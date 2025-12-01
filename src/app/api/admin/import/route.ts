@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import { connectToDatabase } from "@/lib/mongodb";
 import { getSessionUser } from "@/lib/auth-helpers";
 import Company from "@/models/Company";
+import mongoose from "mongoose";
 
 type NormalizedRow = Record<string, unknown>;
 
@@ -30,7 +31,7 @@ export async function POST(req: Request) {
   const formData = await req.formData();
   const file = formData.get("file") as File | null;
   const campaignId = formData.get("campaignId") as string | null;
-  const assignedToUserId = formData.get("assignedToUserId") as string | null;
+    const assignedToUserId = formData.get("assignedToUserId") as string | null;
 
   if (!file || !campaignId || !assignedToUserId) {
     return NextResponse.json({ message: "Missing file or fields" }, { status: 400 });
@@ -70,7 +71,7 @@ export async function POST(req: Request) {
       existing.telefone3 = telefone3;
       existing.cidade = cidade;
       existing.uf = uf;
-      existing.assignedTo = assignedToUserId;
+      existing.assignedTo = new mongoose.Types.ObjectId(assignedToUserId);
       existing.raw = normalized;
       await existing.save();
       updated += 1;
@@ -86,7 +87,7 @@ export async function POST(req: Request) {
         uf,
         raw: normalized,
         campaign: campaignId,
-        assignedTo: assignedToUserId,
+        assignedTo: new mongoose.Types.ObjectId(assignedToUserId),
         stage: "PROSPECCAO",
         isWorked: false,
       });
