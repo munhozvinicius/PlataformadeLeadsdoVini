@@ -16,7 +16,7 @@ export async function GET(_req: Request, { params }: Params) {
 
   const totalBruto = await prisma.lead.count({ where: { campanhaId } });
   const atribuidos = await prisma.lead.count({
-    where: { campanhaId, status: { in: [LeadStatus.EM_ATENDIMENTO, LeadStatus.FINALIZADO] } },
+    where: { campanhaId, status: { not: LeadStatus.NOVO } },
   });
   const restantes = await prisma.lead.count({ where: { campanhaId, status: LeadStatus.NOVO } });
 
