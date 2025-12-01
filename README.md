@@ -11,7 +11,7 @@ Aplicação web para gestão de leads industriais com autenticação por papéis
 
 1. Copie `.env.local.example` para `.env.local`.
 2. Preencha:
-   - `MONGODB_URI` – string de conexão do MongoDB.
+   - `MONGO_URL_MONGODB_URI` – string de conexão do MongoDB.
    - `NEXTAUTH_SECRET` – chave secreta para NextAuth (use `openssl rand -base64 32`).
    - Opcional: alterar `MASTER_EMAIL` / `MASTER_PASSWORD` do seed inicial.
 
