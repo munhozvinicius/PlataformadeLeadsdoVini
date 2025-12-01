@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import XLSX from "xlsx";
+import * as XLSX from "xlsx";
 import { connectToDatabase } from "@/lib/mongodb";
 import { getSessionUser } from "@/lib/auth-helpers";
 import Company from "@/models/Company";
