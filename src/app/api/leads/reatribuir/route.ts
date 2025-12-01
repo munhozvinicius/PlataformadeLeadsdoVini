@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { LeadStatus, Role } from "@prisma/client";
+import { LeadStatus, Role, Prisma } from "@prisma/client";
 
 export async function PATCH(req: Request) {
   const session = await getServerSession(authOptions);
@@ -36,7 +36,7 @@ export async function PATCH(req: Request) {
     data: {
       consultorId: novoConsultorId,
       status: LeadStatus.EM_ATENDIMENTO,
-      historico: historicoAtual,
+      historico: historicoAtual as Prisma.JsonArray,
     },
   });
 
