@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 // Reuse the same connection across hot reloads in Next.js
 // to avoid creating multiple connections in dev.
-const MONGODB_URI = process.env.MONGODB_URI;
+const MONGODB_URI = process.env.MONGODB_URI as string;
 
 if (!MONGODB_URI) {
   throw new Error("Please define the MONGODB_URI environment variable.");
