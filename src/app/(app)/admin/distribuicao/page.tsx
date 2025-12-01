@@ -60,7 +60,7 @@ export default function DistribuicaoPage() {
     const res = await fetch("/api/campanhas/distribuir", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ campanhaId, consultorId, quantidade }),
+      body: JSON.stringify({ campanhaId: campaignId, consultorId, quantidade }),
     });
     setLoading(false);
     if (!res.ok) {

@@ -37,3 +37,6 @@ export async function leadsAccessFilter(user: SessionUser) {
   }
   return { consultorId: user.id };
 }
+
+// Backward compatibility for legacy imports
+export const companyAccessFilter = leadsAccessFilter;
