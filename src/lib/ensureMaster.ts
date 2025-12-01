@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
-import User from "@/models/User";
-import { connectToDatabase } from "./mongodb";
+import { prisma } from "@/lib/prisma";
+import { Escritorio, Role } from "@prisma/client";
 
 let masterSeeded = false;
 
@@ -12,38 +12,38 @@ export async function ensureMasterUser() {
   const email = process.env.MASTER_EMAIL || "munhoz.vinicius@gmail.com";
   const password = process.env.MASTER_PASSWORD || "Theforce85!!";
 
-  await connectToDatabase();
-
-  // If a master already exists, try to align it with the configured email/password
-  const byEmail = await User.findOne({ email });
-  if (byEmail) {
-    let needsSave = false;
-    if (byEmail.role !== "MASTER") {
-      byEmail.role = "MASTER";
-      needsSave = true;
+  const existingByEmail = await prisma.user.findUnique({ where: { email } });
+  if (existingByEmail) {
+    const updates: Partial<typeof existingByEmail> = {};
+    if (existingByEmail.role !== Role.MASTER) {
+      updates.role = Role.MASTER;
     }
-    const matches = await bcrypt.compare(password, byEmail.password);
+    const matches = await bcrypt.compare(password, existingByEmail.password);
     if (!matches) {
-      byEmail.password = await bcrypt.hash(password, 10);
-      needsSave = true;
+      updates.password = await bcrypt.hash(password, 10);
     }
-    if (needsSave) await byEmail.save();
+    if (Object.keys(updates).length > 0) {
+      await prisma.user.update({ where: { id: existingByEmail.id }, data: updates });
+    }
     masterSeeded = true;
     return;
   }
 
-  const existingMaster = await User.findOne({ role: "MASTER" });
+  const existingMaster = await prisma.user.findFirst({ where: { role: Role.MASTER } });
   if (existingMaster) {
     masterSeeded = true;
     return;
   }
 
   const hashed = await bcrypt.hash(password, 10);
-  await User.create({
-    name: "Vinicius Munhoz",
-    email,
-    password: hashed,
-    role: "MASTER",
+  await prisma.user.create({
+    data: {
+      name: "Vinicius Munhoz",
+      email,
+      password: hashed,
+      role: Role.MASTER,
+      escritorio: Escritorio.JLC_TECH,
+    },
   });
   masterSeeded = true;
 }

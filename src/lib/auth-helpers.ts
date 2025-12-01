@@ -1,10 +1,11 @@
 import { authOptions } from "@/lib/auth";
-import User from "@/models/User";
+import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
+import { Role } from "@prisma/client";
 
 export type SessionUser = {
   id: string;
-  role: "MASTER" | "OWNER" | "CONSULTOR";
+  role: Role;
   email?: string | null;
   name?: string | null;
 };
@@ -21,13 +22,16 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 }
 
 export async function getOwnerTeamIds(ownerId: string) {
-  const consultants = await User.find({ owner: ownerId, role: "CONSULTOR" }).select("_id");
-  return [ownerId, ...consultants.map((c) => c._id.toString())];
+  const consultants = await prisma.user.findMany({
+    where: { ownerId, role: Role.CONSULTOR },
+    select: { id: true },
+  });
+  return [ownerId, ...consultants.map((c) => c.id)];
 }
 
 export async function companyAccessFilter(user: SessionUser) {
-  if (user.role === "MASTER") return {};
-  if (user.role === "OWNER") {
+  if (user.role === Role.MASTER) return {};
+  if (user.role === Role.OWNER) {
     const teamIds = await getOwnerTeamIds(user.id);
     return { assignedTo: { $in: teamIds } };
   }

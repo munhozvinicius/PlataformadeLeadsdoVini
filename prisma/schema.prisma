@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("MONGO_URL_MONGODB_URI")
+}
+
+enum Role {
+  MASTER
+  OWNER
+  CONSULTOR
+}
+
+enum Escritorio {
+  JLC_TECH
+  SAFE_TI
+}
+
+enum LeadStatus {
+  NOVO
+  EM_ATENDIMENTO
+  FINALIZADO
+  PERDIDO
+  REATRIBUIDO
+}
+
+model User {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  name          String
+  email         String   @unique
+  password      String
+  role          Role
+  escritorio    Escritorio
+  ownerId       String?  @db.ObjectId
+  owner         User?    @relation("OwnerConsultor", fields: [ownerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  team          User[]   @relation("OwnerConsultor")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  leadsAssigned Lead[]   @relation("AssignedLeads")
+}
+
+model Campanha {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  nome        String
+  descricao   String?
+  createdAt   DateTime @default(now())
+
+  leadsBrutos Lead[]   @relation("CampanhaLeads")
+}
+
+model Lead {
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  campanhaId    String      @db.ObjectId
+  campanha      Campanha    @relation("CampanhaLeads", fields: [campanhaId], references: [id])
+
+  empresa       String?
+  cidade        String?
+  telefone      String?
+  cnpj          String?
+
+  status        LeadStatus  @default(NOVO)
+  consultorId   String?     @db.ObjectId
+  consultor     User?       @relation("AssignedLeads", fields: [consultorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  historico     Json?
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
