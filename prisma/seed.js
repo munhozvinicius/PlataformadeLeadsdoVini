@@ -40,6 +40,21 @@ const rawUsers = [
 async function main() {
   console.log("Seeding usuários base...");
 
+  // Offices
+  const offices = [
+    { code: Escritorio.JLC_TECH, name: "JLC Tech" },
+    { code: Escritorio.SAFE_TI, name: "Safe TI" },
+  ];
+  const officeIds = {};
+  for (const office of offices) {
+    const o = await prisma.office.upsert({
+      where: { code: office.code },
+      update: { name: office.name },
+      create: { code: office.code, name: office.name },
+    });
+    officeIds[office.code] = o.id;
+  }
+
   // Cria/atualiza owners primeiro
   const owners = {};
   for (const u of rawUsers.filter((u) => u.role === Role.OWNER)) {
@@ -51,6 +66,7 @@ async function main() {
         password: hashed,
         escritorio: u.escritorio,
         role: u.role,
+        officeId: officeIds[u.escritorio],
       },
       create: {
         name: u.name,
@@ -58,6 +74,7 @@ async function main() {
         password: hashed,
         escritorio: u.escritorio,
         role: u.role,
+        officeId: officeIds[u.escritorio],
       },
     });
     owners[u.email] = user.id;
@@ -83,6 +100,7 @@ async function main() {
         escritorio: u.escritorio,
         role: u.role,
         ownerId,
+        officeId: officeIds[u.escritorio],
       },
     });
   }

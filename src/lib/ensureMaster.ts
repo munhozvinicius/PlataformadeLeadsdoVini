@@ -4,10 +4,26 @@ import { Escritorio, Role } from "@prisma/client";
 
 let masterSeeded = false;
 
+async function ensureOffices() {
+  const offices = [
+    { code: Escritorio.JLC_TECH, name: "JLC Tech" },
+    { code: Escritorio.SAFE_TI, name: "Safe TI" },
+  ];
+  for (const office of offices) {
+    await prisma.office.upsert({
+      where: { code: office.code },
+      update: { name: office.name },
+      create: { code: office.code, name: office.name },
+    });
+  }
+}
+
 // Ensures there is at least one MASTER user in the database.
 // Falls back to default credentials if envs are missing to avoid lockout.
 export async function ensureMasterUser() {
   if (masterSeeded) return;
+
+  await ensureOffices();
 
   const email = process.env.MASTER_EMAIL || "munhoz.vinicius@gmail.com";
   const password = process.env.MASTER_PASSWORD || "Theforce85!!";
@@ -17,6 +33,9 @@ export async function ensureMasterUser() {
     const updates: Partial<typeof existingByEmail> = {};
     if (existingByEmail.role !== Role.MASTER) {
       updates.role = Role.MASTER;
+      updates.ownerId = null;
+      updates.officeId = null;
+      updates.escritorio = null;
     }
     const matches = await bcrypt.compare(password, existingByEmail.password);
     if (!matches) {
@@ -42,7 +61,6 @@ export async function ensureMasterUser() {
       email,
       password: hashed,
       role: Role.MASTER,
-      escritorio: Escritorio.JLC_TECH,
     },
   });
   masterSeeded = true;

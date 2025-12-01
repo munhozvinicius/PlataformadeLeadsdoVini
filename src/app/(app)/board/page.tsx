@@ -15,12 +15,29 @@ type Lead = {
   campanha?: { nome: string };
 };
 
+const PALITAGEM = [
+  "Cliente não atende",
+  "Telefone inválido",
+  "Cliente recusou o contato",
+  "Sem interesse no produto",
+  "Em contrato com concorrente",
+  "Empresa fechada",
+  "Não é o decisor / Sem contato do decisor",
+  "Prospecção incorreta (CNAE/Vertical errada)",
+  "Lead duplicado",
+  "Outro",
+] as const;
+
 export default function BoardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [modalLead, setModalLead] = useState<Lead | null>(null);
+  const [motivo, setMotivo] = useState<string>("");
+  const [obs, setObs] = useState("");
+  const [savingPerdido, setSavingPerdido] = useState(false);
 
   useEffect(() => {
     if (status === "authenticated" && session?.user.role !== "CONSULTOR") {
@@ -54,6 +71,13 @@ export default function BoardPage() {
   }
 
   async function updateStatus(leadId: string, status: LeadStatusId) {
+    if (status === "PERDIDO") {
+      const lead = leads.find((l) => l.id === leadId) || null;
+      setModalLead(lead);
+      setMotivo("");
+      setObs("");
+      return;
+    }
     await fetch(`/api/consultor/leads/${leadId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -65,16 +89,37 @@ export default function BoardPage() {
   const grouped = useMemo(() => {
     const map: Record<LeadStatusId, Lead[]> = {
       NOVO: [],
-      EM_ATENDIMENTO: [],
-      FINALIZADO: [],
+      EM_CONTATO: [],
+      EM_NEGOCIACAO: [],
+      FECHADO: [],
       PERDIDO: [],
-      REATRIBUIDO: [],
     };
     for (const lead of leads) {
       (map[lead.status] ?? []).push(lead);
     }
     return map;
   }, [leads]);
+
+  async function confirmarPerdido() {
+    if (!modalLead) return;
+    if (!motivo) {
+      setError("Selecione um motivo.");
+      return;
+    }
+    if (motivo === "Outro" && !obs) {
+      setError("Observação obrigatória para motivo Outro.");
+      return;
+    }
+    setSavingPerdido(true);
+    await fetch(`/api/leads/${modalLead.id}/status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "PERDIDO", motivo, observacao: obs }),
+    });
+    setSavingPerdido(false);
+    setModalLead(null);
+    await loadLeads();
+  }
 
   return (
     <div className="relative">
@@ -134,6 +179,57 @@ export default function BoardPage() {
           </div>
         ))}
       </div>
+      {modalLead ? (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-30">
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md space-y-4">
+            <h3 className="text-lg font-semibold text-slate-900">Lead perdido</h3>
+            <p className="text-sm text-slate-600">
+              Preencha o motivo de perda para <strong>{modalLead.empresa}</strong>
+            </p>
+            <div className="space-y-2">
+              <label className="text-xs text-slate-600">Motivo</label>
+              <select
+                value={motivo}
+                onChange={(e) => setMotivo(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+              >
+                <option value="">Selecione</option>
+                {PALITAGEM.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs text-slate-600">Observações complementares</label>
+              <textarea
+                value={obs}
+                onChange={(e) => setObs(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+                rows={3}
+                placeholder="Obrigatório se motivo = Outro"
+              />
+            </div>
+            {error ? <div className="text-sm text-red-600">{error}</div> : null}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setModalLead(null)}
+                className="px-4 py-2 text-sm rounded-lg border border-slate-200 hover:bg-slate-100"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarPerdido}
+                disabled={savingPerdido}
+                className="px-4 py-2 text-sm rounded-lg bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50"
+              >
+                {savingPerdido ? "Salvando..." : "Confirmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

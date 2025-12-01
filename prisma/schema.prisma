@@ -20,10 +20,10 @@ enum Escritorio {
 
 enum LeadStatus {
   NOVO
-  EM_ATENDIMENTO
-  FINALIZADO
+  EM_CONTATO
+  EM_NEGOCIACAO
+  FECHADO
   PERDIDO
-  REATRIBUIDO
 }
 
 model User {
@@ -32,14 +32,18 @@ model User {
   email         String   @unique
   password      String
   role          Role
-  escritorio    Escritorio
+  escritorio    Escritorio?
   ownerId       String?  @db.ObjectId
   owner         User?    @relation("OwnerConsultor", fields: [ownerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   team          User[]   @relation("OwnerConsultor")
+  officeId      String?  @db.ObjectId
+  office        Office?  @relation(fields: [officeId], references: [id])
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   leadsAssigned Lead[]   @relation("AssignedLeads")
+  leadsOwned    Lead[]   @relation("LeadOwner")
+  isActive      Boolean  @default(true)
 }
 
 model Campanha {
@@ -47,6 +51,11 @@ model Campanha {
   nome        String
   descricao   String?
   createdAt   DateTime @default(now())
+  createdById String?  @db.ObjectId
+  totalLeads      Int     @default(0)
+  assignedLeads   Int     @default(0)
+  remainingLeads  Int     @default(0)
+  isActive        Boolean @default(true)
 
   leadsBrutos Lead[]   @relation("CampanhaLeads")
 }
@@ -56,16 +65,37 @@ model Lead {
   campanhaId    String      @db.ObjectId
   campanha      Campanha    @relation("CampanhaLeads", fields: [campanhaId], references: [id])
 
-  empresa       String?
-  cidade        String?
-  telefone      String?
   cnpj          String?
+  razaoSocial   String?
+  nomeFantasia  String?
+  vertical      String?
+  cidade        String?
+  estado        String?
+  telefone      String?
+  email         String?
 
   status        LeadStatus  @default(NOVO)
   consultorId   String?     @db.ObjectId
   consultor     User?       @relation("AssignedLeads", fields: [consultorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ownerId       String?     @db.ObjectId
+  owner         User?       @relation("LeadOwner", fields: [ownerId], references: [id])
+  officeId      String?     @db.ObjectId
+  office        Office?     @relation(fields: [officeId], references: [id])
   historico     Json?
+  lastStatusChangeAt DateTime?
+  lastInteractionAt DateTime?
+  interactionCount  Int      @default(0)
 
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+}
+
+model Office {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  code      Escritorio @unique
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users     User[]
+  leads     Lead[]
 }
