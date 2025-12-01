@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
 type User = {
-  _id: string;
+  id: string;
   name: string;
   email: string;
   role: "MASTER" | "OWNER" | "CONSULTOR";
-  owner?: { _id: string; name: string; email: string };
+  escritorio: "JLC_TECH" | "SAFE_TI";
+  owner?: { id: string; name: string; email: string };
 };
 
 export default function AdminUsersPage() {
@@ -23,6 +24,7 @@ export default function AdminUsersPage() {
     password: "",
     role: "OWNER",
     owner: "",
+    escritorio: "JLC_TECH",
   });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -37,7 +39,10 @@ export default function AdminUsersPage() {
     loadUsers();
   }, []);
 
-  const owners = useMemo(() => users.filter((u) => u.role === "OWNER"), [users]);
+  const owners = useMemo(
+    () => users.filter((u) => u.role === "OWNER" && u.escritorio === form.escritorio),
+    [users, form.escritorio]
+  );
 
   async function loadUsers() {
     setLoading(true);
@@ -53,17 +58,32 @@ export default function AdminUsersPage() {
     e.preventDefault();
     setError("");
     setSaving(true);
+    const payload = {
+      name: form.name,
+      email: form.email,
+      password: form.password,
+      role: form.role,
+      ownerId: form.role === "CONSULTOR" ? form.owner : null,
+      escritorio: form.escritorio,
+    };
     const res = await fetch("/api/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify(payload),
     });
     setSaving(false);
     if (!res.ok) {
       setError("Não foi possível criar o usuário.");
       return;
     }
-    setForm({ name: "", email: "", password: "", role: "OWNER", owner: "" });
+    setForm({
+      name: "",
+      email: "",
+      password: "",
+      role: "OWNER",
+      owner: "",
+      escritorio: "JLC_TECH",
+    });
     await loadUsers();
   }
 
@@ -94,15 +114,17 @@ export default function AdminUsersPage() {
                   <th className="py-2 pr-3">Nome</th>
                   <th className="py-2 pr-3">Email</th>
                   <th className="py-2 pr-3">Perfil</th>
+                  <th className="py-2 pr-3">Escritório</th>
                   <th className="py-2 pr-3">Owner</th>
                 </tr>
               </thead>
               <tbody>
                 {users.map((user) => (
-                  <tr key={user._id} className="border-b last:border-b-0">
+                  <tr key={user.id} className="border-b last:border-b-0">
                     <td className="py-2 pr-3">{user.name}</td>
                     <td className="py-2 pr-3">{user.email}</td>
                     <td className="py-2 pr-3">{user.role}</td>
+                    <td className="py-2 pr-3">{user.escritorio}</td>
                     <td className="py-2 pr-3">
                       {user.owner ? `${user.owner.name} (${user.owner.email})` : "-"}
                     </td>
@@ -117,6 +139,17 @@ export default function AdminUsersPage() {
           <h2 className="text-lg font-semibold text-slate-900 mb-3">Novo usuário</h2>
           {error ? <div className="text-sm text-red-600 mb-2">{error}</div> : null}
           <form className="space-y-3" onSubmit={handleSubmit}>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-600">Escritório</label>
+              <select
+                value={form.escritorio}
+                onChange={(e) => setForm({ ...form, escritorio: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+              >
+                <option value="JLC_TECH">JLC Tech</option>
+                <option value="SAFE_TI">Safe TI</option>
+              </select>
+            </div>
             <div className="space-y-1">
               <label className="text-xs text-slate-600">Nome</label>
               <input
@@ -168,7 +201,7 @@ export default function AdminUsersPage() {
                 >
                   <option value="">Selecione</option>
                   {owners.map((owner) => (
-                    <option key={owner._id} value={owner._id}>
+                    <option key={owner.id} value={owner.id}>
                       {owner.name} ({owner.email})
                     </option>
                   ))}

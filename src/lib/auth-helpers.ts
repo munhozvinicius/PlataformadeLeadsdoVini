@@ -15,7 +15,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   if (!session?.user) return null;
   return {
     id: session.user.id,
-    role: session.user.role as SessionUser["role"],
+    role: session.user.role as Role,
     email: session.user.email,
     name: session.user.name,
   };
@@ -29,11 +29,11 @@ export async function getOwnerTeamIds(ownerId: string) {
   return [ownerId, ...consultants.map((c) => c.id)];
 }
 
-export async function companyAccessFilter(user: SessionUser) {
+export async function leadsAccessFilter(user: SessionUser) {
   if (user.role === Role.MASTER) return {};
   if (user.role === Role.OWNER) {
     const teamIds = await getOwnerTeamIds(user.id);
-    return { assignedTo: { $in: teamIds } };
+    return { consultorId: { in: teamIds } };
   }
-  return { assignedTo: user.id };
+  return { consultorId: user.id };
 }

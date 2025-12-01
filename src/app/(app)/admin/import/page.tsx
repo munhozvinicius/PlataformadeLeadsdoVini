@@ -4,8 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
-type Campaign = { _id: string; name: string };
-type User = { _id: string; name: string; email: string; role: string };
+type Campaign = {
+  id: string;
+  nome: string;
+  descricao?: string;
+  totalBruto?: number;
+  atribuidos?: number;
+  restantes?: number;
+  consultoresReceberam?: number;
+};
+type User = { id: string; name: string; email: string; role: string };
 
 export default function ImportPage() {
   const router = useRouter();
@@ -34,7 +42,7 @@ export default function ImportPage() {
   const consultants = useMemo(() => users.filter((u) => u.role === "CONSULTOR"), [users]);
 
   async function loadCampaigns() {
-    const res = await fetch("/api/admin/campaigns", { cache: "no-store" });
+    const res = await fetch("/api/campanhas/summary", { cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
       setCampaigns(data);
@@ -51,35 +59,36 @@ export default function ImportPage() {
 
   async function createCampaign() {
     if (!newCampaignName) return;
-    const res = await fetch("/api/admin/campaigns", {
+    const res = await fetch("/api/campanhas/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newCampaignName, description: newCampaignDescription }),
+      body: JSON.stringify({ nome: newCampaignName, descricao: newCampaignDescription }),
     });
     if (res.ok) {
       setNewCampaignName("");
       setNewCampaignDescription("");
       await loadCampaigns();
       const json = await res.json();
-      setCampaignId(json._id);
+      setCampaignId(json.id);
     }
   }
 
   async function handleImport(e: React.FormEvent) {
     e.preventDefault();
     setMessage("");
-    if (!campaignId || !assignedUser || !file) {
-      setMessage("Selecione campanha, consultor e arquivo.");
+    if (!assignedUser || !file) {
+      setMessage("Selecione consultor e arquivo. Campanha é obrigatória (crie ou escolha).");
       return;
     }
 
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("campaignId", campaignId);
-    formData.append("assignedToUserId", assignedUser);
+    if (campaignId) formData.append("campanhaId", campaignId);
+    if (!campaignId && newCampaignName) formData.append("campanhaNome", newCampaignName);
+    formData.append("consultorId", assignedUser);
 
     setLoading(true);
-    const res = await fetch("/api/admin/import", {
+    const res = await fetch("/api/campanhas/import", {
       method: "POST",
       body: formData,
     });
@@ -89,7 +98,8 @@ export default function ImportPage() {
       return;
     }
     const json = await res.json();
-    setMessage(`Importação concluída: ${json.created} criados, ${json.updated} atualizados.`);
+    setMessage(`Importação concluída: ${json.created} criados.`);
+    await loadCampaigns();
   }
 
   return (
@@ -115,8 +125,8 @@ export default function ImportPage() {
               >
                 <option value="">Selecione</option>
                 {campaigns.map((c) => (
-                  <option key={c._id} value={c._id}>
-                    {c.name}
+                  <option key={c.id} value={c.id}>
+                    {c.nome}
                   </option>
                 ))}
               </select>
@@ -130,7 +140,7 @@ export default function ImportPage() {
               >
                 <option value="">Selecione</option>
                 {consultants.map((u) => (
-                  <option key={u._id} value={u._id}>
+                  <option key={u.id} value={u.id}>
                     {u.name} ({u.email})
                   </option>
                 ))}
@@ -186,6 +196,24 @@ export default function ImportPage() {
           <p className="text-xs text-slate-500">
             Crie a campanha primeiro, depois selecione-a para subir a planilha.
           </p>
+        </div>
+      </div>
+
+      <div className="rounded-xl border bg-white p-4 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900 mb-3">Campanhas (estoque)</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {campaigns.map((c) => (
+            <div key={c.id} className="border rounded-lg p-3 bg-slate-50">
+              <p className="font-semibold text-sm">{c.nome}</p>
+              <p className="text-xs text-slate-500">{c.descricao ?? ""}</p>
+              <div className="text-xs text-slate-600 mt-2 space-y-1">
+                <p>Total bruto: {c.totalBruto ?? "-"}</p>
+                <p>Atribuídos: {c.atribuidos ?? "-"}</p>
+                <p>Restantes: {c.restantes ?? "-"}</p>
+                <p>Consultores que receberam: {c.consultoresReceberam ?? 0}</p>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
