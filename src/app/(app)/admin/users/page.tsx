@@ -44,6 +44,12 @@ export default function AdminUsersPage() {
     [users, form.escritorio]
   );
 
+  const filteredUsers = useMemo(() => {
+    if (session?.user.role === "MASTER") return users;
+    // owner vê somente a si e consultores vinculados
+    return users.filter((u) => u.id === session?.user.id || u.owner?.id === session?.user.id);
+  }, [users, session]);
+
   async function loadUsers() {
     setLoading(true);
     const res = await fetch("/api/admin/users", { cache: "no-store" });
@@ -58,13 +64,26 @@ export default function AdminUsersPage() {
     e.preventDefault();
     setError("");
     setSaving(true);
+
+    const roleToSend =
+      session?.user.role === "OWNER"
+        ? ("CONSULTOR" as const)
+        : (form.role as "OWNER" | "CONSULTOR");
+    const ownerIdToSend =
+      roleToSend === "CONSULTOR"
+        ? session?.user.role === "OWNER"
+          ? session.user.id
+          : form.owner
+        : null;
+    const escritorioToSend =
+      session?.user.role === "OWNER" ? users.find((u) => u.id === session.user.id)?.escritorio : form.escritorio;
     const payload = {
       name: form.name,
       email: form.email,
       password: form.password,
-      role: form.role,
-      ownerId: form.role === "CONSULTOR" ? form.owner : null,
-      escritorio: form.escritorio,
+      role: roleToSend,
+      ownerId: ownerIdToSend,
+      escritorio: escritorioToSend,
     };
     const res = await fetch("/api/admin/users", {
       method: "POST",
@@ -119,7 +138,7 @@ export default function AdminUsersPage() {
                 </tr>
               </thead>
               <tbody>
-                {users.map((user) => (
+                {filteredUsers.map((user) => (
                   <tr key={user.id} className="border-b last:border-b-0">
                     <td className="py-2 pr-3">{user.name}</td>
                     <td className="py-2 pr-3">{user.email}</td>
@@ -139,17 +158,28 @@ export default function AdminUsersPage() {
           <h2 className="text-lg font-semibold text-slate-900 mb-3">Novo usuário</h2>
           {error ? <div className="text-sm text-red-600 mb-2">{error}</div> : null}
           <form className="space-y-3" onSubmit={handleSubmit}>
-            <div className="space-y-1">
-              <label className="text-xs text-slate-600">Escritório</label>
-              <select
-                value={form.escritorio}
-                onChange={(e) => setForm({ ...form, escritorio: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2 text-sm"
-              >
-                <option value="JLC_TECH">JLC Tech</option>
-                <option value="SAFE_TI">Safe TI</option>
-              </select>
-            </div>
+            {session?.user.role === "MASTER" ? (
+              <div className="space-y-1">
+                <label className="text-xs text-slate-600">Escritório</label>
+                <select
+                  value={form.escritorio}
+                  onChange={(e) => setForm({ ...form, escritorio: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="JLC_TECH">JLC Tech</option>
+                  <option value="SAFE_TI">Safe TI</option>
+                </select>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <label className="text-xs text-slate-600">Escritório</label>
+                <input
+                  value={users.find((u) => u.id === session?.user.id)?.escritorio ?? ""}
+                  disabled
+                  className="w-full border rounded-lg px-3 py-2 text-sm bg-slate-100"
+                />
+              </div>
+            )}
             <div className="space-y-1">
               <label className="text-xs text-slate-600">Nome</label>
               <input
@@ -179,18 +209,29 @@ export default function AdminUsersPage() {
                 required
               />
             </div>
-            <div className="space-y-1">
-              <label className="text-xs text-slate-600">Perfil</label>
-              <select
-                value={form.role}
-                onChange={(e) => setForm({ ...form, role: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2 text-sm"
-              >
-                <option value="OWNER">OWNER</option>
-                <option value="CONSULTOR">CONSULTOR</option>
-              </select>
-            </div>
-            {form.role === "CONSULTOR" ? (
+            {session?.user.role === "MASTER" ? (
+              <div className="space-y-1">
+                <label className="text-xs text-slate-600">Perfil</label>
+                <select
+                  value={form.role}
+                  onChange={(e) => setForm({ ...form, role: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="OWNER">OWNER</option>
+                  <option value="CONSULTOR">CONSULTOR</option>
+                </select>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <label className="text-xs text-slate-600">Perfil</label>
+                <input
+                  value="CONSULTOR"
+                  disabled
+                  className="w-full border rounded-lg px-3 py-2 text-sm bg-slate-100"
+                />
+              </div>
+            )}
+            {(session?.user.role === "MASTER" ? form.role === "CONSULTOR" : true) ? (
               <div className="space-y-1">
                 <label className="text-xs text-slate-600">Owner responsável</label>
                 <select
