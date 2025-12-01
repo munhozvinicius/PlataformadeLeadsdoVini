@@ -10,24 +10,24 @@
   },
   "dependencies": {
     "@types/bcryptjs": "^2.4.6",
-    "@types/xlsx": "^0.0.35",
+    "@types/exceljs": "^0.5.3",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "exceljs": "^4.4.0",
     "mongodb": "^7.0.0",
     "mongoose": "^9.0.0",
-    "next": "14.2.15",
+    "next": "^14.2.33",
     "next-auth": "^4.24.13",
     "react": "^18",
-    "react-dom": "^18",
-    "xlsx": "^0.18.5"
+    "react-dom": "^18"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "eslint": "^8",
-    "eslint-config-next": "14.2.15",
+    "eslint-config-next": "^16.0.6",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "typescript": "^5"

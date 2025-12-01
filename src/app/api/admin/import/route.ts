@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { connectToDatabase } from "@/lib/mongodb";
 import { getSessionUser } from "@/lib/auth-helpers";
 import Company from "@/models/Company";
@@ -40,10 +40,51 @@ export async function POST(req: Request) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const workbook = XLSX.read(buffer, { type: "buffer" });
-  const firstSheetName = workbook.SheetNames[0];
-  const sheet = workbook.Sheets[firstSheetName];
-  const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" }) as Record<string, unknown>[];
+
+  // Prevent very large uploads
+  const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+  if (buffer.length > MAX_BYTES) {
+    return NextResponse.json({ message: "File too large" }, { status: 413 });
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  try {
+    await workbook.xlsx.load(buffer);
+  } catch (err) {
+    return NextResponse.json({ message: "Failed to parse spreadsheet" }, { status: 400 });
+  }
+
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) {
+    return NextResponse.json({ message: "No sheets found in file" }, { status: 400 });
+  }
+
+  // Read header row and normalize header names
+  const headerRow = worksheet.getRow(1).values as Array<unknown>;
+  // headerRow[0] is usually undefined in exceljs
+  const headers: string[] = [];
+  for (let i = 1; i < headerRow.length; i++) {
+    const h = headerRow[i];
+    if (h === undefined || h === null) {
+      headers.push(`COLUMN_${i}`);
+    } else {
+      headers.push(String(h).trim());
+    }
+  }
+
+  const rows: Record<string, unknown>[] = [];
+  for (let r = 2; r <= worksheet.rowCount; r++) {
+    const row = worksheet.getRow(r);
+    // skip entirely empty rows
+    const isEmpty = row.values.every((v) => v === null || v === undefined || v === "");
+    if (isEmpty) continue;
+    const obj: Record<string, unknown> = {};
+    for (let c = 0; c < headers.length; c++) {
+      const cell = row.getCell(c + 1).value;
+      obj[headers[c] ?? `COLUMN_${c + 1}`] = cell === null || cell === undefined ? "" : cell;
+    }
+    rows.push(obj);
+  }
 
   let created = 0;
   let updated = 0;
