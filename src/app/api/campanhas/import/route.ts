@@ -1,8 +1,16 @@
 export const dynamic = "force-dynamic";
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: "50mb",
+    },
+  },
+};
 
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import * as XLSX from "xlsx";
+import { unzipSync } from "fflate";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Role, LeadStatus } from "@prisma/client";
@@ -28,6 +36,7 @@ export async function POST(req: Request) {
 
   const formData = await req.formData();
   const file = formData.get("file") as File | null;
+  const compressedFlag = formData.get("compressed") as string | null;
   const campanhaId = formData.get("campanhaId") as string | null;
   const campanhaNome = formData.get("campanhaNome") as string | null;
 
@@ -44,7 +53,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Arquivo não enviado" }, { status: 400 });
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
+  let buffer = Buffer.from(await file.arrayBuffer());
+  if (compressedFlag === "true") {
+    try {
+      const unzipped = unzipSync(new Uint8Array(buffer));
+      const firstEntry = Object.values(unzipped)[0];
+      if (!firstEntry) {
+        return NextResponse.json({ message: "Arquivo compactado inválido" }, { status: 400 });
+      }
+      buffer = Buffer.from(firstEntry);
+    } catch (error) {
+      return NextResponse.json({ message: "Não foi possível descompactar o arquivo" }, { status: 400 });
+    }
+  }
   const workbook = XLSX.read(buffer, { type: "buffer" });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" }) as Record<string, unknown>[];

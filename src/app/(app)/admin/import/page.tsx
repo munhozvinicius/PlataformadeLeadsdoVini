@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { zipSync } from "fflate";
 
 import { importTemplates } from "@/constants/importTemplates";
 
@@ -89,8 +90,20 @@ export default function ImportPage() {
       return;
     }
 
+    let uploadFile: Blob = file;
+    let uploadFileName = file.name;
+    let compressed = false;
+
+    // compress on the client before sending to avoid 413 errors
+    const buffer = await file.arrayBuffer();
+    const zipped = zipSync({ [file.name]: new Uint8Array(buffer) });
+    uploadFile = new Blob([zipped], { type: "application/zip" });
+    uploadFileName = `${file.name}.zip`;
+    compressed = true;
+
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", uploadFile, uploadFileName);
+    formData.append("compressed", compressed ? "true" : "false");
     if (campaignId) formData.append("campanhaId", campaignId);
     if (!campaignId && newCampaignName) formData.append("campanhaNome", newCampaignName);
     formData.append("consultorId", assignedUser);
@@ -244,6 +257,9 @@ export default function ImportPage() {
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                 className="w-full text-sm"
               />
+              <p className="text-xs text-slate-400">
+                O XLSX é compactado em ZIP automaticamente antes do envio para evitar limites de tamanho.
+              </p>
             </div>
             {message ? <div className="text-sm text-slate-700">{message}</div> : null}
             <button
