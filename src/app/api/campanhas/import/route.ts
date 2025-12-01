@@ -52,18 +52,26 @@ export async function POST(req: Request) {
   let created = 0;
   for (const row of rows) {
     const norm = normalizeRow(row);
-    const empresa = s(norm["EMPRESA"] || norm["RAZAO_SOCIAL"] || norm["NOME_FANTASIA"]);
+    const razaoSocial = s(norm["RAZAO_SOCIAL"] || norm["EMPRESA"]);
+    const nomeFantasia = s(norm["NOME_FANTASIA"]);
+    const vertical = s(norm["VERTICAL"]);
     const cidade = s(norm["CIDADE"]);
+    const estado = s(norm["ESTADO"] || norm["UF"]);
     const telefone = s(norm["TELEFONE"]) || s(norm["TELEFONE1"]);
     const cnpj = s(norm["CNPJ"]);
+    const email = s(norm["EMAIL"]);
 
     await prisma.lead.create({
       data: {
         campanhaId: campanhaIdToUse!,
-        empresa,
+        razaoSocial,
+        nomeFantasia,
+        vertical,
         cidade,
+        estado,
         telefone,
         cnpj,
+        email,
         status: LeadStatus.NOVO,
         historico: [],
       },
