@@ -13,8 +13,27 @@ export async function ensureMasterUser() {
   const password = process.env.MASTER_PASSWORD || "Theforce85!!";
 
   await connectToDatabase();
-  const existing = await User.findOne({ role: "MASTER" });
-  if (existing) {
+
+  // If a master already exists, try to align it with the configured email/password
+  const byEmail = await User.findOne({ email });
+  if (byEmail) {
+    let needsSave = false;
+    if (byEmail.role !== "MASTER") {
+      byEmail.role = "MASTER";
+      needsSave = true;
+    }
+    const matches = await bcrypt.compare(password, byEmail.password);
+    if (!matches) {
+      byEmail.password = await bcrypt.hash(password, 10);
+      needsSave = true;
+    }
+    if (needsSave) await byEmail.save();
+    masterSeeded = true;
+    return;
+  }
+
+  const existingMaster = await User.findOne({ role: "MASTER" });
+  if (existingMaster) {
     masterSeeded = true;
     return;
   }
