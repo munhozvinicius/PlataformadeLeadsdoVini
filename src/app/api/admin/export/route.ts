@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import type { Types } from "mongoose";
 import { connectToDatabase } from "@/lib/mongodb";
