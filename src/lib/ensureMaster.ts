@@ -5,14 +5,12 @@ import { connectToDatabase } from "./mongodb";
 let masterSeeded = false;
 
 // Ensures there is at least one MASTER user in the database.
-// This runs on auth flows so local devs always have a way in.
+// Falls back to default credentials if envs are missing to avoid lockout.
 export async function ensureMasterUser() {
   if (masterSeeded) return;
 
-  const email = process.env.MASTER_EMAIL;
-  const password = process.env.MASTER_PASSWORD;
-
-  if (!email || !password) return;
+  const email = process.env.MASTER_EMAIL || "munhoz.vinicius@gmail.com";
+  const password = process.env.MASTER_PASSWORD || "Theforce85!!";
 
   await connectToDatabase();
   const existing = await User.findOne({ role: "MASTER" });
