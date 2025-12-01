@@ -37,12 +37,12 @@ export async function GET(req: Request) {
   const filter: Record<string, unknown> = {};
   if (campaignId) filter.campaign = campaignId;
 
-  const companies: ExportCompany[] = await Company.find(filter)
+  const companies = (await Company.find(filter)
     .populate("assignedTo", "name email")
     .select(
       "empresa documento vertical stage campaign assignedTo lastActivityAt lastOutcomeLabel lastOutcomeNote"
     )
-    .lean();
+    .lean()) as ExportCompany[];
 
   const companyIds = companies.map((c) => c._id);
 
