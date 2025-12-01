@@ -40,7 +40,9 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         const typedUser = user as { id: string; role?: UserRole };
         token.id = typedUser.id;
-        token.role = typedUser.role;
+        if (typedUser.role) {
+          token.role = typedUser.role;
+        }
       }
       return token;
     },
