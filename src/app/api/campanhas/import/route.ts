@@ -1,11 +1,4 @@
 export const dynamic = "force-dynamic";
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: "50mb",
-    },
-  },
-};
 
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
@@ -62,7 +55,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ message: "Arquivo compactado inválido" }, { status: 400 });
       }
       buffer = Buffer.from(firstEntry);
-    } catch (error) {
+    } catch {
       return NextResponse.json({ message: "Não foi possível descompactar o arquivo" }, { status: 400 });
     }
   }

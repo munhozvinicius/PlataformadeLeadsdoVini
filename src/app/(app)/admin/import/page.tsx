@@ -97,7 +97,8 @@ export default function ImportPage() {
     // compress on the client before sending to avoid 413 errors
     const buffer = await file.arrayBuffer();
     const zipped = zipSync({ [file.name]: new Uint8Array(buffer) });
-    uploadFile = new Blob([zipped], { type: "application/zip" });
+    const zippedArray = new Uint8Array(zipped);
+    uploadFile = new Blob([zippedArray], { type: "application/zip" });
     uploadFileName = `${file.name}.zip`;
     compressed = true;
 
