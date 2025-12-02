@@ -232,7 +232,7 @@ export default function BoardPage() {
           <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md space-y-4">
             <h3 className="text-lg font-semibold text-slate-900">Lead perdido</h3>
             <p className="text-sm text-slate-600">
-              Preencha o motivo de perda para <strong>{modalLead.empresa}</strong>
+              Preencha o motivo de perda para <strong>{displayName(modalLead)}</strong>
             </p>
             <div className="space-y-2">
               <label className="text-xs text-slate-600">Motivo</label>
