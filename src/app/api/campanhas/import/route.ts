@@ -18,7 +18,7 @@ function normalizeKey(key: string) {
     .trim()
     .toUpperCase()
     .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "");
+    .replace(/[\u0300-\u036f]/g, "");
 }
 
 function normalizeRow(row: Record<string, unknown>): Record<string, string> {
