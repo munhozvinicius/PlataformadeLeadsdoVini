@@ -7,9 +7,9 @@ import { useSession } from "next-auth/react";
 type CampaignSummary = {
   id: string;
   nome: string;
-  totalBruto: number;
-  atribuidos: number;
-  restantes: number;
+  totalBruto?: number;
+  atribuidos?: number;
+  restantes?: number;
 };
 
 type User = { id: string; name: string; email: string; role: string; escritorio: string };
@@ -68,7 +68,8 @@ export default function DistribuicaoPage() {
       return;
     }
     const json = await res.json();
-    setMessage(`Atribuídos ${json["atribuídos"] ?? quantidade} leads.`);
+    const assigned = json.assigned ?? json["atribuídos"] ?? quantidade;
+    setMessage(`Atribuídos ${assigned} leads.`);
     await loadData();
   }
 

@@ -73,6 +73,20 @@ model Lead {
   estado        String?
   telefone      String?
   email         String?
+  telefone1     String?
+  telefone2     String?
+  telefone3     String?
+  logradouro    String?
+  numero        String?
+  cep           String?
+  endereco      String?
+  territorio    String?
+  ofertaMkt     String?
+  estrategia    String?
+  armario       String?
+  idPruma       String?
+  vlFatPresumido String?
+  cnae          String?
 
   status        LeadStatus  @default(NOVO)
   consultorId   String?     @db.ObjectId
@@ -82,6 +96,7 @@ model Lead {
   officeId      String?     @db.ObjectId
   office        Office?     @relation(fields: [officeId], references: [id])
   historico     Json?
+  raw           Json?
   lastStatusChangeAt DateTime?
   lastInteractionAt DateTime?
   interactionCount  Int      @default(0)

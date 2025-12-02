@@ -33,5 +33,5 @@ export async function POST(req: Request) {
     data: { consultorId, status: LeadStatus.EM_CONTATO },
   });
 
-  return NextResponse.json({ atribuídos: leadsNovos.length });
+  return NextResponse.json({ assigned: leadsNovos.length, atribuídos: leadsNovos.length });
 }

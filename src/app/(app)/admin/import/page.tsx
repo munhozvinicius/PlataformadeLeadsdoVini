@@ -5,8 +5,6 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { zipSync } from "fflate";
 
-import { importTemplates } from "@/constants/importTemplates";
-
 type Campaign = {
   id: string;
   nome: string;
@@ -16,6 +14,7 @@ type Campaign = {
   restantes?: number;
   consultoresReceberam?: number;
 };
+
 type User = { id: string; name: string; email: string; role: string };
 
 export default function ImportPage() {
@@ -30,7 +29,6 @@ export default function ImportPage() {
   const [file, setFile] = useState<File | null>(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [selectedTemplateId, setSelectedTemplateId] = useState(importTemplates[0]?.id ?? "");
 
   useEffect(() => {
     if (status === "authenticated" && session?.user.role !== "MASTER") {
@@ -44,11 +42,6 @@ export default function ImportPage() {
   }, []);
 
   const consultants = useMemo(() => users.filter((u) => u.role === "CONSULTOR"), [users]);
-  const selectedTemplate = useMemo(
-    () =>
-      importTemplates.find((template) => template.id === selectedTemplateId) ?? importTemplates[0],
-    [selectedTemplateId],
-  );
 
   async function loadCampaigns() {
     const res = await fetch("/api/campanhas/summary", { cache: "no-store" });
@@ -90,21 +83,17 @@ export default function ImportPage() {
       return;
     }
 
-    let uploadFile: Blob = file;
-    let uploadFileName = file.name;
-    let compressed = false;
-
-    // compress on the client before sending to avoid 413 errors
     const buffer = await file.arrayBuffer();
     const zipped = zipSync({ [file.name]: new Uint8Array(buffer) });
     const zippedArray = new Uint8Array(zipped);
-    uploadFile = new Blob([zippedArray], { type: "application/zip" });
-    uploadFileName = `${file.name}.zip`;
-    compressed = true;
 
     const formData = new FormData();
-    formData.append("file", uploadFile, uploadFileName);
-    formData.append("compressed", compressed ? "true" : "false");
+    formData.append(
+      "file",
+      new Blob([zippedArray], { type: "application/zip" }),
+      `${file.name}.zip`,
+    );
+    formData.append("compressed", "true");
     if (campaignId) formData.append("campanhaId", campaignId);
     if (!campaignId && newCampaignName) formData.append("campanhaNome", newCampaignName);
     formData.append("consultorId", assignedUser);
@@ -124,96 +113,15 @@ export default function ImportPage() {
     await loadCampaigns();
   }
 
-  function handleDownloadTemplate() {
-    if (!selectedTemplate) return;
-
-    const rows = [
-      selectedTemplate.columns.join(";"),
-      ...selectedTemplate.sampleRows.map((sample) =>
-        selectedTemplate.columns
-          .map((column) => (sample[column] ?? "").replace(/;/g, ","))
-          .join(";"),
-      ),
-    ];
-
-    const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${selectedTemplate.id}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
   return (
     <div className="space-y-6">
       <div>
         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Master</p>
         <h1 className="text-2xl font-semibold text-slate-900">Importar Leads</h1>
         <p className="text-sm text-slate-500">
-          Suba a planilha base_com_vertical.xlsx e defina a campanha e o consultor.
+          Suba a planilha `base_com_vertical.xlsx`, escolha campanha e consultor para importar os
+          leads.
         </p>
-      </div>
-
-      <div className="rounded-xl border bg-white p-4 shadow-sm space-y-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Planilha padrão</p>
-            <h2 className="text-lg font-semibold text-slate-900">
-              {selectedTemplate?.label ?? "Escolha um modelo"}
-            </h2>
-            <p className="text-sm text-slate-500 max-w-xl">{selectedTemplate?.description}</p>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <select
-              value={selectedTemplateId}
-              onChange={(e) => setSelectedTemplateId(e.target.value)}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
-            >
-              {importTemplates.map((template) => (
-                <option key={template.id} value={template.id}>
-                  {template.label}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={handleDownloadTemplate}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-            >
-              Baixar planilha
-            </button>
-          </div>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <p className="text-xs text-slate-500 mb-2">Colunas esperadas</p>
-            <div className="flex flex-wrap gap-2">
-              {selectedTemplate?.columns.map((column) => (
-                <span
-                  key={column}
-                  className="rounded-full border border-slate-200 px-2 py-1 text-[11px] font-semibold uppercase text-slate-600"
-                >
-                  {column}
-                </span>
-              ))}
-            </div>
-          </div>
-          {selectedTemplate?.sampleRows?.[0] ? (
-            <div>
-              <p className="text-xs text-slate-500 mb-2">Linha de exemplo</p>
-              <div className="grid grid-cols-1 gap-2 text-xs text-slate-500 sm:grid-cols-2">
-                {Object.entries(selectedTemplate.sampleRows[0]).map(([key, value]) => (
-                  <div key={key} className="space-y-0.5">
-                    <p className="text-[11px] font-semibold uppercase text-slate-700">{key}</p>
-                    <p className="text-[13px] text-slate-900">{value}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -259,7 +167,8 @@ export default function ImportPage() {
                 className="w-full text-sm"
               />
               <p className="text-xs text-slate-400">
-                O XLSX é compactado em ZIP automaticamente antes do envio para evitar limites de tamanho.
+                O arquivo é compactado em ZIP automaticamente antes do envio para evitar limites de
+                tamanho.
               </p>
             </div>
             {message ? <div className="text-sm text-slate-700">{message}</div> : null}

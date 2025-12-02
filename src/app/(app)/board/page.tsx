@@ -1,16 +1,22 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { LEAD_STATUS, LeadStatusId } from "@/constants/leadStatus";
 
 type Lead = {
   id: string;
-  empresa?: string | null;
+  razaoSocial?: string | null;
+  nomeFantasia?: string | null;
   cidade?: string | null;
+  endereco?: string | null;
   telefone?: string | null;
+  telefone1?: string | null;
+  telefone2?: string | null;
+  telefone3?: string | null;
   cnpj?: string | null;
+  vertical?: string | null;
   status: LeadStatusId;
   campanha?: { nome: string };
 };
@@ -39,25 +45,17 @@ export default function BoardPage() {
   const [obs, setObs] = useState("");
   const [savingPerdido, setSavingPerdido] = useState(false);
 
-  useEffect(() => {
-    if (status === "authenticated" && session?.user.role !== "CONSULTOR") {
-      // direciona master/owner para admin
-      router.replace("/admin/campanhas");
-    }
-  }, [status, session, router]);
-
-  useEffect(() => {
-    loadLeads();
-  }, []);
-
-  async function loadLeads() {
+  const loadLeads = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
       const res = await fetch("/api/consultor/leads", { cache: "no-store" });
+      if (res.status === 401) {
+        router.replace("/login");
+        return;
+      }
       if (!res.ok) {
         setError("Não foi possível carregar os leads.");
-        setLoading(false);
         return;
       }
       const data = await res.json();
@@ -68,7 +66,22 @@ export default function BoardPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [router]);
+
+  useEffect(() => {
+    if (status === "loading") return;
+    if (status === "unauthenticated") {
+      router.replace("/login");
+      return;
+    }
+    if (status === "authenticated") {
+      if (session?.user.role !== "CONSULTOR") {
+        router.replace("/admin/campanhas");
+        return;
+      }
+      loadLeads();
+    }
+  }, [status, session, router, loadLeads]);
 
   async function updateStatus(leadId: string, status: LeadStatusId) {
     if (status === "PERDIDO") {
@@ -85,6 +98,18 @@ export default function BoardPage() {
     });
     await loadLeads();
   }
+
+  const displayName = (lead: Lead) => lead.razaoSocial ?? lead.nomeFantasia ?? "Sem empresa";
+  const gatherPhones = (lead: Lead) => {
+    const values = [lead.telefone, lead.telefone1, lead.telefone2, lead.telefone3];
+    const unique: string[] = [];
+    for (const value of values) {
+      if (value && !unique.includes(value)) {
+        unique.push(value);
+      }
+    }
+    return unique;
+  };
 
   const grouped = useMemo(() => {
     const map: Record<LeadStatusId, Lead[]> = {
@@ -152,14 +177,36 @@ export default function BoardPage() {
               <span className="text-xs text-slate-400">{grouped[stage.id]?.length ?? 0}</span>
             </div>
             <div className="flex flex-col gap-2">
-              {(grouped[stage.id] || []).map((lead) => (
+            {(grouped[stage.id] || []).map((lead) => {
+              const phones = gatherPhones(lead);
+              return (
                 <div
                   key={lead.id}
                   className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm"
                 >
-                  <p className="font-semibold text-sm">{lead.empresa ?? "Sem empresa"}</p>
-                  <p className="text-xs text-slate-500">{lead.cnpj ?? "-"}</p>
-                  <p className="text-xs text-slate-500">{lead.telefone ?? "-"}</p>
+                  <p className="font-semibold text-sm">{displayName(lead)}</p>
+                  <p className="text-[11px] text-slate-500">
+                    {lead.vertical ?? "Vertical não informada"}
+                  </p>
+                  <p className="text-[11px] text-slate-400">{lead.cnpj ?? "-"}</p>
+                  <p className="text-[11px] text-slate-400">{lead.cidade ?? "-"}</p>
+                  {lead.endereco ? (
+                    <p className="text-[11px] text-slate-400">{lead.endereco}</p>
+                  ) : null}
+                  <div className="mt-2 space-y-1 text-xs text-slate-500">
+                    {phones.length > 0 ? (
+                      phones.map((phone, index) => (
+                        <p
+                          key={`${phone}-${index}`}
+                          className={index === 0 ? "text-xs text-slate-500" : "text-[11px] text-slate-400"}
+                        >
+                          {phone}
+                        </p>
+                      ))
+                    ) : (
+                      <p className="text-xs text-slate-500">Telefone não informado</p>
+                    )}
+                  </div>
                   <div className="mt-2 flex items-center justify-between gap-2">
                     <select
                       value={lead.status}
@@ -174,7 +221,8 @@ export default function BoardPage() {
                     </select>
                   </div>
                 </div>
-              ))}
+              );
+            })}
             </div>
           </div>
         ))}
