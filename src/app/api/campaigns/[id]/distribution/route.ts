@@ -21,15 +21,22 @@ export async function GET(_req: NextRequest, { params }: Params) {
     }
 
     const campaignId = params.id;
+    const officeId = _req.nextUrl.searchParams.get("officeId");
     const total = await prisma.lead.count({ where: { campanhaId: campaignId } });
     const estoqueWhere = {
       campanhaId: campaignId,
       consultorId: null,
     };
+    if (officeId) {
+      estoqueWhere.officeId = officeId;
+    }
     const atribuidosWhere = {
       campanhaId: campaignId,
       consultorId: { not: null },
     };
+    if (officeId) {
+      atribuidosWhere.officeId = officeId;
+    }
 
     const estoque = await prisma.lead.count({ where: estoqueWhere });
     const atribuidos = await prisma.lead.count({ where: atribuidosWhere });
@@ -43,7 +50,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     });
 
     const leadDetails = await prisma.lead.findMany({
-      where: { campanhaId: campaignId, consultorId: { not: null } },
+      where: { campanhaId: campaignId, consultorId: { not: null }, ...(officeId ? { officeId } : {}) },
       select: {
         consultorId: true,
         status: true,
@@ -179,10 +186,19 @@ export async function POST(req: NextRequest, { params }: Params) {
       consultantIds?: string[];
       quantityPerConsultant?: number;
       auto?: boolean;
-      considerOffice?: boolean;
+      officeId?: string;
     };
     const takeAll = Boolean(body.auto);
-    const considerOffice = Boolean(body.considerOffice);
+    const officeId = body.officeId ?? "";
+
+    if (!officeId) {
+      return NextResponse.json({ message: "officeId é obrigatório" }, { status: 400 });
+    }
+
+    const office = await prisma.office.findUnique({ where: { id: officeId } });
+    if (!office) {
+      return NextResponse.json({ message: "Escritório inválido" }, { status: 400 });
+    }
     const rawConsultantIds = Array.isArray(body.consultantIds)
       ? Array.from(new Set(body.consultantIds.filter(Boolean)))
       : [];
@@ -191,8 +207,9 @@ export async function POST(req: NextRequest, { params }: Params) {
     let targetConsultants: ConsultantDetail[] = [];
 
     if (takeAll) {
-      const autoWhere: { role: Role; id?: { in: string[] } } = {
+      const autoWhere: { role: Role; id?: { in: string[] }; officeId: string } = {
         role: Role.CONSULTOR,
+        officeId,
       };
       if (rawConsultantIds.length > 0) {
         autoWhere.id = { in: rawConsultantIds };
@@ -206,7 +223,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         return NextResponse.json({ message: "Selecione ao menos um consultor para distribuir." }, { status: 400 });
       }
       const consultants = await prisma.user.findMany({
-        where: { id: { in: rawConsultantIds }, role: Role.CONSULTOR },
+        where: { id: { in: rawConsultantIds }, role: Role.CONSULTOR, officeId },
         select: { id: true, officeId: true },
       });
       const consultantMap = new Map(consultants.map((c) => [c.id, c]));
@@ -231,6 +248,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       campanhaId: campaignId,
       status: LeadStatus.NOVO,
       consultorId: null,
+      officeId,
     };
     const totalStock = await prisma.lead.count({ where: stockWhere });
     if (totalStock === 0) {
@@ -255,14 +273,18 @@ export async function POST(req: NextRequest, { params }: Params) {
     }
 
     const assignments: LeadAssignment = takeAll
-      ? buildAutoAssignments(stockLeads, targetConsultants, considerOffice)
+      ? buildAutoAssignments(stockLeads, targetConsultants)
       : buildManualAssignments(stockLeads, targetConsultants, quantityPerConsultant);
 
     const updatePromises = [];
     const logPromises = [];
     const distributed: Record<string, number> = {};
 
-    const rulesApplied = describeRules({ auto: takeAll, quantity: quantityPerConsultant, considerOffice });
+    const rulesApplied = describeRules({
+      auto: takeAll,
+      quantity: quantityPerConsultant,
+      officeName: office.name,
+    });
 
     for (const consultant of targetConsultants) {
       const leadIds = assignments[consultant.id] ?? [];
@@ -328,18 +350,7 @@ function buildManualAssignments(leads: { id: string }[], consultants: Consultant
   return assignments;
 }
 
-function groupByOffice(consultants: ConsultantDetail[]): Map<string, string[]> {
-  const groups = new Map<string, string[]>();
-  consultants.forEach((consultant) => {
-    const key = consultant.officeId ?? "sem-escritorio";
-    const subset = groups.get(key) ?? [];
-    subset.push(consultant.id);
-    groups.set(key, subset);
-  });
-  return groups;
-}
-
-function buildAutoAssignments(leads: { id: string }[], consultants: ConsultantDetail[], considerOffice: boolean): LeadAssignment {
+function buildAutoAssignments(leads: { id: string }[], consultants: ConsultantDetail[]): LeadAssignment {
   const assignments: LeadAssignment = {};
   consultants.forEach((consultant) => {
     assignments[consultant.id] = [];
@@ -347,35 +358,28 @@ function buildAutoAssignments(leads: { id: string }[], consultants: ConsultantDe
   if (consultants.length === 0 || leads.length === 0) {
     return assignments;
   }
-  const groups = considerOffice ? groupByOffice(consultants) : new Map<string, string[]>([["todos", consultants.map((c) => c.id)]]);
-  const groupEntries = Array.from(groups.entries()).filter(([, ids]) => ids.length > 0);
   let index = 0;
   while (index < leads.length) {
-    for (const [, consultantIds] of groupEntries) {
-      for (const consultantId of consultantIds) {
-        if (index >= leads.length) {
-          break;
-        }
-        assignments[consultantId].push(leads[index].id);
-        index += 1;
-      }
+    for (const consultant of consultants) {
       if (index >= leads.length) {
         break;
       }
+      assignments[consultant.id].push(leads[index].id);
+      index += 1;
     }
   }
   return assignments;
 }
 
-function describeRules(options: { auto: boolean; quantity: number; considerOffice: boolean }) {
+function describeRules(options: { auto: boolean; quantity: number; officeName?: string | null }) {
   const segments = [];
   if (options.auto) {
     segments.push("Distribuição igualitária automática");
   } else {
     segments.push(`Distribuição manual (${options.quantity} por consultor)`);
   }
-  if (options.considerOffice) {
-    segments.push("considerando escritório");
+  if (options.officeName) {
+    segments.push(`escritório ${options.officeName}`);
   }
   return segments.join(" | ");
 }

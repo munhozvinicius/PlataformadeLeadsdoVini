@@ -69,6 +69,16 @@ type LeadItem = {
   vertical?: string | null;
   status: LeadStatus;
   consultor?: { id: string; name?: string | null; email?: string | null };
+  officeId?: string | null;
+};
+
+type ConsultantWithOffice = {
+  id: string;
+  name?: string | null;
+  email?: string | null;
+  officeId?: string | null;
+  officeName?: string | null;
+  officeCode?: string | null;
 };
 
 const serverFilterKeys: Array<keyof LeadFilters> = [
@@ -107,11 +117,12 @@ export default function CampaignDetailPage() {
     faturamentoMax: "",
     telefone: "all",
   });
-  const [consultants, setConsultants] = useState<{ id: string; name?: string | null; email?: string | null }[]>([]);
+  const [consultants, setConsultants] = useState<ConsultantWithOffice[]>([]);
   const [distributionQuantity, setDistributionQuantity] = useState(5);
   const [selectedConsultor, setSelectedConsultor] = useState("");
   const [selectedDistributionConsultants, setSelectedDistributionConsultants] = useState<string[]>([]);
-  const [considerOffice, setConsiderOffice] = useState(false);
+  const [offices, setOffices] = useState<{ id: string; name: string; code?: string | null }[]>([]);
+  const [selectedOfficeId, setSelectedOfficeId] = useState("");
   const [batches, setBatches] = useState<CampaignBatch[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState("");
   const [message, setMessage] = useState("");
@@ -128,20 +139,48 @@ export default function CampaignDetailPage() {
     return detail.resumo.total ? detail.resumo.ganhos / detail.resumo.total : 0;
   }, [detail]);
 
+  const filteredConsultants = useMemo(() => {
+    if (!selectedOfficeId) return [];
+    return consultants.filter((consultant) => consultant.officeId === selectedOfficeId);
+  }, [consultants, selectedOfficeId]);
+
+  const selectedOffice = useMemo(() => offices.find((office) => office.id === selectedOfficeId), [
+    offices,
+    selectedOfficeId,
+  ]);
+
+  useEffect(() => {
+    if (!selectedOfficeId && offices.length > 0) {
+      setSelectedOfficeId(offices[0].id);
+    }
+  }, [offices, selectedOfficeId]);
+
+  useEffect(() => {
+    setSelectedDistributionConsultants((prev) =>
+      prev.filter((id) => filteredConsultants.some((c) => c.id === id))
+    );
+    if (selectedConsultor && !filteredConsultants.some((c) => c.id === selectedConsultor)) {
+      setSelectedConsultor("");
+    }
+  }, [filteredConsultants, selectedConsultor]);
+
   const loadDetail = useCallback(async () => {
     const res = await fetch(`/api/campaigns/${id}`, { cache: "no-store" });
     if (res.ok) setDetail(await res.json());
   }, [id]);
 
   const loadDistribution = useCallback(async () => {
-    const res = await fetch(`/api/campaigns/${id}/distribution`, { cache: "no-store" });
+    if (!selectedOfficeId) return;
+    const params = new URLSearchParams({ officeId: selectedOfficeId });
+    const res = await fetch(`/api/campaigns/${id}/distribution?${params.toString()}`, { cache: "no-store" });
     if (res.ok) {
       const json = await res.json();
       setDistribution(json.distribution ?? []);
     }
-  }, [id]);
+  }, [id, selectedOfficeId]);
 
   const loadLeads = useCallback(async () => {
+    if (!selectedOfficeId) return;
     const params = new URLSearchParams();
     serverFilterKeys.forEach((key) => {
       const value = filters[key];
@@ -149,12 +188,13 @@ export default function CampaignDetailPage() {
         params.append(key, value);
       }
     });
+    params.append("officeId", selectedOfficeId);
     const res = await fetch(`/api/campaigns/${id}/leads?${params.toString()}`, { cache: "no-store" });
     if (res.ok) {
       const json = await res.json();
       setLeads(json.items ?? []);
     }
-  }, [filters, id]);
+  }, [filters, id, selectedOfficeId]);
 
   const loadLogs = useCallback(async () => {
     const res = await fetch(`/api/campaign/${id}/logs`, { cache: "no-store" });
@@ -169,9 +209,34 @@ export default function CampaignDetailPage() {
   const loadConsultants = useCallback(async () => {
     const res = await fetch("/api/admin/users", { cache: "no-store" });
     if (res.ok) {
-      const users = (await res.json()) as { id: string; name?: string | null; email?: string | null; role: string }[];
-      setConsultants(users.filter((u) => u.role === "CONSULTOR"));
+      type ApiUser = {
+        id: string;
+        name?: string | null;
+        email?: string | null;
+        role: string;
+        office?: { id?: string | null; name?: string | null; code?: string | null } | null;
+        escritorio?: string | null;
+        owner?: { escritorio?: string | null } | null;
+      };
+      const users = (await res.json()) as ApiUser[];
+      const onlyConsultants = users.filter((u) => u.role === "CONSULTOR");
+      setConsultants(
+        onlyConsultants.map((u) => ({
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          officeId: u.office?.id ?? null,
+          officeName: u.office?.name ?? u.escritorio ?? u.owner?.escritorio ?? "",
+          officeCode: u.office?.code ?? u.escritorio ?? u.owner?.escritorio ?? null,
+        }))
+      );
     }
+  }, []);
+
+  const loadOffices = useCallback(async () => {
+    const res = await fetch("/api/admin/offices", { cache: "no-store" });
+    if (!res.ok) return;
+    setOffices(await res.json());
   }, []);
 
   const loadBatches = useCallback(async () => {
@@ -191,12 +256,23 @@ export default function CampaignDetailPage() {
   useEffect(() => {
     if (status === "authenticated" && id) {
       loadDetail();
-      loadDistribution();
-      loadLeads();
       loadConsultants();
       loadBatches();
+      loadOffices();
     }
-  }, [status, id, loadDetail, loadDistribution, loadLeads, loadConsultants, loadBatches]);
+  }, [status, id, loadDetail, loadConsultants, loadBatches, loadOffices]);
+
+  useEffect(() => {
+    if (status === "authenticated" && id && selectedOfficeId) {
+      loadDistribution();
+    }
+  }, [status, id, selectedOfficeId, loadDistribution]);
+
+  useEffect(() => {
+    if (status === "authenticated" && id && selectedOfficeId) {
+      loadLeads();
+    }
+  }, [status, id, selectedOfficeId, filters, loadLeads]);
 
   useEffect(() => {
     if (status === "authenticated" && id) {
@@ -207,6 +283,9 @@ export default function CampaignDetailPage() {
 
   const filteredLeads = useMemo(() => {
     return leads.filter((lead) => {
+      if (selectedOfficeId && (!lead.officeId || lead.officeId !== selectedOfficeId)) {
+        return false;
+      }
       if (filters.documento) {
         const docValue = (lead.documento ?? lead.cnpj ?? "").toLowerCase();
         if (!docValue.includes(filters.documento.toLowerCase())) return false;
@@ -228,11 +307,28 @@ export default function CampaignDetailPage() {
       if (filters.telefone === "without" && hasAnyPhone(lead)) return false;
       return true;
     });
-  }, [leads, filters]);
+  }, [leads, filters, selectedOfficeId]);
+
+  const officeTotals = useMemo(
+    () =>
+      distribution.reduce(
+        (acc, row) => ({
+          assigned: acc.assigned + row.totalAtribuidos,
+          worked: acc.worked + row.trabalhados,
+          remaining: acc.remaining + row.restantes,
+        }),
+        { assigned: 0, worked: 0, remaining: 0 }
+      ),
+    [distribution]
+  );
 
   async function distribute() {
     if (!isMaster) {
       setMessage("Apenas master pode distribuir.");
+      return;
+    }
+    if (!selectedOfficeId) {
+      setMessage("Selecione um escritório antes de distribuir.");
       return;
     }
     setMessage("");
@@ -248,9 +344,9 @@ export default function CampaignDetailPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        officeId: selectedOfficeId,
         consultantIds: selectedDistributionConsultants,
         quantityPerConsultant: distributionQuantity,
-        considerOffice,
       }),
     });
     if (!res.ok) {
@@ -267,14 +363,18 @@ export default function CampaignDetailPage() {
       setMessage("Apenas master pode distribuir.");
       return;
     }
+    if (!selectedOfficeId) {
+      setMessage("Selecione um escritório antes de distribuir.");
+      return;
+    }
     setMessage("");
     const res = await fetch(`/api/campaigns/${id}/distribution`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        officeId: selectedOfficeId,
         consultantIds: selectedDistributionConsultants,
         auto: true,
-        considerOffice,
       }),
     });
     if (!res.ok) {
@@ -376,79 +476,98 @@ export default function CampaignDetailPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900">Distribuição de Leads</h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="space-y-3">
           <div className="space-y-1">
-            <label className="text-xs text-slate-600">Consultor (para reatribuir)</label>
-            <select
-              value={selectedConsultor}
-              onChange={(e) => setSelectedConsultor(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2 text-sm"
-            >
-              <option value="">Selecione</option>
-              {consultants.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name ?? c.email}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-slate-600">Consultores para distribuir</label>
-            <select
-              multiple
-              value={selectedDistributionConsultants}
-              onChange={(e) =>
-                setSelectedDistributionConsultants(Array.from(e.target.selectedOptions, (option) => option.value))
-              }
-              className="h-32 w-full rounded-lg border px-3 py-2 text-sm"
-              disabled={!isMaster}
-            >
-              {consultants.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name ?? c.email}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-slate-500">Use Ctrl/Cmd para selecionar mais de um consultor.</p>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-slate-600">Quantidade por consultor</label>
-            <input
-              type="number"
-              min={1}
-              value={distributionQuantity}
-              onChange={(e) => setDistributionQuantity(Math.max(1, Number(e.target.value)))}
-              className="w-full rounded-lg border px-3 py-2 text-sm"
-              disabled={!isMaster}
-            />
-          </div>
-          <div className="space-y-3">
-            <label className="text-xs text-slate-600">Opções</label>
-            <label className="flex items-center gap-2 text-xs text-slate-500">
-              <input
-                type="checkbox"
-                checked={considerOffice}
-                onChange={(e) => setConsiderOffice(e.target.checked)}
-                disabled={!isMaster}
-                className="h-4 w-4 rounded border-slate-300"
-              />
+            <label className="text-xs text-slate-600">
               Distribuir considerando escritório (SAFE TI / JLC Tech)
             </label>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={distribute}
-                disabled={!isMaster}
-                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:bg-slate-400"
+            <select
+              value={selectedOfficeId}
+              onChange={(e) => setSelectedOfficeId(e.target.value)}
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+            >
+              <option value="">Selecione um escritório</option>
+              {offices.map((office) => (
+                <option key={office.id} value={office.id}>
+                  {office.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-500">
+              {selectedOfficeId
+                ? `Escritório em foco: ${selectedOffice?.name ?? "não informado"}`
+                : "Selecione o escritório para liberar os consultores e filtrar os dados."}
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs text-slate-600">Consultor (para reatribuir)</label>
+              <select
+                value={selectedConsultor}
+                onChange={(e) => setSelectedConsultor(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+                disabled={!selectedOfficeId}
               >
-                Distribuir leads
-              </button>
-              <button
-                onClick={autoDistribute}
-                disabled={!isMaster}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:border-slate-200"
+                <option value="">Selecione</option>
+                {filteredConsultants.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name ?? c.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-600">Consultores para distribuir</label>
+              <select
+                multiple
+                value={selectedDistributionConsultants}
+                onChange={(e) =>
+                  setSelectedDistributionConsultants(Array.from(e.target.selectedOptions, (option) => option.value))
+                }
+                className="h-32 w-full rounded-lg border px-3 py-2 text-sm"
+                disabled={!selectedOfficeId}
               >
-                Distribuição igualitária automática
-              </button>
+                {filteredConsultants.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name ?? c.email}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-500">
+                {filteredConsultants.length === 0
+                  ? "Nenhum consultor cadastrado para este escritório."
+                  : "Use Ctrl/Cmd para selecionar mais de um consultor."}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-600">Quantidade por consultor</label>
+              <input
+                type="number"
+                min={1}
+                value={distributionQuantity}
+                onChange={(e) => setDistributionQuantity(Math.max(1, Number(e.target.value)))}
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+                disabled={!selectedOfficeId}
+              />
+            </div>
+            <div className="space-y-3">
+              <label className="text-xs text-slate-600">Ações</label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={distribute}
+                  disabled={!isMaster || !selectedOfficeId || selectedDistributionConsultants.length === 0}
+                  className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:bg-slate-400"
+                >
+                  Distribuir leads
+                </button>
+                <button
+                  onClick={autoDistribute}
+                  disabled={!isMaster || !selectedOfficeId}
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:border-slate-200"
+                >
+                  Distribuição igualitária automática
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -493,6 +612,19 @@ export default function CampaignDetailPage() {
                 </tr>
               ) : null}
             </tbody>
+            {distribution.length > 0 ? (
+              <tfoot>
+                <tr className="text-left text-slate-500 border-t">
+                  <td className="py-2 pr-3 font-semibold" colSpan={2}>
+                    Totais do {selectedOffice?.name ?? "escritório"}
+                  </td>
+                  <td className="py-2 pr-3 font-semibold">{officeTotals.assigned}</td>
+                  <td className="py-2 pr-3 font-semibold">{officeTotals.worked}</td>
+                  <td className="py-2 pr-3 font-semibold">{officeTotals.remaining}</td>
+                  <td className="py-2 pr-3" colSpan={5} />
+                </tr>
+              </tfoot>
+            ) : null}
           </table>
         </div>
       </div>

@@ -18,6 +18,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   const search = req.nextUrl.searchParams;
   const status = search.get("status") as LeadStatus | null;
   const consultorId = search.get("consultorId");
+  const officeId = search.get("officeId");
   const cidade = search.get("cidade");
   const uf = search.get("uf");
   const estrategia = search.get("estrategia");
@@ -28,6 +29,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   const where: Prisma.LeadWhereInput = { campanhaId: params.id };
   if (status) where.status = status;
   if (consultorId) where.consultorId = consultorId;
+  if (officeId) where.officeId = officeId;
   if (cidade) where.cidade = { contains: cidade, mode: "insensitive" };
   if (uf) where.estado = { equals: uf, mode: "insensitive" };
   if (estrategia) where.estrategia = { contains: estrategia, mode: "insensitive" };
@@ -57,11 +59,12 @@ export async function GET(req: NextRequest, { params }: Params) {
         cep: true,
         numero: true,
         estrategia: true,
-        vertical: true,
-        status: true,
-        consultor: { select: { id: true, name: true, email: true } },
-      },
-    }),
+      vertical: true,
+      status: true,
+      consultor: { select: { id: true, name: true, email: true } },
+      officeId: true,
+    },
+  }),
     prisma.lead.count({ where }),
   ]);
 

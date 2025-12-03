@@ -13,6 +13,7 @@ export interface ICompany extends Document {
   raw?: Record<string, unknown>;
   campaign: mongoose.Types.ObjectId;
   assignedTo: mongoose.Types.ObjectId;
+  office?: string;
   stage: StageId;
   isWorked: boolean;
   lastActivityAt?: Date;
@@ -42,6 +43,7 @@ const CompanySchema = new Schema<ICompany>(
     raw: { type: Schema.Types.Mixed },
     campaign: { type: Schema.Types.ObjectId, ref: "Campaign", required: true },
     assignedTo: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    office: { type: String },
     stage: {
       type: String,
       enum: ["NOVO", "EM_CONTATO", "EM_NEGOCIACAO", "FECHADO", "PERDIDO"],

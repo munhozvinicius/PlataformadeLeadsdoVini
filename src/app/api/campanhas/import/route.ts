@@ -87,6 +87,31 @@ export async function POST(req: Request) {
   let attributedLeads = 0;
   let notAttributedLeads = 0;
 
+  const offices = await prisma.office.findMany({
+    select: { id: true, code: true, name: true },
+  });
+  const officeLookup = new Map<string, string>();
+  const normalizeOfficeKey = (value?: string) => (value ? value.trim().toUpperCase() : "");
+  offices.forEach((office) => {
+    const codeKey = normalizeOfficeKey(office.code);
+    const nameKey = normalizeOfficeKey(office.name);
+    if (codeKey) officeLookup.set(codeKey, office.id);
+    if (nameKey) officeLookup.set(nameKey, office.id);
+  });
+
+  const resolveOfficeId = (territory?: string) => {
+    const normalized = normalizeOfficeKey(territory);
+    if (!normalized) return null;
+    const direct = officeLookup.get(normalized);
+    if (direct) return direct;
+    for (const [key, id] of officeLookup.entries()) {
+      if (normalized.includes(key) || key.includes(normalized)) {
+        return id;
+      }
+    }
+    return null;
+  };
+
   const importBatch = await prisma.importBatch.create({
     data: {
       nomeArquivoOriginal: originalFileName,
@@ -186,6 +211,7 @@ export async function POST(req: Request) {
         emails: email ? [email] : [],
         origem: origem || undefined,
         site: site || undefined,
+        officeId: resolveOfficeId(territorio) ?? undefined,
       },
     });
     created += 1;

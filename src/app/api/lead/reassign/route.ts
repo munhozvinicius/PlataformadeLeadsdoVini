@@ -16,9 +16,36 @@ export async function POST(req: NextRequest) {
   const { leadId, consultantId } = await req.json();
   if (!leadId || !consultantId) return NextResponse.json({ message: "leadId e consultantId são obrigatórios" }, { status: 400 });
 
+  const lead = await prisma.lead.findUnique({
+    where: { id: leadId },
+    select: { officeId: true },
+  });
+  if (!lead) {
+    return NextResponse.json({ message: "Lead não encontrada" }, { status: 404 });
+  }
+
+  const consultant = await prisma.user.findUnique({
+    where: { id: consultantId },
+    select: { officeId: true },
+  });
+  if (!consultant) {
+    return NextResponse.json({ message: "Consultor não encontrado" }, { status: 404 });
+  }
+
+  if (lead.officeId && consultant.officeId && lead.officeId !== consultant.officeId) {
+    return NextResponse.json(
+      { message: "A reatribuição só pode ocorrer entre consultores do mesmo escritório." },
+      { status: 400 }
+    );
+  }
+
   await prisma.lead.update({
     where: { id: leadId },
-    data: { consultorId: consultantId, isWorked: false },
+    data: {
+      consultorId: consultantId,
+      officeId: consultant.officeId ?? lead.officeId ?? null,
+      isWorked: false,
+    },
   });
 
   return NextResponse.json({ ok: true });

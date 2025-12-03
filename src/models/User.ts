@@ -8,6 +8,7 @@ export interface IUser extends Document {
   password: string;
   role: UserRole;
   owner?: mongoose.Types.ObjectId | null;
+  office?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -19,6 +20,7 @@ const UserSchema = new Schema<IUser>(
     password: { type: String, required: true },
     role: { type: String, enum: ["MASTER", "OWNER", "CONSULTOR"], required: true },
     owner: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    office: { type: String },
   },
   { timestamps: true }
 );
