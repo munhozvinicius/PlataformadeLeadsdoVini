@@ -68,6 +68,10 @@ model Campanha {
   parceiro    String?
   objetivo    String?
   vertical    String?
+  regiaoUf    String?
+  regiaoCidade String?
+  observacoes String?
+  status      String?   @default("ATIVA")
   periodoInicio DateTime?
   periodoFim   DateTime?
   createdAt   DateTime @default(now())
