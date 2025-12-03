@@ -28,7 +28,7 @@ type Lead = {
   vertical?: string | null;
   endereco?: string | null;
   status: LeadStatusId;
-  campanha?: { nome: string } | null;
+  campanha?: { id?: string; nome: string } | null;
   consultor?: { id: string; name?: string | null; email?: string | null } | null;
   isWorked?: boolean;
   lastActivityAt?: string | null;
@@ -70,6 +70,19 @@ type ConsultantBoardProps = {
   consultantId?: string;
   campaignId?: string;
   refreshSignal: number;
+  onCampaignsUpdate?: (campaigns: { id: string; name: string }[]) => void;
+};
+
+type Metrics = {
+  totalLeads: number;
+  workedLeads: number;
+  notWorkedLeads: number;
+  contactRate: number;
+  negotiationRate: number;
+  closeRate: number;
+  lossReasons: { outcomeLabel: string | null; _count: { outcomeLabel: number } }[];
+  avgActivities: number;
+  followUps: number;
 };
 
 const ACTIVITY_TYPES = [
@@ -568,11 +581,18 @@ function LeadCard({
   );
 }
 
-function ConsultantBoard({ viewerRole, consultantId, campaignId, refreshSignal }: ConsultantBoardProps) {
+function ConsultantBoard({
+  viewerRole,
+  consultantId,
+  campaignId,
+  refreshSignal,
+  onCampaignsUpdate,
+}: ConsultantBoardProps) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
 
   const loadLeads = useCallback(async () => {
     setLoading(true);
@@ -584,7 +604,7 @@ function ConsultantBoard({ viewerRole, consultantId, campaignId, refreshSignal }
     }
     const params = new URLSearchParams();
     if (consultantId) params.set("consultantId", consultantId);
-    if (campaignId) params.set("campaignId", campaignId);
+    if (campaignId && campaignId !== "all") params.set("campaignId", campaignId);
     try {
       const res = await fetch(`/api/consultor/leads?${params.toString()}`, { cache: "no-store" });
       if (!res.ok) {
@@ -594,17 +614,40 @@ function ConsultantBoard({ viewerRole, consultantId, campaignId, refreshSignal }
       }
       const data = (await res.json()) as Lead[];
       setLeads(data);
+      const campaignsFound = Array.from(
+        new Map(
+          data
+            .filter((l) => l.campanha?.id || l.campanha?.nome)
+            .map((l) => [l.campanha?.id ?? l.campanha?.nome ?? "", l.campanha?.nome ?? ""]),
+        ).entries(),
+      ).map(([id, name]) => ({ id, name }));
+      onCampaignsUpdate?.(campaignsFound);
     } catch (err) {
       console.error(err);
       setError("Erro ao carregar leads.");
     } finally {
       setLoading(false);
     }
+  }, [viewerRole, consultantId, campaignId, onCampaignsUpdate]);
+
+  const loadMetrics = useCallback(async () => {
+    if (viewerRole === "MASTER" && !consultantId) {
+      setMetrics(null);
+      return;
+    }
+    const params = new URLSearchParams();
+    if (consultantId) params.set("consultantId", consultantId);
+    if (campaignId) params.set("campaignId", campaignId);
+    const res = await fetch(`/api/consultor/metrics?${params.toString()}`, { cache: "no-store" });
+    if (res.ok) {
+      setMetrics(await res.json());
+    }
   }, [viewerRole, consultantId, campaignId]);
 
   useEffect(() => {
     loadLeads();
-  }, [loadLeads, refreshSignal]);
+    loadMetrics();
+  }, [loadLeads, loadMetrics, refreshSignal]);
 
   useEffect(() => {
     if (!selectedLead) return;
@@ -656,6 +699,31 @@ function ConsultantBoard({ viewerRole, consultantId, campaignId, refreshSignal }
         ))}
       </div>
 
+      {metrics ? (
+        <div className="rounded-xl border bg-white p-4 shadow-sm grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <div className="rounded-lg bg-slate-50 p-3">
+            <p className="text-xs text-slate-500">Leads totais</p>
+            <p className="text-lg font-semibold">{metrics.totalLeads}</p>
+            <p className="text-xs text-slate-500">Trabalhados: {metrics.workedLeads}</p>
+          </div>
+          <div className="rounded-lg bg-slate-50 p-3">
+            <p className="text-xs text-slate-500">Taxa de contato</p>
+            <p className="text-lg font-semibold">{metrics.contactRate}%</p>
+            <p className="text-xs text-slate-500">Não trabalhados: {metrics.notWorkedLeads}</p>
+          </div>
+          <div className="rounded-lg bg-slate-50 p-3">
+            <p className="text-xs text-slate-500">Taxa de negociação</p>
+            <p className="text-lg font-semibold">{metrics.negotiationRate}%</p>
+            <p className="text-xs text-slate-500">Atividades/lead: {metrics.avgActivities}</p>
+          </div>
+          <div className="rounded-lg bg-slate-50 p-3">
+            <p className="text-xs text-slate-500">Taxa de fechamento</p>
+            <p className="text-lg font-semibold">{metrics.closeRate}%</p>
+            <p className="text-xs text-slate-500">Follow-ups próximos 7d: {metrics.followUps}</p>
+          </div>
+        </div>
+      ) : null}
+
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
       {loading ? <div className="text-sm text-slate-600">Carregando...</div> : null}
       {viewerRole === "MASTER" && !consultantId ? (
@@ -704,6 +772,8 @@ export default function BoardPage() {
   const [consultants, setConsultants] = useState<{ id: string; name: string; email: string; role: string }[]>([]);
   const [selectedConsultant, setSelectedConsultant] = useState<string>("");
   const [refreshSignal, setRefreshSignal] = useState(0);
+  const [selectedCampaign, setSelectedCampaign] = useState<string>("all");
+  const [campaignOptions, setCampaignOptions] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
     if (status === "loading") return;
@@ -764,6 +834,18 @@ export default function BoardPage() {
               ))}
             </select>
           ) : null}
+          <select
+            value={selectedCampaign}
+            onChange={(e) => setSelectedCampaign(e.target.value)}
+            className="rounded-lg border px-3 py-2 text-sm"
+          >
+            <option value="all">Todas as campanhas</option>
+            {campaignOptions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name || c.id}
+              </option>
+            ))}
+          </select>
           <button
             onClick={() => setRefreshSignal((prev) => prev + 1)}
             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-100"
@@ -776,7 +858,9 @@ export default function BoardPage() {
       <ConsultantBoard
         viewerRole={viewerRole}
         consultantId={viewerRole === "CONSULTOR" ? session.user.id : selectedConsultant || undefined}
+        campaignId={selectedCampaign}
         refreshSignal={refreshSignal}
+        onCampaignsUpdate={setCampaignOptions}
       />
     </div>
   );

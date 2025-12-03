@@ -116,6 +116,7 @@ export async function POST(req: NextRequest) {
     data: {
       leadId,
       userId: sessionUser.id,
+      campaignId: lead.campanhaId,
       activityType,
       channel: parseChannel(channel),
       outcomeCode: outcomeCode || undefined,

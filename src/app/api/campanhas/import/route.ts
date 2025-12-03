@@ -45,18 +45,21 @@ export async function POST(req: Request) {
   const consultorId = formData.get("consultorId") as string | null;
   const campanhaId = formData.get("campanhaId") as string | null;
   const campanhaNome = formData.get("campanhaNome") as string | null;
+  const originalFileName = file?.name ?? "arquivo.xlsx";
+
+  if (!file) {
+    return NextResponse.json({ message: "Arquivo não enviado" }, { status: 400 });
+  }
 
   let campanhaIdToUse = campanhaId;
   if (!campanhaIdToUse) {
     if (!campanhaNome) {
       return NextResponse.json({ message: "Campanha ausente" }, { status: 400 });
     }
-    const created = await prisma.campanha.create({ data: { nome: campanhaNome } });
+    const created = await prisma.campanha.create({
+      data: { nome: campanhaNome, descricao: campanhaNome, createdById: session.user.id },
+    });
     campanhaIdToUse = created.id;
-  }
-
-  if (!file) {
-    return NextResponse.json({ message: "Arquivo não enviado" }, { status: 400 });
   }
 
   let buffer = Buffer.from(await file.arrayBuffer());
@@ -77,6 +80,15 @@ export async function POST(req: Request) {
   const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" }) as Record<string, unknown>[];
 
   let created = 0;
+
+  const importBatch = await prisma.importBatch.create({
+    data: {
+      nomeArquivoOriginal: originalFileName,
+      campaignId: campanhaIdToUse!,
+      totalLeads: rows.length,
+      criadoPorId: session.user.id,
+    },
+  });
   for (const row of rows) {
     const norm = normalizeRow(row);
     const razaoSocial = firstNonEmpty(norm["RAZAO_SOCIAL"], norm["EMPRESA"], norm["NOME_FANTASIA"]);
@@ -89,6 +101,7 @@ export async function POST(req: Request) {
     const telefone = firstNonEmpty(telefone1, telefone2, telefone3, norm["TELEFONE"]);
     const cnpj = firstNonEmpty(norm["CNPJ"], norm["DOCUMENTO"]);
     const email = norm["EMAIL"];
+    const enderecoBairro = norm["BAIRRO"];
     const vertical = norm["VERTICAL"];
     const logradouro = norm["LOGRADOURO"];
     const numero = norm["NUMERO"];
@@ -101,10 +114,18 @@ export async function POST(req: Request) {
     const idPruma = norm["ID PRUMA"];
     const vlFatPresumido = firstNonEmpty(norm["VL_FAT_PRESUMIDO"], norm["VL FAT PRESUMIDO"]);
     const cnae = firstNonEmpty(norm["CD_CNAE"], norm["CNAE"]);
+    const origem = norm["ORIGEM"] || campanhaNome || "Importação";
+    const telefones = [
+      telefone1 ? { rotulo: "Telefone 1", valor: telefone1 } : null,
+      telefone2 ? { rotulo: "Telefone 2", valor: telefone2 } : null,
+      telefone3 ? { rotulo: "Telefone 3", valor: telefone3 } : null,
+    ].filter(Boolean) as { rotulo: string; valor: string }[];
+    const site = norm["SITE"];
 
     await prisma.lead.create({
       data: {
         campanhaId: campanhaIdToUse!,
+        importBatchId: importBatch.id,
         razaoSocial,
         nomeFantasia,
         vertical,
@@ -115,9 +136,11 @@ export async function POST(req: Request) {
         telefone2: telefone2 || undefined,
         telefone3: telefone3 || undefined,
         cnpj,
+        documento: cnpj || undefined,
         email,
         logradouro: logradouro || undefined,
         numero: numero || undefined,
+        bairro: enderecoBairro || undefined,
         cep: cep || undefined,
         endereco: endereco || undefined,
         territorio: territorio || undefined,
@@ -132,6 +155,10 @@ export async function POST(req: Request) {
         status: LeadStatus.NOVO,
         historico: [],
         isWorked: false,
+        telefones,
+        emails: email ? [email] : [],
+        origem: origem || undefined,
+        site: site || undefined,
       },
     });
     created += 1;

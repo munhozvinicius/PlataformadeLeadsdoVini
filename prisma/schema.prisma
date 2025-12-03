@@ -39,7 +39,10 @@ model User {
   name          String
   email         String   @unique
   password      String
+  passwordHash  String?
   role          Role
+  companyTag    String?
+  ativo         Boolean  @default(true)
   escritorio    Escritorio?
   ownerId       String?  @db.ObjectId
   owner         User?    @relation("OwnerConsultor", fields: [ownerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -53,12 +56,14 @@ model User {
   leadsOwned    Lead[]   @relation("LeadOwner")
   isActive      Boolean  @default(true)
   leadActivities LeadActivity[] @relation("UserLeadActivities")
+  importBatches ImportBatch[] @relation("UserImportBatches")
 }
 
 model Campanha {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
   nome        String
   descricao   String?
+  parceiro    String?
   createdAt   DateTime @default(now())
   createdById String?  @db.ObjectId
   totalLeads      Int     @default(0)
@@ -67,14 +72,19 @@ model Campanha {
   isActive        Boolean @default(true)
 
   leadsBrutos Lead[]   @relation("CampanhaLeads")
+  importBatches ImportBatch[]
+  activities    LeadActivity[]
 }
 
 model Lead {
   id            String      @id @default(auto()) @map("_id") @db.ObjectId
   campanhaId    String      @db.ObjectId
   campanha      Campanha    @relation("CampanhaLeads", fields: [campanhaId], references: [id])
+  importBatchId String?     @db.ObjectId
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
 
   cnpj          String?
+  documento     String?
   razaoSocial   String?
   nomeFantasia  String?
   vertical      String?
@@ -87,6 +97,7 @@ model Lead {
   telefone3     String?
   logradouro    String?
   numero        String?
+  bairro        String?
   cep           String?
   endereco      String?
   territorio    String?
@@ -116,6 +127,12 @@ model Lead {
   lastOutcomeNote  String?
   nextFollowUpAt   DateTime?
   nextStepNote     String?
+  telefones        Json?
+  emails           String[]
+  site             String?
+  contatoPrincipal Json?
+  observacoesGerais String?
+  origem           String?
 
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -139,6 +156,8 @@ model LeadActivity {
   lead           Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
   userId         String        @db.ObjectId
   user           User          @relation("UserLeadActivities", fields: [userId], references: [id])
+  campaignId     String        @db.ObjectId
+  campaign       Campanha      @relation(fields: [campaignId], references: [id])
   activityType   String
   channel        ActivityChannel?
   outcomeCode    String?
@@ -153,4 +172,17 @@ model LeadActivity {
 
   @@index([leadId])
   @@index([userId])
+  @@index([campaignId])
+}
+
+model ImportBatch {
+  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  nomeArquivoOriginal String
+  campaignId          String    @db.ObjectId
+  campaign            Campanha  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  totalLeads          Int
+  criadoPorId         String?   @db.ObjectId
+  criadoPor           User?     @relation("UserImportBatches", fields: [criadoPorId], references: [id])
+  createdAt           DateTime  @default(now())
+  leads               Lead[]
 }

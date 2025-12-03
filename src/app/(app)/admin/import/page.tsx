@@ -16,6 +16,15 @@ type Campaign = {
   createdAt?: string;
 };
 
+type ImportBatch = {
+  id: string;
+  nomeArquivoOriginal: string;
+  campaignId: string;
+  campaignName: string;
+  totalLeads: number;
+  createdAt: string;
+};
+
 type User = { id: string; name: string; email: string; role: string };
 
 export default function ImportPage() {
@@ -23,6 +32,7 @@ export default function ImportPage() {
   const { data: session, status } = useSession();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [batches, setBatches] = useState<ImportBatch[]>([]);
   const [campaignId, setCampaignId] = useState("");
   const [newCampaignName, setNewCampaignName] = useState("");
   const [newCampaignDescription, setNewCampaignDescription] = useState("");
@@ -33,6 +43,7 @@ export default function ImportPage() {
   const [campaignToDelete, setCampaignToDelete] = useState<Campaign | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [batchToDelete, setBatchToDelete] = useState<ImportBatch | null>(null);
 
   useEffect(() => {
     if (status === "authenticated" && session?.user.role !== "MASTER") {
@@ -43,6 +54,7 @@ export default function ImportPage() {
   useEffect(() => {
     loadCampaigns();
     loadUsers();
+    loadBatches();
   }, []);
 
   const consultants = useMemo(() => users.filter((u) => u.role === "CONSULTOR"), [users]);
@@ -52,6 +64,14 @@ export default function ImportPage() {
     if (res.ok) {
       const data = await res.json();
       setCampaigns(data);
+    }
+  }
+
+  async function loadBatches() {
+    const res = await fetch("/api/admin/import-batches", { cache: "no-store" });
+    if (res.ok) {
+      const data = await res.json();
+      setBatches(data);
     }
   }
 
@@ -138,6 +158,22 @@ export default function ImportPage() {
     const json = await res.json();
     setMessage(`Importação concluída: ${json.created} criados.`);
     await loadCampaigns();
+    await loadBatches();
+  }
+
+  async function deleteBatch() {
+    if (!batchToDelete) return;
+    setDeleteError("");
+    setDeleteLoading(true);
+    const res = await fetch(`/api/admin/import-batches/${batchToDelete.id}`, { method: "DELETE" });
+    setDeleteLoading(false);
+    if (!res.ok) {
+      setDeleteError("Não foi possível excluir esta base.");
+      return;
+    }
+    setBatchToDelete(null);
+    await loadCampaigns();
+    await loadBatches();
   }
 
   return (
@@ -271,6 +307,47 @@ export default function ImportPage() {
           ))}
         </div>
       </div>
+
+      <div className="rounded-xl border bg-white p-4 shadow-sm space-y-3">
+        <h2 className="text-lg font-semibold text-slate-900">Importações</h2>
+        <p className="text-sm text-slate-600">Batches importados com opção de exclusão total.</p>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="text-left text-slate-500 border-b">
+                <th className="py-2 pr-3">Arquivo</th>
+                <th className="py-2 pr-3">Campanha</th>
+                <th className="py-2 pr-3">Total</th>
+                <th className="py-2 pr-3">Criado em</th>
+                <th className="py-2 pr-3">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {batches.map((batch) => (
+                <tr key={batch.id} className="border-b last:border-b-0">
+                  <td className="py-2 pr-3">{batch.nomeArquivoOriginal}</td>
+                  <td className="py-2 pr-3">{batch.campaignName}</td>
+                  <td className="py-2 pr-3">{batch.totalLeads}</td>
+                  <td className="py-2 pr-3">
+                    {batch.createdAt ? new Date(batch.createdAt).toLocaleString("pt-BR") : "-"}
+                  </td>
+                  <td className="py-2 pr-3">
+                    <button
+                      onClick={() => {
+                        setDeleteError("");
+                        setBatchToDelete(batch);
+                      }}
+                      className="text-xs text-red-600 underline"
+                    >
+                      Excluir base
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
       {campaignToDelete ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 backdrop-blur-sm">
           <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl space-y-3">
@@ -290,6 +367,36 @@ export default function ImportPage() {
               </button>
               <button
                 onClick={deleteCampaign}
+                disabled={deleteLoading}
+                className="rounded-lg bg-red-600 text-white px-4 py-2 text-sm font-semibold hover:bg-red-500 disabled:opacity-60"
+              >
+                {deleteLoading ? "Excluindo..." : "Excluir base"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {batchToDelete ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl space-y-3">
+            <h3 className="text-lg font-semibold text-slate-900">Excluir lote importado</h3>
+            <p className="text-sm text-slate-600">
+              Isso removerá todos os leads e atividades vinculados a este arquivo/importação. A ação é irreversível.
+            </p>
+            <p className="text-sm font-semibold text-slate-800">
+              {batchToDelete.nomeArquivoOriginal} — {batchToDelete.totalLeads} leads
+            </p>
+            {deleteError ? <p className="text-sm text-red-600">{deleteError}</p> : null}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setBatchToDelete(null)}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-100"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={deleteBatch}
                 disabled={deleteLoading}
                 className="rounded-lg bg-red-600 text-white px-4 py-2 text-sm font-semibold hover:bg-red-500 disabled:opacity-60"
               >
