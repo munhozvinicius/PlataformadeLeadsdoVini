@@ -62,9 +62,3 @@ export async function PATCH(req: Request, { params }: Params) {
 
   return NextResponse.json({ ok: true });
 }
-      historico: historicoAtual as Prisma.JsonArray,
-    },
-  });
-
-  return NextResponse.json({ ok: true });
-}
