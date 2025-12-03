@@ -20,11 +20,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
     const total = await prisma.lead.count({ where: { campanhaId: campaignId } });
     const estoqueWhere = {
       campanhaId: campaignId,
-      OR: [{ consultorId: null }, { consultorId: "" }],
+      consultorId: null,
     };
     const atribuidosWhere = {
       campanhaId: campaignId,
-      NOT: [{ consultorId: null }, { consultorId: "" }],
+      consultorId: { not: null },
     };
 
     const estoque = await prisma.lead.count({ where: estoqueWhere });
@@ -110,7 +110,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     const stockWhere = {
       campanhaId: campaignId,
       status: LeadStatus.NOVO,
-      OR: [{ consultorId: null }, { consultorId: "" }],
+      consultorId: null,
     };
 
     const stockLeads = await prisma.lead.findMany({
