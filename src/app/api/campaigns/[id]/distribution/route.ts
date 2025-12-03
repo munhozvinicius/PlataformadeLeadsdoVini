@@ -210,9 +210,14 @@ export async function POST(req: NextRequest, { params }: Params) {
         select: { id: true, officeId: true },
       });
       const consultantMap = new Map(consultants.map((c) => [c.id, c]));
-      targetConsultants = rawConsultantIds
-        .map((id) => consultantMap.get(id))
-        .filter((c): c is ConsultantDetail => Boolean(c));
+      const resolvedConsultants: ConsultantDetail[] = [];
+      for (const id of rawConsultantIds) {
+        const candidate = consultantMap.get(id);
+        if (candidate) {
+          resolvedConsultants.push(candidate);
+        }
+      }
+      targetConsultants = resolvedConsultants;
     }
 
     if (targetConsultants.length === 0) {
