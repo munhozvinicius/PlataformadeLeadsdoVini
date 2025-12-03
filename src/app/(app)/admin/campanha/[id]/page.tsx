@@ -34,7 +34,9 @@ type AdminUser = {
   name?: string | null;
   email?: string | null;
   role: string;
+  escritorio?: string | null;
   office?: { id?: string | null; name?: string | null } | null;
+  owner?: { escritorio?: string | null } | null;
 };
 
 export default function CampanhaDetalhePage() {
@@ -51,9 +53,16 @@ export default function CampanhaDetalhePage() {
   const [message, setMessage] = useState("");
   const [distribution, setDistribution] = useState<DistributionRow[]>([]);
   const [resumo, setResumo] = useState<Resumo | null>(null);
-  const [offices, setOffices] = useState<{ id: string; name: string }[]>([]);
+  const [offices, setOffices] = useState<{ id: string; name: string; code?: string | null }[]>([]);
   const [consultants, setConsultants] = useState<
-    { id: string; name?: string | null; email?: string | null; officeId?: string | null; officeName?: string | null }[]
+    {
+      id: string;
+      name?: string | null;
+      email?: string | null;
+      officeId?: string | null;
+      officeName?: string | null;
+      officeCode?: string | null;
+    }[]
   >([]);
   const [selectedOffice, setSelectedOffice] = useState<string>("all");
   const [selectedConsultants, setSelectedConsultants] = useState<string[]>([]);
@@ -100,7 +109,8 @@ export default function CampanhaDetalhePage() {
           name: u.name,
           email: u.email,
           officeId: u.office?.id ?? null,
-          officeName: u.office?.name ?? "",
+          officeName: u.office?.name ?? u.escritorio ?? u.owner?.escritorio ?? "",
+          officeCode: (u as { office?: { code?: string } }).office?.code ?? u.escritorio ?? u.owner?.escritorio ?? null,
         }))
       );
     }
@@ -139,8 +149,12 @@ export default function CampanhaDetalhePage() {
       : null);
   const batches: Batch[] = data.batches ?? [];
   const distr = data.distribuicao ?? [];
+  const selectedOfficeCode =
+    selectedOffice === "all" ? null : offices.find((o) => o.id === selectedOffice)?.code ?? null;
   const filteredConsultants = consultants.filter((c) =>
-    selectedOffice === "all" ? true : c.officeId === selectedOffice
+    selectedOffice === "all"
+      ? true
+      : c.officeId === selectedOffice || (!!selectedOfficeCode && c.officeCode === selectedOfficeCode)
   );
   const tableRows = distribution
     .filter((row) =>
