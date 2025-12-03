@@ -8,11 +8,14 @@ declare global {
 function getPrismaClient() {
   const datasourceUrl =
     process.env.MONGO_URL_MONGODB_URI || process.env.MONGODB_URI || process.env.DATABASE_URL;
-  if (!datasourceUrl) {
-    throw new Error("Missing Mongo connection string (MONGO_URL_MONGODB_URI or MONGODB_URI).");
-  }
 
   const client = new PrismaClient({
+    datasources: {
+      db: {
+        // Fallback evita falha em build sem variável; em produção a env deve estar definida.
+        url: datasourceUrl || "mongodb://127.0.0.1:27017/placeholder",
+      },
+    },
     log: process.env.NODE_ENV === "development" ? ["query", "info", "warn", "error"] : ["error"],
   });
   return client;

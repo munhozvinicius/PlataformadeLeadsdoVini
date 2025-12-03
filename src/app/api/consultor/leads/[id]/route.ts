@@ -21,7 +21,7 @@ export async function PATCH(req: Request, { params }: Params) {
   const allowed = Object.values(LeadStatus).includes(status);
   if (!allowed) return NextResponse.json({ message: "Status inválido" }, { status: 400 });
 
-  let leadWhere: Prisma.LeadWhereInput = { id: params.id };
+  const leadWhere: Prisma.LeadWhereInput = { id: params.id };
   if (session.user.role === Role.CONSULTOR) {
     leadWhere.consultorId = session.user.id;
   } else if (session.user.role === Role.OWNER) {
