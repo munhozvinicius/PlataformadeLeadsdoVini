@@ -17,9 +17,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   const campaignId = params.id;
   const total = await prisma.lead.count({ where: { campanhaId: campaignId } });
-  const estoque = await prisma.lead.count({ where: { campanhaId: campaignId, consultorId: null } });
+  const estoque = await prisma.lead.count({
+    where: { campanhaId: campaignId, OR: [{ consultorId: null }, { consultorId: "" }] },
+  });
   const atribuidos = await prisma.lead.count({
-    where: { campanhaId: campaignId, consultorId: { not: null } },
+    where: { campanhaId: campaignId, consultorId: { not: null, notIn: [""] } },
   });
   const fechados = await prisma.lead.count({ where: { campanhaId: campaignId, status: LeadStatus.FECHADO } });
   const perdidos = await prisma.lead.count({ where: { campanhaId: campaignId, status: LeadStatus.PERDIDO } });
@@ -27,7 +29,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const grouped = await prisma.lead.groupBy({
     by: ["consultorId", "status"],
     _count: { status: true },
-    where: { campanhaId: campaignId, consultorId: { not: null } },
+    where: { campanhaId: campaignId, consultorId: { not: null, notIn: [""] } },
   });
 
   const consultorIds = Array.from(new Set(grouped.map((g) => g.consultorId).filter(Boolean))) as string[];
@@ -92,7 +94,11 @@ export async function POST(req: NextRequest, { params }: Params) {
   const totalNeeded = quantityPerConsultant * consultantIds.length;
   // Pega leads em estoque (sem consultor, status NOVO)
   const stockLeads = await prisma.lead.findMany({
-    where: { campanhaId: campaignId, consultorId: null, status: LeadStatus.NOVO },
+    where: {
+      campanhaId: campaignId,
+      OR: [{ consultorId: null }, { consultorId: "" }],
+      status: LeadStatus.NOVO,
+    },
     orderBy: { createdAt: "asc" },
     take: totalNeeded,
     select: { id: true },
@@ -134,7 +140,11 @@ export async function POST(req: NextRequest, { params }: Params) {
   }
 
   const remainingStock = await prisma.lead.count({
-    where: { campanhaId: campaignId, consultorId: null, status: LeadStatus.NOVO },
+    where: {
+      campanhaId: campaignId,
+      OR: [{ consultorId: null }, { consultorId: "" }],
+      status: LeadStatus.NOVO,
+    },
   });
 
   return NextResponse.json({ success: true, distributed, remainingStock });

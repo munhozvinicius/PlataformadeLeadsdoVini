@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { zipSync } from "fflate";
@@ -29,20 +29,17 @@ type ImportBatch = {
   duplicatedLeads?: number;
 };
 
-type User = { id: string; name: string; email: string; role: string };
-
 export default function ImportPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const [batches, setBatches] = useState<ImportBatch[]>([]);
   const [campaignId, setCampaignId] = useState("");
   const [newCampaignName, setNewCampaignName] = useState("");
   const [newCampaignDescription, setNewCampaignDescription] = useState("");
   const [newCampaignObjective, setNewCampaignObjective] = useState("");
   const [newCampaignVertical, setNewCampaignVertical] = useState("");
-  const [assignedUser, setAssignedUser] = useState("");
+  // Controles de atribuição removidos desta tela; distribuição ocorre no detalhe da campanha
   const [file, setFile] = useState<File | null>(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -50,8 +47,7 @@ export default function ImportPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [batchToDelete, setBatchToDelete] = useState<ImportBatch | null>(null);
-  const [assignmentType, setAssignmentType] = useState<"none" | "single" | "multi">("single");
-  const [multiConsultants, setMultiConsultants] = useState<string[]>([]);
+  const assignmentType: "none" | "single" | "multi" = "none";
 
   useEffect(() => {
     if (status === "authenticated" && session?.user.role !== "MASTER") {
@@ -61,11 +57,8 @@ export default function ImportPage() {
 
   useEffect(() => {
     loadCampaigns();
-    loadUsers();
     loadBatches();
   }, []);
-
-  const consultants = useMemo(() => users.filter((u) => u.role === "CONSULTOR"), [users]);
 
   async function loadCampaigns() {
     const res = await fetch("/api/campanhas/summary", { cache: "no-store" });
@@ -83,13 +76,6 @@ export default function ImportPage() {
     }
   }
 
-  async function loadUsers() {
-    const res = await fetch("/api/admin/users", { cache: "no-store" });
-    if (res.ok) {
-      const data = await res.json();
-      setUsers(data);
-    }
-  }
 
   async function deleteCampaign() {
     if (!campaignToDelete) return;
@@ -146,14 +132,6 @@ export default function ImportPage() {
       setMessage("Escolha uma campanha ou crie uma nova antes de importar.");
       return;
     }
-    if (assignmentType === "single" && !assignedUser) {
-      setMessage("Selecione o consultor para atribuição ou escolha deixar em estoque.");
-      return;
-    }
-    if (assignmentType === "multi" && multiConsultants.length === 0) {
-      setMessage("Selecione pelo menos um consultor para distribuição múltipla.");
-      return;
-    }
 
     const buffer = await file.arrayBuffer();
     // Compacta o arquivo para reduzir tamanho da requisição e evitar 413.
@@ -169,11 +147,7 @@ export default function ImportPage() {
     formData.append("compressed", "true");
     if (campaignId) formData.append("campanhaId", campaignId);
     if (!campaignId && newCampaignName) formData.append("campanhaNome", newCampaignName);
-    if (assignmentType !== "none" && assignedUser) formData.append("consultorId", assignedUser);
     formData.append("assignmentType", assignmentType);
-    if (assignmentType === "multi") {
-      multiConsultants.forEach((id) => formData.append("multiConsultants[]", id));
-    }
 
     setLoading(true);
     const res = await fetch("/api/campanhas/import", {
@@ -238,48 +212,9 @@ export default function ImportPage() {
                 ))}
               </select>
             </div>
-            <div className="space-y-1">
-              <label className="text-xs text-slate-600">Atribuir para consultor</label>
-              <select
-                value={assignedUser}
-                onChange={(e) => setAssignedUser(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-sm"
-              >
-                <option value="">Selecione</option>
-                {consultants.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name} ({u.email})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-slate-600">Tipo de atribuição</label>
-              <select
-                value={assignmentType}
-                onChange={(e) => setAssignmentType(e.target.value as "none" | "single" | "multi")}
-                className="w-full border rounded-lg px-3 py-2 text-sm"
-              >
-                <option value="none">Não atribuir (estoque da campanha)</option>
-                <option value="single">Atribuir tudo para um consultor</option>
-                <option value="multi">Distribuir igualmente entre consultores</option>
-              </select>
-              {assignmentType === "multi" ? (
-                <select
-                  multiple
-                  value={multiConsultants}
-                  onChange={(e) =>
-                    setMultiConsultants(Array.from(e.target.selectedOptions).map((opt) => opt.value))
-                  }
-                  className="w-full border rounded-lg px-3 py-2 text-sm h-32"
-                >
-                  {consultants.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} ({u.email})
-                    </option>
-                  ))}
-                </select>
-              ) : null}
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              A distribuição agora é feita dentro do detalhe da campanha. Ao importar, os leads ficam em estoque
+              (status Novo) para você racionar depois.
             </div>
             <div className="space-y-1">
               <label className="text-xs text-slate-600">Arquivo Excel</label>

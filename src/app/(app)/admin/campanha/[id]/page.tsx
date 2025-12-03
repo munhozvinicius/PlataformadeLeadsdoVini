@@ -204,6 +204,10 @@ export default function CampanhaDetalhePage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+          <div className="md:col-span-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+            Selecione os consultores e a quantidade por pessoa. O botão só funciona se houver leads em estoque (coluna
+            ESTOQUE acima). Após distribuir, os leads aparecem como “Novo” no board do consultor.
+          </div>
           <div className="space-y-1">
             <label className="text-xs text-slate-600">Consultores</label>
             <select

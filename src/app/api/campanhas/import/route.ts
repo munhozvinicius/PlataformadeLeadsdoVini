@@ -177,7 +177,8 @@ export async function POST(req: Request) {
         vlFatPresumido: vlFatPresumido || undefined,
         cnae: cnae || undefined,
         raw: norm,
-        consultorId: assignmentType === "none" ? undefined : consultorEscolhido,
+        // quando não atribuir, grava explicitamente null para que filtros de estoque encontrem
+        consultorId: assignmentType === "none" ? null : consultorEscolhido ?? null,
         status: LeadStatus.NOVO,
         historico: [],
         isWorked: false,
