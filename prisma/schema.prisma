@@ -57,6 +57,8 @@ model User {
   isActive      Boolean  @default(true)
   leadActivities LeadActivity[] @relation("UserLeadActivities")
   importBatches ImportBatch[] @relation("UserImportBatches")
+  leadNotes     LeadNote[]
+  leadLosses    LeadLoss[]
 }
 
 model Campanha {
@@ -133,11 +135,14 @@ model Lead {
   contatoPrincipal Json?
   observacoesGerais String?
   origem           String?
+  externalData     Json?
 
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
   activities    LeadActivity[]
+  notes         LeadNote[]
+  losses        LeadLoss[]
 }
 
 model Office {
@@ -185,4 +190,32 @@ model ImportBatch {
   criadoPor           User?     @relation("UserImportBatches", fields: [criadoPorId], references: [id])
   createdAt           DateTime  @default(now())
   leads               Lead[]
+}
+
+model LeadNote {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  leadId    String   @db.ObjectId
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
+  tipo      String
+  conteudo  String
+  createdAt DateTime @default(now())
+
+  @@index([leadId])
+  @@index([userId])
+}
+
+model LeadLoss {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  leadId       String   @db.ObjectId
+  lead         Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId       String   @db.ObjectId
+  user         User     @relation(fields: [userId], references: [id])
+  motivo       String
+  justificativa String
+  createdAt    DateTime @default(now())
+
+  @@index([leadId])
+  @@index([userId])
 }
