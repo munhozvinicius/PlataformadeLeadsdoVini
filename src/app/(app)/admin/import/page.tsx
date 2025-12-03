@@ -138,8 +138,20 @@ export default function ImportPage() {
   async function handleImport(e: React.FormEvent) {
     e.preventDefault();
     setMessage("");
-    if (!assignedUser || !file) {
-      setMessage("Selecione consultor e arquivo. Campanha é obrigatória (crie ou escolha).");
+    if (!file) {
+      setMessage("Selecione o arquivo da planilha.");
+      return;
+    }
+    if (!campaignId && !newCampaignName) {
+      setMessage("Escolha uma campanha ou crie uma nova antes de importar.");
+      return;
+    }
+    if (assignmentType === "single" && !assignedUser) {
+      setMessage("Selecione o consultor para atribuição ou escolha deixar em estoque.");
+      return;
+    }
+    if (assignmentType === "multi" && multiConsultants.length === 0) {
+      setMessage("Selecione pelo menos um consultor para distribuição múltipla.");
       return;
     }
 
@@ -157,7 +169,7 @@ export default function ImportPage() {
     formData.append("compressed", "true");
     if (campaignId) formData.append("campanhaId", campaignId);
     if (!campaignId && newCampaignName) formData.append("campanhaNome", newCampaignName);
-    formData.append("consultorId", assignedUser);
+    if (assignmentType !== "none" && assignedUser) formData.append("consultorId", assignedUser);
     formData.append("assignmentType", assignmentType);
     if (assignmentType === "multi") {
       multiConsultants.forEach((id) => formData.append("multiConsultants[]", id));

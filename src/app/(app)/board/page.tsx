@@ -8,7 +8,7 @@ import React, {
   FormEvent,
   ChangeEvent,
 } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { LEAD_STATUS, LeadStatusId } from "@/constants/leadStatus";
 
@@ -873,6 +873,7 @@ function ConsultantBoard({
 export default function BoardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [consultants, setConsultants] = useState<{ id: string; name: string; email: string; role: string }[]>([]);
   const [selectedConsultant, setSelectedConsultant] = useState<string>("");
   const [refreshSignal, setRefreshSignal] = useState(0);
@@ -888,6 +889,19 @@ export default function BoardPage() {
       setSelectedConsultant(session.user.id);
     }
   }, [status, session, router]);
+
+  useEffect(() => {
+    if (status !== "authenticated" || !session?.user) return;
+    if (session.user.role === "CONSULTOR") return;
+    const consultantFromQuery = searchParams.get("consultantId");
+    const campaignFromQuery = searchParams.get("campaignId");
+    if (consultantFromQuery) {
+      setSelectedConsultant(consultantFromQuery);
+    }
+    if (campaignFromQuery) {
+      setSelectedCampaign(campaignFromQuery);
+    }
+  }, [status, session, searchParams]);
 
   const loadConsultants = useCallback(async () => {
     const res = await fetch("/api/admin/users", { cache: "no-store" });

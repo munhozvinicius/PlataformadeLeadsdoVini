@@ -18,7 +18,10 @@ export async function GET() {
 
   if (role === Role.MASTER) {
     users = await prisma.user.findMany({
-      include: { owner: { select: { id: true, name: true, email: true, escritorio: true } } },
+      include: {
+        owner: { select: { id: true, name: true, email: true, escritorio: true } },
+        office: { select: { id: true, name: true, code: true } },
+      },
       orderBy: { createdAt: "desc" },
     });
   } else if (role === Role.OWNER) {
@@ -27,7 +30,10 @@ export async function GET() {
       where: {
         OR: [{ id: session.user.id }, { ownerId: session.user.id }],
       },
-      include: { owner: { select: { id: true, name: true, email: true, escritorio: true } } },
+      include: {
+        owner: { select: { id: true, name: true, email: true, escritorio: true } },
+        office: { select: { id: true, name: true, code: true } },
+      },
       orderBy: { createdAt: "desc" },
     });
   } else {
