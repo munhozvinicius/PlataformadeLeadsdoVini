@@ -59,6 +59,9 @@ model User {
   importBatches ImportBatch[] @relation("UserImportBatches")
   leadNotes     LeadNote[]
   leadLosses    LeadLoss[]
+  adminDistributionLogs      DistributionLog[] @relation("AdminDistributionLog")
+  consultantDistributionLogs DistributionLog[] @relation("ConsultantDistributionLog")
+  leadHistories LeadHistory[] @relation("UserLeadHistory")
 }
 
 model Campanha {
@@ -84,6 +87,7 @@ model Campanha {
   leadsBrutos Lead[]   @relation("CampanhaLeads")
   importBatches ImportBatch[]
   activities    LeadActivity[]
+  distributionLogs DistributionLog[] @relation("CampanhaDistributionLogs")
 }
 
 model Lead {
@@ -151,6 +155,7 @@ model Lead {
   activities    LeadActivity[]
   notes         LeadNote[]
   losses        LeadLoss[]
+  histories     LeadHistory[] @relation("LeadToHistories")
 }
 
 model Office {
@@ -216,7 +221,7 @@ model DistributionLog {
   rulesApplied String?
   createdAt    DateTime @default(now())
 
-  campaign     Campanha @relation(fields: [campaignId], references: [id])
+  campaign     Campanha @relation("CampanhaDistributionLogs", fields: [campaignId], references: [id])
   admin        User     @relation("AdminDistributionLog", fields: [adminId], references: [id])
   consultant   User     @relation("ConsultantDistributionLog", fields: [consultantId], references: [id])
 }
@@ -224,10 +229,10 @@ model DistributionLog {
 model LeadHistory {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   leadId    String   @db.ObjectId
-  lead      Lead     @relation(fields: [leadId], references: [id])
+  lead      Lead     @relation("LeadToHistories", fields: [leadId], references: [id])
   action    String
   userId    String   @db.ObjectId
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation("UserLeadHistory", fields: [userId], references: [id])
   notes     String?
   createdAt DateTime @default(now())
 }
