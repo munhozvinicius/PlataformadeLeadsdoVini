@@ -253,9 +253,18 @@ export default function CampanhaDetalhePage() {
                   }),
                 });
                 if (!res.ok) {
-                  setMessage("Erro ao distribuir.");
+                  const errorText = await res.json().catch(() => ({}));
+                  setMessage(errorText?.message ?? "Erro ao distribuir.");
                 } else {
-                  setMessage("Leads distribuídos com sucesso.");
+                  const json = await res.json();
+                  const resumoDistribuido = Object.entries(json.distributed ?? {})
+                    .map(([cid, q]) => `${q} → ${consultants.find((c) => c.id === cid)?.name ?? cid}`)
+                    .join(" | ");
+                  setMessage(
+                    `Leads distribuídos com sucesso. ${resumoDistribuido || ""} Estoque restante: ${
+                      json.remainingStock ?? 0
+                    }.`
+                  );
                   await load();
                   await loadDistribution();
                 }

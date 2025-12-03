@@ -98,6 +98,13 @@ export async function POST(req: NextRequest, { params }: Params) {
     select: { id: true },
   });
 
+  if (stockLeads.length === 0) {
+    return NextResponse.json(
+      { success: false, message: "Estoque vazio para esta campanha. Nenhum lead disponível." },
+      { status: 400 }
+    );
+  }
+
   const distributed: Record<string, number> = {};
   let cursor = 0;
   for (const consultantId of consultantIds) {
@@ -113,7 +120,15 @@ export async function POST(req: NextRequest, { params }: Params) {
     });
     await prisma.lead.updateMany({
       where: { id: { in: slice.map((s) => s.id) } },
-      data: { consultorId: consultantId, officeId: consultant?.officeId ?? officeId ?? null, status: LeadStatus.NOVO },
+      data: {
+        consultorId: consultantId,
+        officeId: consultant?.officeId ?? officeId ?? null,
+        status: LeadStatus.NOVO,
+        isWorked: false,
+        nextFollowUpAt: null,
+        nextStepNote: null,
+        lastStatusChangeAt: new Date(),
+      },
     });
     distributed[consultantId] = slice.length;
   }
