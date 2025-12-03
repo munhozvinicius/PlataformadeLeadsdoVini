@@ -20,6 +20,32 @@ type DistributionRow = {
   restantes: number;
   fechados: number;
   perdidos: number;
+  percentConcluido: number;
+  tempoMedioTratativaMs: number;
+  ultimaAtividadeAt?: string | null;
+};
+
+type LeadFilters = {
+  status: LeadStatus | "";
+  consultorId: string;
+  cidade: string;
+  uf: string;
+  estrategia: string;
+  vertical: string;
+  documento: string;
+  empresa: string;
+  faturamentoMin: string;
+  faturamentoMax: string;
+  telefone: "all" | "with" | "without";
+};
+
+type CampaignBatch = {
+  id: string;
+  campaignId: string;
+  nomeArquivoOriginal: string;
+  totalLeads: number;
+  importedLeads: number;
+  createdAt: string;
 };
 
 type LeadItem = {
@@ -42,8 +68,17 @@ type LeadItem = {
   estrategia?: string | null;
   vertical?: string | null;
   status: LeadStatus;
-  consultor?: { id: string; name?: string | null; email?: string | null } | null;
+  consultor?: { id: string; name?: string | null; email?: string | null };
 };
+
+const serverFilterKeys: Array<keyof LeadFilters> = [
+  "status",
+  "consultorId",
+  "cidade",
+  "uf",
+  "estrategia",
+  "vertical",
+];
 
 export default function CampaignDetailPage() {
   const router = useRouter();
@@ -53,15 +88,34 @@ export default function CampaignDetailPage() {
     activities: { id: string; action: string; user: string; lead: string; timestamp: string }[];
     distributions: { id: string; admin: string; consultant: string; leadsSent: number; rulesApplied: string; timestamp: string }[];
   } | null>(null);
-  const [audit, setAudit] = useState<{ total: number; invalidPhones: number; duplicated: number; invalids: number } | null>(null);
+  const [audit, setAudit] = useState<{ total: number; invalidPhones: number; duplicated: number; invalids: number } | null>(
+    null
+  );
   const [detail, setDetail] = useState<CampaignDetail | null>(null);
   const [distribution, setDistribution] = useState<DistributionRow[]>([]);
   const [leads, setLeads] = useState<LeadItem[]>([]);
-  const [filters, setFilters] = useState({ status: "", consultorId: "", cidade: "", uf: "", estrategia: "", vertical: "" });
+  const [filters, setFilters] = useState<LeadFilters>({
+    status: "",
+    consultorId: "",
+    cidade: "",
+    uf: "",
+    estrategia: "",
+    vertical: "",
+    documento: "",
+    empresa: "",
+    faturamentoMin: "",
+    faturamentoMax: "",
+    telefone: "all",
+  });
   const [consultants, setConsultants] = useState<{ id: string; name?: string | null; email?: string | null }[]>([]);
-  const [qty, setQty] = useState(10);
+  const [distributionQuantity, setDistributionQuantity] = useState(5);
   const [selectedConsultor, setSelectedConsultor] = useState("");
+  const [selectedDistributionConsultants, setSelectedDistributionConsultants] = useState<string[]>([]);
+  const [considerOffice, setConsiderOffice] = useState(false);
+  const [batches, setBatches] = useState<CampaignBatch[]>([]);
+  const [selectedBatchId, setSelectedBatchId] = useState("");
   const [message, setMessage] = useState("");
+  const isMaster = session?.user.role === "MASTER";
 
   useEffect(() => {
     if (status === "authenticated" && session?.user.role !== "MASTER") {
@@ -89,8 +143,11 @@ export default function CampaignDetailPage() {
 
   const loadLeads = useCallback(async () => {
     const params = new URLSearchParams();
-    Object.entries(filters).forEach(([k, v]) => {
-      if (v) params.append(k, v);
+    serverFilterKeys.forEach((key) => {
+      const value = filters[key];
+      if (value) {
+        params.append(key, value);
+      }
     });
     const res = await fetch(`/api/campaigns/${id}/leads?${params.toString()}`, { cache: "no-store" });
     if (res.ok) {
@@ -117,14 +174,29 @@ export default function CampaignDetailPage() {
     }
   }, []);
 
+  const loadBatches = useCallback(async () => {
+    const res = await fetch("/api/admin/import-batches", { cache: "no-store" });
+    if (!res.ok) return;
+    const json = (await res.json()) as CampaignBatch[];
+    const filtered = json.filter((batch) => batch.campaignId === id);
+    setBatches(filtered);
+    setSelectedBatchId((prev) => {
+      if (filtered.some((batch) => batch.id === prev)) {
+        return prev;
+      }
+      return filtered[0]?.id ?? "";
+    });
+  }, [id]);
+
   useEffect(() => {
     if (status === "authenticated" && id) {
       loadDetail();
       loadDistribution();
       loadLeads();
       loadConsultants();
+      loadBatches();
     }
-  }, [status, id, loadDetail, loadDistribution, loadLeads, loadConsultants]);
+  }, [status, id, loadDetail, loadDistribution, loadLeads, loadConsultants, loadBatches]);
 
   useEffect(() => {
     if (status === "authenticated" && id) {
@@ -133,16 +205,53 @@ export default function CampaignDetailPage() {
     }
   }, [status, id, loadLogs, loadAudit]);
 
+  const filteredLeads = useMemo(() => {
+    return leads.filter((lead) => {
+      if (filters.documento) {
+        const docValue = (lead.documento ?? lead.cnpj ?? "").toLowerCase();
+        if (!docValue.includes(filters.documento.toLowerCase())) return false;
+      }
+      if (filters.empresa) {
+        const companyValue = (lead.razaoSocial ?? lead.nomeFantasia ?? "").toLowerCase();
+        if (!companyValue.includes(filters.empresa.toLowerCase())) return false;
+      }
+      const revenueValue = parseRevenue(lead.vlFatPresumido);
+      if (filters.faturamentoMin) {
+        const minValue = Number(filters.faturamentoMin);
+        if (Number.isFinite(minValue) && (revenueValue === null || revenueValue < minValue)) return false;
+      }
+      if (filters.faturamentoMax) {
+        const maxValue = Number(filters.faturamentoMax);
+        if (Number.isFinite(maxValue) && (revenueValue === null || revenueValue > maxValue)) return false;
+      }
+      if (filters.telefone === "with" && !hasAnyPhone(lead)) return false;
+      if (filters.telefone === "without" && hasAnyPhone(lead)) return false;
+      return true;
+    });
+  }, [leads, filters]);
+
   async function distribute() {
+    if (!isMaster) {
+      setMessage("Apenas master pode distribuir.");
+      return;
+    }
     setMessage("");
-    if (!selectedConsultor) {
-      setMessage("Selecione um consultor.");
+    if (selectedDistributionConsultants.length === 0) {
+      setMessage("Selecione ao menos um consultor.");
+      return;
+    }
+    if (!distributionQuantity || distributionQuantity < 1) {
+      setMessage("Quantidade por consultor inválida.");
       return;
     }
     const res = await fetch(`/api/campaigns/${id}/distribution`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ consultantIds: [selectedConsultor], quantityPerConsultant: qty }),
+      body: JSON.stringify({
+        consultantIds: selectedDistributionConsultants,
+        quantityPerConsultant: distributionQuantity,
+        considerOffice,
+      }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => null);
@@ -150,7 +259,68 @@ export default function CampaignDetailPage() {
       return;
     }
     setMessage("Distribuição realizada.");
-    await Promise.all([loadDetail(), loadDistribution(), loadLeads()]);
+    await Promise.all([loadDetail(), loadDistribution(), loadLeads(), loadLogs()]);
+  }
+
+  async function autoDistribute() {
+    if (!isMaster) {
+      setMessage("Apenas master pode distribuir.");
+      return;
+    }
+    setMessage("");
+    const res = await fetch(`/api/campaigns/${id}/distribution`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        consultantIds: selectedDistributionConsultants,
+        auto: true,
+        considerOffice,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      setMessage(err?.message ?? "Erro ao distribuir automaticamente.");
+      return;
+    }
+    setMessage("Distribuição igualitária aplicada.");
+    await Promise.all([loadDetail(), loadDistribution(), loadLeads(), loadLogs()]);
+  }
+
+  async function deleteBatch() {
+    if (!isMaster) {
+      setMessage("Apenas master pode excluir lotes.");
+      return;
+    }
+    if (!selectedBatchId) {
+      setMessage("Selecione um lote para excluir.");
+      return;
+    }
+    const res = await fetch(`/api/admin/import-batches/${selectedBatchId}`, { method: "DELETE" });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      setMessage(err?.message ?? "Não foi possível excluir o lote.");
+      return;
+    }
+    setMessage("Lote excluído.");
+    await Promise.all([loadDetail(), loadDistribution(), loadLeads(), loadBatches()]);
+  }
+
+  async function resetCampaign() {
+    if (!isMaster) {
+      setMessage("Apenas master pode resetar a campanha.");
+      return;
+    }
+    if (!window.confirm("Deseja resetar esta campanha? As atribuições serão removidas, mas os leads permanecerão.")) {
+      return;
+    }
+    const res = await fetch(`/api/campaigns/${id}/reset`, { method: "POST" });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      setMessage(err?.message ?? "Erro ao resetar campanha.");
+      return;
+    }
+    setMessage("Campanha resetada.");
+    await Promise.all([loadDetail(), loadDistribution(), loadLeads(), loadLogs()]);
   }
 
   return (
@@ -187,7 +357,6 @@ export default function CampaignDetailPage() {
 
       {message ? <div className="text-sm text-slate-700">{message}</div> : null}
 
-      {/* D1 */}
       <div className="rounded-2xl border bg-white/70 backdrop-blur p-4 shadow-sm grid grid-cols-2 md:grid-cols-3 gap-3">
         <ResumoCard title="Total" value={detail?.resumo.total ?? 0} />
         <ResumoCard title="Atribuídos" value={detail?.resumo.atribuidos ?? 0} />
@@ -203,14 +372,13 @@ export default function CampaignDetailPage() {
         ) : null}
       </div>
 
-      {/* D2 */}
-      <div className="rounded-2xl border bg-white/70 backdrop-blur p-4 shadow-sm space-y-3">
+      <div className="rounded-2xl border bg-white/70 backdrop-blur p-4 shadow-sm space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900">Distribuição de Leads</h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div className="space-y-1">
-            <label className="text-xs text-slate-600">Consultor</label>
+            <label className="text-xs text-slate-600">Consultor (para reatribuir)</label>
             <select
               value={selectedConsultor}
               onChange={(e) => setSelectedConsultor(e.target.value)}
@@ -225,48 +393,101 @@ export default function CampaignDetailPage() {
             </select>
           </div>
           <div className="space-y-1">
+            <label className="text-xs text-slate-600">Consultores para distribuir</label>
+            <select
+              multiple
+              value={selectedDistributionConsultants}
+              onChange={(e) =>
+                setSelectedDistributionConsultants(Array.from(e.target.selectedOptions, (option) => option.value))
+              }
+              className="h-32 w-full rounded-lg border px-3 py-2 text-sm"
+              disabled={!isMaster}
+            >
+              {consultants.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name ?? c.email}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-500">Use Ctrl/Cmd para selecionar mais de um consultor.</p>
+          </div>
+          <div className="space-y-1">
             <label className="text-xs text-slate-600">Quantidade por consultor</label>
             <input
               type="number"
-              value={qty}
               min={1}
-              onChange={(e) => setQty(Number(e.target.value))}
+              value={distributionQuantity}
+              onChange={(e) => setDistributionQuantity(Math.max(1, Number(e.target.value)))}
               className="w-full rounded-lg border px-3 py-2 text-sm"
+              disabled={!isMaster}
             />
           </div>
-          <button
-            onClick={distribute}
-            className="rounded-lg bg-slate-900 text-white px-3 py-2 text-sm font-semibold hover:bg-slate-800"
-          >
-            Distribuir leads
-          </button>
+          <div className="space-y-3">
+            <label className="text-xs text-slate-600">Opções</label>
+            <label className="flex items-center gap-2 text-xs text-slate-500">
+              <input
+                type="checkbox"
+                checked={considerOffice}
+                onChange={(e) => setConsiderOffice(e.target.checked)}
+                disabled={!isMaster}
+                className="h-4 w-4 rounded border-slate-300"
+              />
+              Distribuir considerando escritório (SAFE TI / JLC Tech)
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={distribute}
+                disabled={!isMaster}
+                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:bg-slate-400"
+              >
+                Distribuir leads
+              </button>
+              <button
+                onClick={autoDistribute}
+                disabled={!isMaster}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:border-slate-200"
+              >
+                Distribuição igualitária automática
+              </button>
+            </div>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
               <tr className="text-left text-slate-500 border-b">
                 <th className="py-2 pr-3">Consultor</th>
+                <th className="py-2 pr-3">Escritório</th>
                 <th className="py-2 pr-3">Atribuídos</th>
                 <th className="py-2 pr-3">Trabalhados</th>
                 <th className="py-2 pr-3">Restantes</th>
+                <th className="py-2 pr-3">% concluído</th>
+                <th className="py-2 pr-3">Tempo médio</th>
                 <th className="py-2 pr-3">Ganhos</th>
                 <th className="py-2 pr-3">Perdidos</th>
+                <th className="py-2 pr-3">Última atividade</th>
               </tr>
             </thead>
             <tbody>
-              {distribution.map((d) => (
-                <tr key={d.consultantId} className="border-b last:border-b-0">
-                  <td className="py-2 pr-3">{d.consultantName}</td>
-                  <td className="py-2 pr-3">{d.totalAtribuidos}</td>
-                  <td className="py-2 pr-3">{d.trabalhados}</td>
-                  <td className="py-2 pr-3">{d.restantes}</td>
-                  <td className="py-2 pr-3">{d.fechados}</td>
-                  <td className="py-2 pr-3">{d.perdidos}</td>
+              {distribution.map((row) => (
+                <tr key={row.consultantId} className="border-b last:border-b-0">
+                  <td className="py-2 pr-3">{row.consultantName}</td>
+                  <td className="py-2 pr-3">{row.officeName || "-"}</td>
+                  <td className="py-2 pr-3">{row.totalAtribuidos}</td>
+                  <td className="py-2 pr-3">{row.trabalhados}</td>
+                  <td className="py-2 pr-3">{row.restantes}</td>
+                  <td className="py-2 pr-3">{row.percentConcluido ?? 0}%</td>
+                  <td className="py-2 pr-3">{formatDuration(row.tempoMedioTratativaMs)}</td>
+                  <td className="py-2 pr-3">{row.fechados}</td>
+                  <td className="py-2 pr-3">{row.perdidos}</td>
+                  <td className="py-2 pr-3">
+                    {row.ultimaAtividadeAt ? new Date(row.ultimaAtividadeAt).toLocaleString("pt-BR") : "-"}
+                  </td>
                 </tr>
               ))}
               {distribution.length === 0 ? (
                 <tr>
-                  <td className="py-2 pr-3 text-sm text-slate-500" colSpan={6}>
+                  <td className="py-2 pr-3 text-sm text-slate-500" colSpan={10}>
                     Sem dados de distribuição.
                   </td>
                 </tr>
@@ -276,31 +497,142 @@ export default function CampaignDetailPage() {
         </div>
       </div>
 
-      {/* D3 */}
-      <div className="rounded-2xl border bg-white/70 backdrop-blur p-4 shadow-sm space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-slate-900">Estoque da campanha</h2>
-              <button onClick={loadLeads} className="text-sm underline text-blue-700">
-                Atualizar
+      <div className="rounded-2xl border bg-white/70 backdrop-blur p-4 shadow-sm space-y-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Estoque da campanha</h2>
+            <p className="text-xs text-slate-500">Filtros aplicados apenas no front-end.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={loadLeads}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-100"
+            >
+              Atualizar
+            </button>
+            {isMaster ? (
+              <button
+                onClick={resetCampaign}
+                className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+              >
+                Resetar campanha
+              </button>
+            ) : null}
+          </div>
+        </div>
+        {batches.length > 0 && (
+          <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm text-slate-700">
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={selectedBatchId}
+                onChange={(e) => setSelectedBatchId(e.target.value)}
+                className="w-full max-w-sm rounded-lg border px-3 py-2 text-sm"
+              >
+                {batches.map((batch) => (
+                  <option key={batch.id} value={batch.id}>
+                    {batch.nomeArquivoOriginal} - {new Date(batch.createdAt).toLocaleDateString("pt-BR")}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={deleteBatch}
+                disabled={!isMaster}
+                className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-600 disabled:border-slate-200 disabled:text-slate-400"
+              >
+                Excluir lote desta campanha
               </button>
             </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-2">
-          {[
-            { key: "status", label: "Status" },
-            { key: "consultorId", label: "Consultor" },
-            { key: "cidade", label: "Cidade" },
-            { key: "uf", label: "UF" },
-            { key: "estrategia", label: "Estratégia" },
-            { key: "vertical", label: "Vertical" },
-          ].map((f) => (
+            <p className="text-xs text-slate-500">A exclusão remove apenas os leads daquele lote importado.</p>
+          </div>
+        )}
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
+            <select
+              value={filters.status}
+              onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value as LeadStatus | "" }))}
+              className="rounded-lg border px-3 py-2 text-sm"
+            >
+              <option value="">Todos os status</option>
+              {Object.values(LeadStatus).map((statusOption) => (
+                <option key={statusOption} value={statusOption}>
+                  {statusOption}
+                </option>
+              ))}
+            </select>
+            <select
+              value={filters.consultorId}
+              onChange={(e) => setFilters((prev) => ({ ...prev, consultorId: e.target.value }))}
+              className="rounded-lg border px-3 py-2 text-sm"
+            >
+              <option value="">Todos os consultores</option>
+              {consultants.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name ?? c.email}
+                </option>
+              ))}
+            </select>
             <input
-              key={f.key}
-              placeholder={f.label}
-              value={filters[f.key as keyof typeof filters]}
-              onChange={(e) => setFilters((prev) => ({ ...prev, [f.key as keyof typeof filters]: e.target.value }))}
-              className="w-full rounded-lg border px-3 py-2 text-sm"
+              placeholder="Cidade"
+              value={filters.cidade}
+              onChange={(e) => setFilters((prev) => ({ ...prev, cidade: e.target.value }))}
+              className="rounded-lg border px-3 py-2 text-sm"
             />
-          ))}
+            <input
+              placeholder="UF"
+              value={filters.uf}
+              onChange={(e) => setFilters((prev) => ({ ...prev, uf: e.target.value }))}
+              className="rounded-lg border px-3 py-2 text-sm"
+            />
+            <input
+              placeholder="Estratégia"
+              value={filters.estrategia}
+              onChange={(e) => setFilters((prev) => ({ ...prev, estrategia: e.target.value }))}
+              className="rounded-lg border px-3 py-2 text-sm"
+            />
+            <input
+              placeholder="Vertical"
+              value={filters.vertical}
+              onChange={(e) => setFilters((prev) => ({ ...prev, vertical: e.target.value }))}
+              className="rounded-lg border px-3 py-2 text-sm"
+            />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+            <input
+              placeholder="Documento"
+              value={filters.documento}
+              onChange={(e) => setFilters((prev) => ({ ...prev, documento: e.target.value }))}
+              className="rounded-lg border px-3 py-2 text-sm"
+            />
+            <input
+              placeholder="Empresa"
+              value={filters.empresa}
+              onChange={(e) => setFilters((prev) => ({ ...prev, empresa: e.target.value }))}
+              className="rounded-lg border px-3 py-2 text-sm"
+            />
+            <input
+              placeholder="Faturamento mínimo"
+              type="number"
+              value={filters.faturamentoMin}
+              onChange={(e) => setFilters((prev) => ({ ...prev, faturamentoMin: e.target.value }))}
+              className="rounded-lg border px-3 py-2 text-sm"
+            />
+            <input
+              placeholder="Faturamento máximo"
+              type="number"
+              value={filters.faturamentoMax}
+              onChange={(e) => setFilters((prev) => ({ ...prev, faturamentoMax: e.target.value }))}
+              className="rounded-lg border px-3 py-2 text-sm"
+            />
+            <select
+              value={filters.telefone}
+              onChange={(e) => setFilters((prev) => ({ ...prev, telefone: e.target.value as LeadFilters["telefone"] }))}
+              className="rounded-lg border px-3 py-2 text-sm"
+            >
+              <option value="all">Telefones (todos)</option>
+              <option value="with">Com telefones</option>
+              <option value="without">Sem telefones</option>
+            </select>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
@@ -317,7 +649,7 @@ export default function CampaignDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {leads.map((lead) => (
+              {filteredLeads.map((lead) => (
                 <tr key={lead.id} className="border-b last:border-b-0">
                   <td className="py-2 pr-3">{lead.documento ?? lead.cnpj ?? "-"}</td>
                   <td className="py-2 pr-3">{lead.razaoSocial ?? lead.nomeFantasia ?? "-"}</td>
@@ -361,9 +693,9 @@ export default function CampaignDetailPage() {
                   </td>
                 </tr>
               ))}
-              {leads.length === 0 ? (
+              {filteredLeads.length === 0 ? (
                 <tr>
-                  <td className="py-2 pr-3 text-sm text-slate-500" colSpan={7}>
+                  <td className="py-2 pr-3 text-sm text-slate-500" colSpan={8}>
                     Nenhum lead encontrado.
                   </td>
                 </tr>
@@ -374,6 +706,31 @@ export default function CampaignDetailPage() {
       </div>
     </div>
   );
+}
+
+function hasAnyPhone(lead: LeadItem) {
+  return Boolean(lead.telefone1 || lead.telefone2 || lead.telefone3);
+}
+
+function parseRevenue(value?: string | null) {
+  if (!value) return null;
+  const normalized = value
+    .replace(/[^\d.,]/g, "")
+    .replace(/\./g, "")
+    .replace(",", ".");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatDuration(ms: number) {
+  if (!ms || Number.isNaN(ms)) return "-";
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 60) {
+    return `${minutes} min`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
 }
 
 function ResumoCard({ title, value }: { title: string; value: number | string }) {

@@ -9,6 +9,10 @@ import { LeadStatus, Role } from "@prisma/client";
 
 type Params = { params: { id: string } };
 
+type ConsultantDetail = { id: string; officeId?: string | null };
+
+type LeadAssignment = Record<string, string[]>;
+
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
     const session = await getServerSession(authOptions);
@@ -38,17 +42,90 @@ export async function GET(_req: NextRequest, { params }: Params) {
       where: atribuidosWhere,
     });
 
-    const consultorIds = Array.from(new Set(grouped.map((g) => g.consultorId).filter(Boolean))) as string[];
-    const consultores = await prisma.user.findMany({
-      where: { id: { in: consultorIds } },
+    const leadDetails = await prisma.lead.findMany({
+      where: { campanhaId: campaignId, consultorId: { not: null } },
+      select: {
+        consultorId: true,
+        status: true,
+        createdAt: true,
+        lastActivityAt: true,
+        lastStatusChangeAt: true,
+        updatedAt: true,
+      },
+    });
+
+    const stats = new Map<
+      string,
+      {
+        total: number;
+        worked: number;
+        closed: number;
+        lost: number;
+        totalTimeMs: number;
+        timeCount: number;
+        lastActivityAt?: Date | null;
+      }
+    >();
+
+    leadDetails.forEach((lead) => {
+      if (!lead.consultorId) return;
+      const entry = stats.get(lead.consultorId) ?? {
+        total: 0,
+        worked: 0,
+        closed: 0,
+        lost: 0,
+        totalTimeMs: 0,
+        timeCount: 0,
+        lastActivityAt: null,
+      };
+      entry.total += 1;
+      if (lead.status !== LeadStatus.NOVO) {
+        entry.worked += 1;
+      }
+      if (lead.status === LeadStatus.FECHADO) {
+        entry.closed += 1;
+      }
+      if (lead.status === LeadStatus.PERDIDO) {
+        entry.lost += 1;
+      }
+      const referenceTime = lead.lastActivityAt ?? lead.lastStatusChangeAt ?? lead.updatedAt ?? lead.createdAt;
+      if (referenceTime) {
+        if (!entry.lastActivityAt || referenceTime.getTime() > entry.lastActivityAt.getTime()) {
+          entry.lastActivityAt = referenceTime;
+        }
+        if (lead.createdAt) {
+          const diff = referenceTime.getTime() - lead.createdAt.getTime();
+          if (diff > 0) {
+            entry.totalTimeMs += diff;
+            entry.timeCount += 1;
+          }
+        }
+      }
+      stats.set(lead.consultorId, entry);
+    });
+
+    const consultorIds = Array.from(
+      new Set<string>(
+        grouped
+          .map((g) => g.consultorId ?? "")
+          .concat(
+            leadDetails.map((lead) => lead.consultorId ?? "").filter(Boolean)
+          )
+          .filter(Boolean)
+      )
+    );
+
+    const consultants = await prisma.user.findMany({
+      where: { id: { in: consultorIds }, role: Role.CONSULTOR },
       select: { id: true, name: true, email: true, office: { select: { name: true } } },
     });
-    const consultorMap = new Map<
+
+    const consultantMap = new Map<
       string,
       { name?: string | null; email?: string | null; officeName?: string | null }
     >();
-    consultores.forEach((c) => {
-      consultorMap.set(c.id, { name: c.name, email: c.email, officeName: c.office?.name ?? "" });
+    consultants.forEach((c) => {
+      consultantMap.set(c.id, { name: c.name, email: c.email, officeName: c.office?.name ?? "" });
     });
 
     const distribution = consultorIds.map((cid) => {
@@ -59,8 +136,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
         .reduce((acc, cur) => acc + cur._count.status, 0);
       const fech = statuses.find((s) => s.status === LeadStatus.FECHADO)?.["_count"].status ?? 0;
       const perd = statuses.find((s) => s.status === LeadStatus.PERDIDO)?.["_count"].status ?? 0;
+      const stat = stats.get(cid);
+      const tempoMedioTratativaMs = stat?.timeCount ? Math.round(stat.totalTimeMs / stat.timeCount) : 0;
+      const ultimaAtividadeAt = stat?.lastActivityAt ? stat.lastActivityAt.toISOString() : null;
 
-      const meta = consultorMap.get(cid) ?? {};
+      const meta = consultantMap.get(cid) ?? {};
+      const percentConcluido = totalAtribuidos > 0 ? Math.round((trabalhados / totalAtribuidos) * 100) : 0;
       return {
         officeName: meta.officeName ?? "",
         consultantId: cid,
@@ -70,6 +151,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
         restantes: totalAtribuidos - trabalhados,
         fechados: fech,
         perdidos: perd,
+        percentConcluido,
+        tempoMedioTratativaMs,
+        ultimaAtividadeAt,
       };
     });
 
@@ -90,70 +174,125 @@ export async function POST(req: NextRequest, { params }: Params) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await req.json();
-    const { officeId, consultantIds, quantityPerConsultant } = body as {
-      officeId?: string | null;
+    const campaignId = params.id;
+    const body = (await req.json().catch(() => ({}))) as {
       consultantIds?: string[];
       quantityPerConsultant?: number;
+      auto?: boolean;
+      considerOffice?: boolean;
     };
+    const takeAll = Boolean(body.auto);
+    const considerOffice = Boolean(body.considerOffice);
+    const rawConsultantIds = Array.isArray(body.consultantIds)
+      ? Array.from(new Set(body.consultantIds.filter(Boolean)))
+      : [];
+    const quantityPerConsultant = Number(body.quantityPerConsultant ?? 0);
 
-    if (!Array.isArray(consultantIds) || consultantIds.length === 0) {
-      return NextResponse.json({ message: "Selecione pelo menos um consultor" }, { status: 400 });
-    }
-    if (!quantityPerConsultant || quantityPerConsultant <= 0) {
-      return NextResponse.json({ message: "Quantidade por consultor inválida" }, { status: 400 });
+    let targetConsultants: ConsultantDetail[] = [];
+
+    if (takeAll) {
+      const autoWhere: { role: Role; id?: { in: string[] } } = {
+        role: Role.CONSULTOR,
+      };
+      if (rawConsultantIds.length > 0) {
+        autoWhere.id = { in: rawConsultantIds };
+      }
+      targetConsultants = await prisma.user.findMany({
+        where: autoWhere,
+        select: { id: true, officeId: true },
+      });
+    } else {
+      if (rawConsultantIds.length === 0) {
+        return NextResponse.json({ message: "Selecione ao menos um consultor para distribuir." }, { status: 400 });
+      }
+      const consultants = await prisma.user.findMany({
+        where: { id: { in: rawConsultantIds }, role: Role.CONSULTOR },
+        select: { id: true, officeId: true },
+      });
+      const consultantMap = new Map(consultants.map((c) => [c.id, c]));
+      targetConsultants = rawConsultantIds
+        .map((id) => consultantMap.get(id))
+        .filter((c): c is ConsultantDetail => Boolean(c));
     }
 
-    const campaignId = params.id;
-    const totalNeeded = quantityPerConsultant * consultantIds.length;
-    // Pega leads em estoque (sem consultor, status NOVO)
+    if (targetConsultants.length === 0) {
+      return NextResponse.json({ message: "Nenhum consultor válido encontrado." }, { status: 400 });
+    }
+    if (!takeAll && (!quantityPerConsultant || Number.isNaN(quantityPerConsultant))) {
+      return NextResponse.json({ message: "Quantidade por consultor inválida." }, { status: 400 });
+    }
+
     const stockWhere = {
       campanhaId: campaignId,
       status: LeadStatus.NOVO,
       consultorId: null,
     };
-
-    const stockLeads = await prisma.lead.findMany({
-      where: stockWhere,
-      orderBy: { createdAt: "asc" },
-      take: totalNeeded,
-      select: { id: true },
-    });
-
-    if (stockLeads.length === 0) {
+    const totalStock = await prisma.lead.count({ where: stockWhere });
+    if (totalStock === 0) {
       return NextResponse.json(
-        { success: false, message: "Estoque vazio para esta campanha. Nenhum lead disponível." },
+        { message: "Estoque vazio para esta campanha. Nenhum lead disponível." },
         { status: 400 }
       );
     }
 
-    const distributed: Record<string, number> = {};
-    let cursor = 0;
-    for (const consultantId of consultantIds) {
-      const slice = stockLeads.slice(cursor, cursor + quantityPerConsultant);
-      cursor += quantityPerConsultant;
-      if (slice.length === 0) {
-        distributed[consultantId] = 0;
-        continue;
-      }
-      const consultant = await prisma.user.findUnique({
-        where: { id: consultantId },
-        select: { officeId: true },
-      });
-      await prisma.lead.updateMany({
-        where: { id: { in: slice.map((s) => s.id) } },
-        data: {
-          consultorId: consultantId,
-          officeId: consultant?.officeId ?? officeId ?? null,
-          status: LeadStatus.NOVO,
-          isWorked: false,
-          nextFollowUpAt: null,
-          nextStepNote: null,
-          lastStatusChangeAt: new Date(),
-        },
-      });
-      distributed[consultantId] = slice.length;
+    const takeSize = takeAll ? totalStock : Math.min(totalStock, quantityPerConsultant * targetConsultants.length);
+    const stockLeads = await prisma.lead.findMany({
+      where: stockWhere,
+      orderBy: { createdAt: "asc" },
+      take: takeSize,
+      select: { id: true },
+    });
+    if (stockLeads.length === 0) {
+      return NextResponse.json(
+        { message: "Estoque vazio para esta campanha. Nenhum lead disponível." },
+        { status: 400 }
+      );
     }
+
+    const assignments: LeadAssignment = takeAll
+      ? buildAutoAssignments(stockLeads, targetConsultants, considerOffice)
+      : buildManualAssignments(stockLeads, targetConsultants, quantityPerConsultant);
+
+    const updatePromises = [];
+    const logPromises = [];
+    const distributed: Record<string, number> = {};
+
+    const rulesApplied = describeRules({ auto: takeAll, quantity: quantityPerConsultant, considerOffice });
+
+    for (const consultant of targetConsultants) {
+      const leadIds = assignments[consultant.id] ?? [];
+      distributed[consultant.id] = leadIds.length;
+      if (leadIds.length === 0) continue;
+      updatePromises.push(
+        prisma.lead.updateMany({
+          where: { id: { in: leadIds } },
+          data: {
+            consultorId: consultant.id,
+            officeId: consultant.officeId ?? null,
+            status: LeadStatus.NOVO,
+            isWorked: false,
+            nextFollowUpAt: null,
+            nextStepNote: null,
+            lastStatusChangeAt: new Date(),
+            lastActivityAt: null,
+          },
+        })
+      );
+      logPromises.push(
+        prisma.distributionLog.create({
+          data: {
+            campaignId,
+            adminId: session.user.id,
+            consultantId: consultant.id,
+            leadIds,
+            rulesApplied,
+          },
+        })
+      );
+    }
+
+    await Promise.all(updatePromises);
+    await Promise.all(logPromises);
 
     const remainingStock = await prisma.lead.count({ where: stockWhere });
 
@@ -162,4 +301,76 @@ export async function POST(req: NextRequest, { params }: Params) {
     console.error("distribution POST error", error);
     return NextResponse.json({ message: "Erro ao distribuir leads" }, { status: 500 });
   }
+}
+
+function buildManualAssignments(leads: { id: string }[], consultants: ConsultantDetail[], quantity: number): LeadAssignment {
+  const assignments: LeadAssignment = {};
+  consultants.forEach((consultant) => {
+    assignments[consultant.id] = [];
+  });
+  if (quantity <= 0) {
+    return assignments;
+  }
+  let cursor = 0;
+  for (const consultant of consultants) {
+    const slice = leads.slice(cursor, cursor + quantity);
+    cursor += quantity;
+    assignments[consultant.id] = slice.map((lead) => lead.id);
+    if (cursor >= leads.length) {
+      break;
+    }
+  }
+  return assignments;
+}
+
+function groupByOffice(consultants: ConsultantDetail[]): Map<string, string[]> {
+  const groups = new Map<string, string[]>();
+  consultants.forEach((consultant) => {
+    const key = consultant.officeId ?? "sem-escritorio";
+    const subset = groups.get(key) ?? [];
+    subset.push(consultant.id);
+    groups.set(key, subset);
+  });
+  return groups;
+}
+
+function buildAutoAssignments(leads: { id: string }[], consultants: ConsultantDetail[], considerOffice: boolean): LeadAssignment {
+  const assignments: LeadAssignment = {};
+  consultants.forEach((consultant) => {
+    assignments[consultant.id] = [];
+  });
+  if (consultants.length === 0 || leads.length === 0) {
+    return assignments;
+  }
+  const groups = considerOffice ? groupByOffice(consultants) : new Map<string, string[]>([["todos", consultants.map((c) => c.id)]]);
+  const groupEntries = Array.from(groups.entries()).filter(([, ids]) => ids.length > 0);
+  let index = 0;
+  while (index < leads.length) {
+    for (const [, consultantIds] of groupEntries) {
+      for (const consultantId of consultantIds) {
+        if (index >= leads.length) {
+          break;
+        }
+        assignments[consultantId].push(leads[index].id);
+        index += 1;
+      }
+      if (index >= leads.length) {
+        break;
+      }
+    }
+  }
+  return assignments;
+}
+
+function describeRules(options: { auto: boolean; quantity: number; considerOffice: boolean }) {
+  const segments = [];
+  if (options.auto) {
+    segments.push("Distribuição igualitária automática");
+  } else {
+    segments.push(`Distribuição manual (${options.quantity} por consultor)`);
+  }
+  if (options.considerOffice) {
+    segments.push("considerando escritório");
+  }
+  return segments.join(" | ");
 }
