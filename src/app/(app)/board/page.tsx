@@ -25,10 +25,19 @@ type Lead = {
   telefone2?: string | null;
   telefone3?: string | null;
   cnpj?: string | null;
+  documento?: string | null;
   vertical?: string | null;
   endereco?: string | null;
   emails?: string[];
   telefones?: { rotulo: string; valor: string }[];
+  logradouro?: string | null;
+  numero?: string | null;
+  cep?: string | null;
+  territorio?: string | null;
+  ofertaMkt?: string | null;
+  estrategia?: string | null;
+  vlFatPresumido?: string | null;
+  cnae?: string | null;
   status: LeadStatusId;
   campanha?: { id?: string; nome: string } | null;
   consultor?: { id: string; name?: string | null; email?: string | null } | null;
@@ -180,6 +189,19 @@ function LeadDrawer({
   const [siteValue, setSiteValue] = useState(lead.site ?? "");
   const [emailValue, setEmailValue] = useState((lead.emails && lead.emails[0]) || "");
   const [contactName, setContactName] = useState(lead.contatoPrincipal?.nome ?? "");
+  const empresaNome = lead.razaoSocial ?? lead.nomeFantasia ?? "Não informado";
+  const documento = lead.documento ?? lead.cnpj ?? "Não informado";
+  const vertical = lead.vertical ?? "Não informado";
+  const cidadeUf =
+    lead.cidade || lead.estado
+      ? `${lead.cidade ?? "Não informado"}${lead.estado ? ` / ${lead.estado}` : ""}`
+      : "Não informado";
+  const logradouro = lead.logradouro ?? lead.endereco ?? "Não informado";
+  const cepNumero = `${lead.cep ?? "Não informado"} / ${lead.numero ?? "Não informado"}`;
+  const territorio = lead.territorio ?? "Não informado";
+  const faturamento = lead.vlFatPresumido ?? "Não informado";
+  const ofertaMkt = lead.ofertaMkt ?? "Não informado";
+  const estrategia = lead.estrategia ?? "Não informado";
 
   const loadActivities = useCallback(async () => {
     setActivitiesLoading(true);
@@ -327,41 +349,40 @@ function LeadDrawer({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
                 <p className="text-xs uppercase text-slate-500">Empresa</p>
-                <p className="text-lg font-semibold text-slate-900">
-                  {lead.razaoSocial ?? lead.nomeFantasia ?? "Sem empresa"}
-                </p>
-                <p className="text-sm text-slate-600">Documento: {lead.cnpj ?? "-"}</p>
-                <p className="text-sm text-slate-600">Vertical: {lead.vertical ?? "-"}</p>
+                <p className="text-lg font-semibold text-slate-900">{empresaNome}</p>
+                <p className="text-sm text-slate-600">Documento: {documento}</p>
+                <p className="text-sm text-slate-600">Vertical: {vertical}</p>
+                {lead.cnae ? <p className="text-xs text-slate-500">CNAE: {lead.cnae}</p> : null}
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
                 <p className="text-xs uppercase text-slate-500">Localização</p>
-                <p className="text-sm text-slate-700">
-                  {lead.cidade ?? "-"} {lead.estado ? `/ ${lead.estado}` : ""}
-                </p>
-                <p className="text-sm text-slate-600">Endereço: {lead.endereco ?? "-"}</p>
+                <p className="text-sm text-slate-700">Cidade / UF: {cidadeUf}</p>
+                <p className="text-sm text-slate-600">Logradouro: {logradouro}</p>
+                <p className="text-sm text-slate-600">CEP / Número: {cepNumero}</p>
+                <p className="text-sm text-slate-600">Território: {territorio}</p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
                 <p className="text-xs uppercase text-slate-500">Telefones</p>
                 {[
-                  ...(lead.telefones ?? []),
-                  ...[lead.telefone1, lead.telefone2, lead.telefone3, lead.telefone]
-                    .filter(Boolean)
-                    .map((p) => ({ rotulo: "Telefone", valor: p as string })),
-                ].length === 0 ? <p className="text-sm text-slate-600">Telefone não informado</p> : null}
+                  { rotulo: "Telefone 1", valor: lead.telefone1 },
+                  { rotulo: "Telefone 2", valor: lead.telefone2 },
+                  { rotulo: "Telefone 3", valor: lead.telefone3 },
+                ].filter((t) => t.valor).length === 0 ? <p className="text-sm text-slate-600">Telefone não informado</p> : null}
                 {[
-                  ...(lead.telefones ?? []),
-                  ...[lead.telefone1, lead.telefone2, lead.telefone3, lead.telefone]
-                    .filter(Boolean)
-                    .map((p) => ({ rotulo: "Telefone", valor: p as string })),
-                ].map((phone, idx) => (
-                  <a
-                    key={`${phone.valor}-${idx}`}
-                    href={`tel:${phone.valor}`}
-                    className="block text-sm text-slate-800 hover:underline"
-                  >
-                    {phone.rotulo}: {phone.valor}
-                  </a>
-                ))}
+                  { rotulo: "Telefone 1", valor: lead.telefone1 },
+                  { rotulo: "Telefone 2", valor: lead.telefone2 },
+                  { rotulo: "Telefone 3", valor: lead.telefone3 },
+                ]
+                  .filter((t) => t.valor)
+                  .map((phone, idx) => (
+                    <a
+                      key={`${phone.valor}-${idx}`}
+                      href={`tel:${phone.valor}`}
+                      className="block text-sm text-slate-800 hover:underline"
+                    >
+                      {phone.rotulo}: {phone.valor}
+                    </a>
+                  ))}
                 <div className="flex flex-col gap-1 pt-2">
                   <div className="flex gap-2">
                     <input
@@ -385,6 +406,12 @@ function LeadDrawer({
                     {savingPhone ? "Salvando..." : "Adicionar telefone"}
                   </button>
                 </div>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                <p className="text-xs uppercase text-slate-500">Informações comerciais</p>
+                <p className="text-sm text-slate-700">Faturamento presumido: {faturamento}</p>
+                <p className="text-sm text-slate-700">Oferta de marketing: {ofertaMkt}</p>
+                <p className="text-sm text-slate-700">Estratégia: {estrategia}</p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
                 <p className="text-xs uppercase text-slate-500">Campanha e estágio</p>
