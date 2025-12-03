@@ -27,6 +27,8 @@ type Lead = {
   cnpj?: string | null;
   vertical?: string | null;
   endereco?: string | null;
+  emails?: string[];
+  telefones?: { rotulo: string; valor: string }[];
   status: LeadStatusId;
   campanha?: { id?: string; nome: string } | null;
   consultor?: { id: string; name?: string | null; email?: string | null } | null;
@@ -37,6 +39,8 @@ type Lead = {
   nextFollowUpAt?: string | null;
   nextStepNote?: string | null;
   createdAt?: string | null;
+  site?: string | null;
+  contatoPrincipal?: { nome?: string; cargo?: string; telefone?: string; email?: string };
 };
 
 type LeadActivity = {
@@ -171,6 +175,11 @@ function LeadDrawer({
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>("");
+  const [newPhone, setNewPhone] = useState({ rotulo: "", valor: "" });
+  const [savingPhone, setSavingPhone] = useState(false);
+  const [siteValue, setSiteValue] = useState(lead.site ?? "");
+  const [emailValue, setEmailValue] = useState((lead.emails && lead.emails[0]) || "");
+  const [contactName, setContactName] = useState(lead.contatoPrincipal?.nome ?? "");
 
   const loadActivities = useCallback(async () => {
     setActivitiesLoading(true);
@@ -192,7 +201,10 @@ function LeadDrawer({
       nextStepNote: lead.nextStepNote ?? "",
     }));
     loadActivities();
-  }, [lead.id, lead.status, lead.nextFollowUpAt, lead.nextStepNote, loadActivities]);
+    setSiteValue(lead.site ?? "");
+    setEmailValue((lead.emails && lead.emails[0]) || "");
+    setContactName(lead.contatoPrincipal?.nome ?? "");
+  }, [lead.id, lead.status, lead.nextFollowUpAt, lead.nextStepNote, loadActivities, lead.site, lead.emails, lead.contatoPrincipal]);
 
   const handleFormChange = (
     event: ChangeEvent<HTMLSelectElement | HTMLInputElement | HTMLTextAreaElement>,
@@ -241,6 +253,33 @@ function LeadDrawer({
     }));
     await Promise.all([loadActivities(), onActivitySaved()]);
   };
+
+  async function addPhone() {
+    if (!newPhone.rotulo || !newPhone.valor) return;
+    setSavingPhone(true);
+    await fetch(`/api/consultor/leads/${lead.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ addTelefone: newPhone, observacao: "Telefone adicionado via ficha" }),
+    });
+    setNewPhone({ rotulo: "", valor: "" });
+    setSavingPhone(false);
+    await onActivitySaved();
+  }
+
+  async function saveContactFields() {
+    await fetch(`/api/consultor/leads/${lead.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        site: siteValue || null,
+        email: emailValue || null,
+        contatoPrincipal: contactName ? { nome: contactName } : null,
+        observacao: "Atualização de contato/site",
+      }),
+    });
+    await onActivitySaved();
+  }
 
   return (
     <div className="fixed inset-0 z-40 flex">
@@ -303,20 +342,49 @@ function LeadDrawer({
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
                 <p className="text-xs uppercase text-slate-500">Telefones</p>
-                {[lead.telefone1, lead.telefone2, lead.telefone3, lead.telefone]
-                  .filter(Boolean)
-                  .map((phone, idx) => (
-                    <a
-                      key={`${phone}-${idx}`}
-                      href={`tel:${phone}`}
-                      className="block text-sm text-slate-800 hover:underline"
-                    >
-                      {phone}
-                    </a>
-                  ))}
-                {[lead.telefone1, lead.telefone2, lead.telefone3, lead.telefone].every((v) => !v) ? (
-                  <p className="text-sm text-slate-600">Telefone não informado</p>
-                ) : null}
+                {[
+                  ...(lead.telefones ?? []),
+                  ...[lead.telefone1, lead.telefone2, lead.telefone3, lead.telefone]
+                    .filter(Boolean)
+                    .map((p) => ({ rotulo: "Telefone", valor: p as string })),
+                ].length === 0 ? <p className="text-sm text-slate-600">Telefone não informado</p> : null}
+                {[
+                  ...(lead.telefones ?? []),
+                  ...[lead.telefone1, lead.telefone2, lead.telefone3, lead.telefone]
+                    .filter(Boolean)
+                    .map((p) => ({ rotulo: "Telefone", valor: p as string })),
+                ].map((phone, idx) => (
+                  <a
+                    key={`${phone.valor}-${idx}`}
+                    href={`tel:${phone.valor}`}
+                    className="block text-sm text-slate-800 hover:underline"
+                  >
+                    {phone.rotulo}: {phone.valor}
+                  </a>
+                ))}
+                <div className="flex flex-col gap-1 pt-2">
+                  <div className="flex gap-2">
+                    <input
+                      className="flex-1 rounded-lg border px-2 py-1 text-sm"
+                      placeholder="Rótulo"
+                      value={newPhone.rotulo}
+                      onChange={(e) => setNewPhone((prev) => ({ ...prev, rotulo: e.target.value }))}
+                    />
+                    <input
+                      className="flex-1 rounded-lg border px-2 py-1 text-sm"
+                      placeholder="Telefone"
+                      value={newPhone.valor}
+                      onChange={(e) => setNewPhone((prev) => ({ ...prev, valor: e.target.value }))}
+                    />
+                  </div>
+                  <button
+                    onClick={addPhone}
+                    disabled={savingPhone}
+                    className="self-start rounded-lg bg-slate-900 text-white px-3 py-1 text-xs font-semibold hover:bg-slate-800 disabled:opacity-60"
+                  >
+                    {savingPhone ? "Salvando..." : "Adicionar telefone"}
+                  </button>
+                </div>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
                 <p className="text-xs uppercase text-slate-500">Campanha e estágio</p>
@@ -334,6 +402,42 @@ function LeadDrawer({
                   ))}
                 </select>
                 <p className="text-xs text-slate-500">Criado em {formatDate(lead.createdAt)}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                <p className="text-xs uppercase text-slate-500">Contatos & Canais</p>
+                <div className="space-y-1">
+                  <label className="text-xs text-slate-600">Site</label>
+                  <input
+                    value={siteValue}
+                    onChange={(e) => setSiteValue(e.target.value)}
+                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                    placeholder="https://"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-slate-600">Email</label>
+                  <input
+                    value={emailValue}
+                    onChange={(e) => setEmailValue(e.target.value)}
+                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                    placeholder="email@empresa.com"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-slate-600">Contato principal</label>
+                  <input
+                    value={contactName}
+                    onChange={(e) => setContactName(e.target.value)}
+                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                    placeholder="Nome do contato"
+                  />
+                </div>
+                <button
+                  onClick={saveContactFields}
+                  className="rounded-lg bg-slate-900 text-white px-3 py-2 text-sm font-semibold hover:bg-slate-800"
+                >
+                  Salvar contatos
+                </button>
               </div>
             </div>
           ) : (
