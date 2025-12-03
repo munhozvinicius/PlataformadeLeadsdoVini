@@ -1,16 +1,14 @@
 export type StageId =
-  | "PROSPECCAO"
-  | "QUALIFICACAO"
-  | "REUNIAO"
-  | "FECHAMENTO"
-  | "GANHO"
+  | "NOVO"
+  | "EM_CONTATO"
+  | "EM_NEGOCIACAO"
+  | "FECHADO"
   | "PERDIDO";
 
 export const STAGES: { id: StageId; title: string }[] = [
-  { id: "PROSPECCAO", title: "Prospecção" },
-  { id: "QUALIFICACAO", title: "Qualificação" },
-  { id: "REUNIAO", title: "Reunião" },
-  { id: "FECHAMENTO", title: "Fechamento" },
-  { id: "GANHO", title: "Ganho" },
+  { id: "NOVO", title: "Novo" },
+  { id: "EM_CONTATO", title: "Em contato" },
+  { id: "EM_NEGOCIACAO", title: "Em negociação" },
+  { id: "FECHADO", title: "Fechado" },
   { id: "PERDIDO", title: "Perdido" },
 ];

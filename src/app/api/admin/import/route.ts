@@ -90,7 +90,7 @@ export async function POST(req: Request) {
         raw: normalized,
         campaign: campaignId,
         assignedTo: new mongoose.Types.ObjectId(assignedToUserId),
-        stage: "PROSPECCAO",
+        stage: "NOVO",
         isWorked: false,
       });
       created += 1;

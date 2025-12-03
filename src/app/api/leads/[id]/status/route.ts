@@ -68,13 +68,22 @@ export async function POST(req: Request, { params }: Params) {
     userId: session.user.id,
   });
 
+  const now = new Date();
   const updated = await prisma.lead.update({
     where: { id: params.id },
     data: {
       status,
-      lastStatusChangeAt: new Date(),
+      isWorked: true,
+      lastStatusChangeAt: now,
+      lastInteractionAt: now,
+      lastActivityAt: now,
       interactionCount: (lead.interactionCount ?? 0) + 1,
       historico: historicoAtual as Prisma.JsonArray,
+      lastOutcomeCode: status === LeadStatus.PERDIDO ? motivo ?? status : lead.lastOutcomeCode,
+      lastOutcomeLabel: status === LeadStatus.PERDIDO ? motivo : lead.lastOutcomeLabel,
+      lastOutcomeNote: observacao ?? lead.lastOutcomeNote ?? null,
+      nextFollowUpAt: null,
+      nextStepNote: null,
     },
   });
 

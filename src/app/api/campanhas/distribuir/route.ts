@@ -18,7 +18,7 @@ export async function POST(req: Request) {
   }
 
   const leadsNovos = await prisma.lead.findMany({
-    where: { campanhaId, status: LeadStatus.NOVO },
+    where: { campanhaId, status: LeadStatus.NOVO, consultorId: null },
     orderBy: { createdAt: "asc" },
     take: quantidade,
     select: { id: true },
@@ -30,7 +30,18 @@ export async function POST(req: Request) {
 
   await prisma.lead.updateMany({
     where: { id: { in: leadsNovos.map((l) => l.id) } },
-    data: { consultorId, status: LeadStatus.EM_CONTATO },
+    data: {
+      consultorId,
+      status: LeadStatus.NOVO,
+      isWorked: false,
+      nextFollowUpAt: null,
+      nextStepNote: null,
+      lastOutcomeCode: null,
+      lastOutcomeLabel: null,
+      lastOutcomeNote: null,
+      lastActivityAt: null,
+      lastInteractionAt: null,
+    },
   });
 
   return NextResponse.json({ assigned: leadsNovos.length, atribuídos: leadsNovos.length });

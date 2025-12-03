@@ -13,6 +13,7 @@ type Campaign = {
   atribuidos?: number;
   restantes?: number;
   consultoresReceberam?: number;
+  createdAt?: string;
 };
 
 type User = { id: string; name: string; email: string; role: string };
@@ -29,6 +30,9 @@ export default function ImportPage() {
   const [file, setFile] = useState<File | null>(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [campaignToDelete, setCampaignToDelete] = useState<Campaign | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
     if (status === "authenticated" && session?.user.role !== "MASTER") {
@@ -57,6 +61,29 @@ export default function ImportPage() {
       const data = await res.json();
       setUsers(data);
     }
+  }
+
+  async function deleteCampaign() {
+    if (!campaignToDelete) return;
+    setDeleteError("");
+    setDeleteLoading(true);
+    const res = await fetch(`/api/campanhas/${campaignToDelete.id}`, { method: "DELETE" });
+    setDeleteLoading(false);
+    if (!res.ok) {
+      setDeleteError("Não foi possível excluir esta base.");
+      return;
+    }
+    const json = await res.json();
+    setMessage(
+      `Base removida. Leads excluídos: ${json.deletedCompaniesCount ?? 0}. Atividades: ${
+        json.deletedActivitiesCount ?? 0
+      }.`,
+    );
+    if (campaignId === campaignToDelete.id) {
+      setCampaignId("");
+    }
+    setCampaignToDelete(null);
+    await loadCampaigns();
   }
 
   async function createCampaign() {
@@ -223,15 +250,55 @@ export default function ImportPage() {
               <p className="font-semibold text-sm">{c.nome}</p>
               <p className="text-xs text-slate-500">{c.descricao ?? ""}</p>
               <div className="text-xs text-slate-600 mt-2 space-y-1">
+                <p>Criada em: {c.createdAt ? new Date(c.createdAt).toLocaleDateString("pt-BR") : "-"}</p>
                 <p>Total bruto: {c.totalBruto ?? "-"}</p>
                 <p>Atribuídos: {c.atribuidos ?? "-"}</p>
                 <p>Restantes: {c.restantes ?? "-"}</p>
                 <p>Consultores que receberam: {c.consultoresReceberam ?? 0}</p>
               </div>
+              <div className="mt-3 flex justify-end">
+                <button
+                  onClick={() => {
+                    setDeleteError("");
+                    setCampaignToDelete(c);
+                  }}
+                  className="text-xs text-red-600 underline"
+                >
+                  Excluir base
+                </button>
+              </div>
             </div>
           ))}
         </div>
       </div>
+      {campaignToDelete ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl space-y-3">
+            <h3 className="text-lg font-semibold text-slate-900">Excluir base</h3>
+            <p className="text-sm text-slate-600">
+              Tem certeza que deseja excluir completamente esta base? Isso irá remover a campanha, todos os leads
+              e todas as atividades relacionadas. Esta ação é irreversível.
+            </p>
+            <p className="text-sm font-semibold text-slate-800">{campaignToDelete.nome}</p>
+            {deleteError ? <p className="text-sm text-red-600">{deleteError}</p> : null}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setCampaignToDelete(null)}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-100"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={deleteCampaign}
+                disabled={deleteLoading}
+                className="rounded-lg bg-red-600 text-white px-4 py-2 text-sm font-semibold hover:bg-red-500 disabled:opacity-60"
+              >
+                {deleteLoading ? "Excluindo..." : "Excluir base"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

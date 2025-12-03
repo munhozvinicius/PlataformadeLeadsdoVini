@@ -35,7 +35,15 @@ export async function PATCH(req: Request) {
     where: { id: leadId },
     data: {
       consultorId: novoConsultorId,
-      status: LeadStatus.EM_CONTATO,
+      status: LeadStatus.NOVO,
+      isWorked: false,
+      nextFollowUpAt: null,
+      nextStepNote: null,
+      lastOutcomeCode: null,
+      lastOutcomeLabel: null,
+      lastOutcomeNote: null,
+      lastActivityAt: null,
+      lastInteractionAt: null,
       historico: historicoAtual as Prisma.JsonArray,
     },
   });

@@ -129,8 +129,9 @@ export async function POST(req: Request) {
         cnae: cnae || undefined,
         raw: norm,
         consultorId: consultorId || undefined,
-        status: consultorId ? LeadStatus.EM_CONTATO : LeadStatus.NOVO,
+        status: LeadStatus.NOVO,
         historico: [],
+        isWorked: false,
       },
     });
     created += 1;

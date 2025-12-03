@@ -19,6 +19,8 @@ export interface ICompany extends Document {
   lastOutcomeCode?: string;
   lastOutcomeLabel?: string;
   lastOutcomeNote?: string;
+  nextFollowUpAt?: Date;
+  nextStepNote?: string;
   fantasia?: string;
   socios?: { nome: string; documento?: string; telefone?: string }[];
   emailsProspeccao?: string[];
@@ -42,14 +44,16 @@ const CompanySchema = new Schema<ICompany>(
     assignedTo: { type: Schema.Types.ObjectId, ref: "User", required: true },
     stage: {
       type: String,
-      enum: ["PROSPECCAO", "QUALIFICACAO", "REUNIAO", "FECHAMENTO", "GANHO", "PERDIDO"],
-      default: "PROSPECCAO",
+      enum: ["NOVO", "EM_CONTATO", "EM_NEGOCIACAO", "FECHADO", "PERDIDO"],
+      default: "NOVO",
     },
     isWorked: { type: Boolean, default: false },
     lastActivityAt: { type: Date },
     lastOutcomeCode: { type: String },
     lastOutcomeLabel: { type: String },
     lastOutcomeNote: { type: String },
+    nextFollowUpAt: { type: Date },
+    nextStepNote: { type: String },
     fantasia: { type: String },
     socios: [
       {

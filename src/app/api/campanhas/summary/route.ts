@@ -19,9 +19,11 @@ export async function GET() {
   for (const camp of campanhas) {
     const totalBruto = await prisma.lead.count({ where: { campanhaId: camp.id } });
     const atribuidos = await prisma.lead.count({
-      where: { campanhaId: camp.id, status: { not: LeadStatus.NOVO } },
+      where: { campanhaId: camp.id, consultorId: { not: null } },
     });
-    const restantes = await prisma.lead.count({ where: { campanhaId: camp.id, status: LeadStatus.NOVO } });
+    const restantes = await prisma.lead.count({
+      where: { campanhaId: camp.id, consultorId: null },
+    });
     const consultores = await prisma.lead.groupBy({
       by: ["consultorId"],
       where: { campanhaId: camp.id, consultorId: { not: null } },

@@ -30,6 +30,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">CRM</p>
               <p className="text-lg font-semibold">Leads Industriais</p>
+              <p className="text-sm font-semibold text-slate-900">{session.user.name ?? "Consultor"}</p>
               <p className="text-sm text-slate-500">{session.user.email}</p>
               <p className="text-xs text-slate-400 mt-1">Perfil: {session.user.role}</p>
             </div>

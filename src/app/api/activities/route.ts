@@ -1,107 +1,150 @@
 export const dynamic = "force-dynamic";
 
-import { NextResponse } from "next/server";
-import { NextRequest } from "next/server";
-import { connectToDatabase } from "@/lib/mongodb";
-import { companyAccessFilter, getSessionUser } from "@/lib/auth-helpers";
-import Company from "@/models/Company";
-import LeadActivity from "@/models/LeadActivity";
-import { StageId } from "@/constants/stages";
+import { NextRequest, NextResponse } from "next/server";
+import { ActivityChannel, LeadStatus } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { getSessionUser, leadsAccessFilter } from "@/lib/auth-helpers";
+import { Prisma } from "@prisma/client";
+
+function parseChannel(raw: string | null): ActivityChannel | null {
+  if (!raw) return null;
+  const normalized = raw.trim().toUpperCase().replace("-", "_");
+  if (normalized === "TELEFONE") return ActivityChannel.TELEFONE;
+  if (normalized === "WHATSAPP") return ActivityChannel.WHATSAPP;
+  if (normalized === "EMAIL" || normalized === "E-MAIL") return ActivityChannel.EMAIL;
+  if (normalized === "VISITA") return ActivityChannel.VISITA;
+  if (normalized === "OUTRO" || normalized === "OUTROS") return ActivityChannel.OUTRO;
+  return null;
+}
 
 export async function GET(req: NextRequest) {
-  await connectToDatabase();
   const sessionUser = await getSessionUser();
   if (!sessionUser) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const companyId = req.nextUrl.searchParams.get("companyId");
-  if (!companyId) {
-    return NextResponse.json({ message: "companyId is required" }, { status: 400 });
+  const searchParams = req.nextUrl.searchParams;
+  const leadId = searchParams.get("leadId") ?? searchParams.get("companyId");
+  if (!leadId) {
+    return NextResponse.json({ message: "leadId is required" }, { status: 400 });
   }
 
-  const companyFilter: Record<string, unknown> = { _id: companyId };
-  if (sessionUser.role === "MASTER") {
-    // allowed
-  } else if (sessionUser.role === "OWNER") {
-    Object.assign(companyFilter, await companyAccessFilter(sessionUser));
-  } else {
-    companyFilter.assignedTo = sessionUser.id;
-  }
-
-  const company = await Company.findOne(companyFilter);
-  if (!company) {
+  const accessFilter = await leadsAccessFilter(sessionUser);
+  const lead = await prisma.lead.findFirst({
+    where: { id: leadId, ...accessFilter },
+  });
+  if (!lead) {
     return NextResponse.json({ message: "Not found or unauthorized" }, { status: 404 });
   }
 
-  const activities = await LeadActivity.find({ company: companyId })
-    .populate("user", "name email role")
-    .sort({ createdAt: -1 });
+  const activities = await prisma.leadActivity.findMany({
+    where: { leadId },
+    include: { user: { select: { id: true, name: true, email: true, role: true } } },
+    orderBy: { createdAt: "desc" },
+  });
 
   return NextResponse.json(activities);
 }
 
-export async function POST(req: Request) {
-  await connectToDatabase();
+type PostBody = {
+  leadId?: string;
+  companyId?: string;
+  activityType?: string;
+  channel?: string | null;
+  outcomeCode?: string | null;
+  outcomeLabel?: string | null;
+  note?: string | null;
+  newStage?: LeadStatus | null;
+  nextFollowUpAt?: string | null;
+  nextStepNote?: string | null;
+};
+
+export async function POST(req: NextRequest) {
   const sessionUser = await getSessionUser();
   if (!sessionUser) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await req.json();
+  const body = (await req.json()) as PostBody;
+  const leadId = body.leadId ?? body.companyId;
   const {
-    companyId,
-    kind = "CONTATO",
+    activityType,
     channel = null,
     outcomeCode,
     outcomeLabel,
     note,
     newStage,
+    nextFollowUpAt,
+    nextStepNote,
   } = body;
 
-  if (!companyId || !note) {
-    return NextResponse.json({ message: "companyId and note are required" }, { status: 400 });
+  if (!leadId || !activityType || !note) {
+    return NextResponse.json({ message: "leadId, activityType and note are required" }, { status: 400 });
   }
 
-  const companyFilter: Record<string, unknown> = { _id: companyId };
-  if (sessionUser.role === "MASTER") {
-    // allowed
-  } else if (sessionUser.role === "OWNER") {
-    Object.assign(companyFilter, await companyAccessFilter(sessionUser));
-  } else {
-    companyFilter.assignedTo = sessionUser.id;
-  }
-
-  const company = await Company.findOne(companyFilter);
-  if (!company) {
+  const accessFilter = await leadsAccessFilter(sessionUser);
+  const lead = await prisma.lead.findFirst({
+    where: { id: leadId, ...accessFilter },
+  });
+  if (!lead) {
     return NextResponse.json({ message: "Not found or unauthorized" }, { status: 404 });
   }
 
-  const stageBefore = company.stage as StageId | null;
-  if (newStage && newStage !== company.stage) {
-    company.stage = newStage;
-  }
-  const stageAfter = (newStage ?? company.stage) as StageId | null;
+  const stageBefore = lead.status;
+  const stageAfter = newStage && Object.values(LeadStatus).includes(newStage) ? newStage : lead.status;
+  const followUpDate = nextFollowUpAt ? new Date(nextFollowUpAt) : null;
+  const now = new Date();
 
-  company.isWorked = true;
-  company.lastActivityAt = new Date();
-  if (outcomeCode || outcomeLabel) {
-    company.lastOutcomeCode = outcomeCode;
-    company.lastOutcomeLabel = outcomeLabel;
-  }
-  company.lastOutcomeNote = note;
-  await company.save();
-
-  const activity = await LeadActivity.create({
-    company: company._id,
-    user: sessionUser.id,
-    kind,
+  const historicoAtual: Record<string, unknown>[] = Array.isArray(lead.historico)
+    ? (lead.historico as Record<string, unknown>[])
+    : [];
+  historicoAtual.push({
+    date: now.toISOString(),
+    type: "ATIVIDADE",
+    activityType,
+    channel,
+    note,
     stageBefore,
     stageAfter,
-    channel,
     outcomeCode,
     outcomeLabel,
-    note,
+    nextFollowUpAt: followUpDate ? followUpDate.toISOString() : null,
+    userId: sessionUser.id,
+  });
+
+  const activity = await prisma.leadActivity.create({
+    data: {
+      leadId,
+      userId: sessionUser.id,
+      activityType,
+      channel: parseChannel(channel),
+      outcomeCode: outcomeCode || undefined,
+      outcomeLabel: outcomeLabel || undefined,
+      note,
+      stageBefore,
+      stageAfter,
+      nextFollowUpAt: followUpDate ?? undefined,
+      nextStepNote: nextStepNote || undefined,
+    },
+    include: { user: { select: { id: true, name: true, email: true, role: true } } },
+  });
+
+  await prisma.lead.update({
+    where: { id: leadId },
+    data: {
+      status: stageAfter,
+      isWorked: true,
+      lastActivityAt: now,
+      lastInteractionAt: now,
+      interactionCount: (lead.interactionCount ?? 0) + 1,
+      lastOutcomeCode: outcomeCode || lead.lastOutcomeCode || undefined,
+      lastOutcomeLabel: outcomeLabel || lead.lastOutcomeLabel || undefined,
+      lastOutcomeNote: note,
+      nextFollowUpAt: followUpDate,
+      nextStepNote: nextStepNote || null,
+      historico: historicoAtual as Prisma.JsonArray,
+      lastStatusChangeAt: stageAfter !== lead.status ? now : lead.lastStatusChangeAt,
+    },
   });
 
   return NextResponse.json(activity, { status: 201 });
