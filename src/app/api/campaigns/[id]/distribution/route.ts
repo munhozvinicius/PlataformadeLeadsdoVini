@@ -18,19 +18,24 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
     const campaignId = params.id;
     const total = await prisma.lead.count({ where: { campanhaId: campaignId } });
-    const estoque = await prisma.lead.count({
-      where: { campanhaId: campaignId, consultorId: null },
-    });
-    const atribuidos = await prisma.lead.count({
-      where: { campanhaId: campaignId, consultorId: { not: null } },
-    });
+    const estoqueWhere = {
+      campanhaId: campaignId,
+      OR: [{ consultorId: null }, { consultorId: "" }],
+    };
+    const atribuidosWhere = {
+      campanhaId: campaignId,
+      NOT: [{ consultorId: null }, { consultorId: "" }],
+    };
+
+    const estoque = await prisma.lead.count({ where: estoqueWhere });
+    const atribuidos = await prisma.lead.count({ where: atribuidosWhere });
     const fechados = await prisma.lead.count({ where: { campanhaId: campaignId, status: LeadStatus.FECHADO } });
     const perdidos = await prisma.lead.count({ where: { campanhaId: campaignId, status: LeadStatus.PERDIDO } });
 
     const grouped = await prisma.lead.groupBy({
       by: ["consultorId", "status"],
       _count: { status: true },
-      where: { campanhaId: campaignId, consultorId: { not: null } },
+      where: atribuidosWhere,
     });
 
     const consultorIds = Array.from(new Set(grouped.map((g) => g.consultorId).filter(Boolean))) as string[];
@@ -102,12 +107,14 @@ export async function POST(req: NextRequest, { params }: Params) {
     const campaignId = params.id;
     const totalNeeded = quantityPerConsultant * consultantIds.length;
     // Pega leads em estoque (sem consultor, status NOVO)
+    const stockWhere = {
+      campanhaId: campaignId,
+      status: LeadStatus.NOVO,
+      OR: [{ consultorId: null }, { consultorId: "" }],
+    };
+
     const stockLeads = await prisma.lead.findMany({
-      where: {
-        campanhaId: campaignId,
-        consultorId: null,
-        status: LeadStatus.NOVO,
-      },
+      where: stockWhere,
       orderBy: { createdAt: "asc" },
       take: totalNeeded,
       select: { id: true },
@@ -148,13 +155,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       distributed[consultantId] = slice.length;
     }
 
-    const remainingStock = await prisma.lead.count({
-      where: {
-        campanhaId: campaignId,
-        consultorId: null,
-        status: LeadStatus.NOVO,
-      },
-    });
+    const remainingStock = await prisma.lead.count({ where: stockWhere });
 
     return NextResponse.json({ success: true, distributed, remainingStock });
   } catch (error) {
