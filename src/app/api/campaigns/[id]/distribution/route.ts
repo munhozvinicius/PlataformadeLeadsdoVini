@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { LeadStatus, Role } from "@prisma/client";
+import { LeadStatus, Prisma, Role } from "@prisma/client";
 
 type Params = { params: { id: string } };
 
@@ -23,14 +23,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
     const campaignId = params.id;
     const officeId = _req.nextUrl.searchParams.get("officeId");
     const total = await prisma.lead.count({ where: { campanhaId: campaignId } });
-    const estoqueWhere = {
+    const estoqueWhere: Prisma.LeadWhereInput = {
       campanhaId: campaignId,
       consultorId: null,
     };
     if (officeId) {
       estoqueWhere.officeId = officeId;
     }
-    const atribuidosWhere = {
+    const atribuidosWhere: Prisma.LeadWhereInput = {
       campanhaId: campaignId,
       consultorId: { not: null },
     };
@@ -244,7 +244,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       return NextResponse.json({ message: "Quantidade por consultor inválida." }, { status: 400 });
     }
 
-    const stockWhere = {
+    const stockWhere: Prisma.LeadWhereInput = {
       campanhaId: campaignId,
       status: LeadStatus.NOVO,
       consultorId: null,
