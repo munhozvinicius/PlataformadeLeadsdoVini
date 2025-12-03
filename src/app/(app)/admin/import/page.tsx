@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { zipSync } from "fflate";
 
 type Campaign = {
   id: string;
@@ -142,9 +143,18 @@ export default function ImportPage() {
       return;
     }
 
+    const buffer = await file.arrayBuffer();
+    // Compacta o arquivo para reduzir tamanho da requisição e evitar 413.
+    const zipped = zipSync({ [file.name]: new Uint8Array(buffer) });
+    const zippedArray = new Uint8Array(zipped);
+
     const formData = new FormData();
-    formData.append("file", file);
-    formData.append("compressed", "false");
+    formData.append(
+      "file",
+      new Blob([zippedArray], { type: "application/zip" }),
+      `${file.name}.zip`,
+    );
+    formData.append("compressed", "true");
     if (campaignId) formData.append("campanhaId", campaignId);
     if (!campaignId && newCampaignName) formData.append("campanhaNome", newCampaignName);
     formData.append("consultorId", assignedUser);
