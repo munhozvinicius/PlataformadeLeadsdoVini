@@ -207,6 +207,31 @@ model ImportBatch {
   leads               Lead[]
 }
 
+model DistributionLog {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  campaignId   String   @db.ObjectId
+  adminId      String   @db.ObjectId
+  consultantId String   @db.ObjectId
+  leadIds      String[]
+  rulesApplied String?
+  createdAt    DateTime @default(now())
+
+  campaign     Campanha @relation(fields: [campaignId], references: [id])
+  admin        User     @relation("AdminDistributionLog", fields: [adminId], references: [id])
+  consultant   User     @relation("ConsultantDistributionLog", fields: [consultantId], references: [id])
+}
+
+model LeadHistory {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  leadId    String   @db.ObjectId
+  lead      Lead     @relation(fields: [leadId], references: [id])
+  action    String
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
+  notes     String?
+  createdAt DateTime @default(now())
+}
+
 model LeadNote {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   leadId    String   @db.ObjectId

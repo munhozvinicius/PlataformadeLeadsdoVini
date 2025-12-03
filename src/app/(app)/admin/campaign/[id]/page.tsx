@@ -24,11 +24,11 @@ type DistributionRow = {
 
 type LeadItem = {
   id: string;
+  documento?: string | null;
   razaoSocial?: string | null;
   nomeFantasia?: string | null;
   cidade?: string | null;
   estado?: string | null;
-  documento?: string | null;
   cnpj?: string | null;
   vlFatPresumido?: string | null;
   telefone1?: string | null;
@@ -49,6 +49,11 @@ export default function CampaignDetailPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
   const { data: session, status } = useSession();
+  const [, setLogs] = useState<{
+    activities: { id: string; action: string; user: string; lead: string; timestamp: string }[];
+    distributions: { id: string; admin: string; consultant: string; leadsSent: number; rulesApplied: string; timestamp: string }[];
+  } | null>(null);
+  const [audit, setAudit] = useState<{ total: number; invalidPhones: number; duplicated: number; invalids: number } | null>(null);
   const [detail, setDetail] = useState<CampaignDetail | null>(null);
   const [distribution, setDistribution] = useState<DistributionRow[]>([]);
   const [leads, setLeads] = useState<LeadItem[]>([]);
@@ -94,6 +99,16 @@ export default function CampaignDetailPage() {
     }
   }, [filters, id]);
 
+  const loadLogs = useCallback(async () => {
+    const res = await fetch(`/api/campaign/${id}/logs`, { cache: "no-store" });
+    if (res.ok) setLogs(await res.json());
+  }, [id]);
+
+  const loadAudit = useCallback(async () => {
+    const res = await fetch(`/api/campaign/${id}/audit`, { cache: "no-store" });
+    if (res.ok) setAudit(await res.json());
+  }, [id]);
+
   const loadConsultants = useCallback(async () => {
     const res = await fetch("/api/admin/users", { cache: "no-store" });
     if (res.ok) {
@@ -110,6 +125,13 @@ export default function CampaignDetailPage() {
       loadConsultants();
     }
   }, [status, id, loadDetail, loadDistribution, loadLeads, loadConsultants]);
+
+  useEffect(() => {
+    if (status === "authenticated" && id) {
+      loadLogs();
+      loadAudit();
+    }
+  }, [status, id, loadLogs, loadAudit]);
 
   async function distribute() {
     setMessage("");
@@ -139,12 +161,28 @@ export default function CampaignDetailPage() {
           <h1 className="text-2xl font-semibold text-slate-900">{detail?.campaign.nome ?? "Campanha"}</h1>
           <p className="text-sm text-slate-500">{detail?.campaign.descricao}</p>
         </div>
-        <button
-          onClick={() => router.back()}
-          className="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-100"
-        >
-          Voltar
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={loadLogs}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-100"
+          >
+            Logs
+          </button>
+          <button
+            onClick={() => {
+              window.location.href = `/api/admin/export`;
+            }}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-100"
+          >
+            Exportar campanha
+          </button>
+          <button
+            onClick={() => router.back()}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-100"
+          >
+            Voltar
+          </button>
+        </div>
       </div>
 
       {message ? <div className="text-sm text-slate-700">{message}</div> : null}
@@ -157,6 +195,12 @@ export default function CampaignDetailPage() {
         <ResumoCard title="Ganhos" value={detail?.resumo.ganhos ?? 0} />
         <ResumoCard title="Perdidos" value={detail?.resumo.perdidos ?? 0} />
         <ResumoCard title="Conversão" value={`${Math.round(conversao * 100)}%`} />
+        {audit ? (
+          <>
+            <ResumoCard title="Telefones inválidos" value={audit.invalidPhones} />
+            <ResumoCard title="Duplicados" value={audit.duplicated} />
+          </>
+        ) : null}
       </div>
 
       {/* D2 */}
@@ -234,12 +278,12 @@ export default function CampaignDetailPage() {
 
       {/* D3 */}
       <div className="rounded-2xl border bg-white/70 backdrop-blur p-4 shadow-sm space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900">Estoque da campanha</h2>
-          <button onClick={loadLeads} className="text-sm underline text-blue-700">
-            Atualizar
-          </button>
-        </div>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900">Estoque da campanha</h2>
+              <button onClick={loadLeads} className="text-sm underline text-blue-700">
+                Atualizar
+              </button>
+            </div>
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-2">
           {[
             { key: "status", label: "Status" },
@@ -269,6 +313,7 @@ export default function CampaignDetailPage() {
                 <th className="py-2 pr-3">Telefones</th>
                 <th className="py-2 pr-3">Status</th>
                 <th className="py-2 pr-3">Consultor</th>
+                <th className="py-2 pr-3">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -285,6 +330,35 @@ export default function CampaignDetailPage() {
                   </td>
                   <td className="py-2 pr-3">{lead.status}</td>
                   <td className="py-2 pr-3">{lead.consultor?.name ?? lead.consultor?.email ?? "-"}</td>
+                  <td className="py-2 pr-3 space-x-2">
+                    <button
+                      onClick={async () => {
+                        if (!selectedConsultor) return;
+                        await fetch("/api/lead/reassign", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ leadId: lead.id, consultantId: selectedConsultor }),
+                        });
+                        await loadLeads();
+                      }}
+                      className="text-xs text-blue-700 underline"
+                    >
+                      Reatribuir
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await fetch(`/api/lead/${lead.id}/update`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ status: LeadStatus.PERDIDO }),
+                        });
+                        await loadLeads();
+                      }}
+                      className="text-xs text-red-600 underline"
+                    >
+                      Invalidar
+                    </button>
+                  </td>
                 </tr>
               ))}
               {leads.length === 0 ? (
