@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { zipSync } from "fflate";
 
 type Campaign = {
   id: string;
@@ -23,6 +22,10 @@ type ImportBatch = {
   campaignName: string;
   totalLeads: number;
   createdAt: string;
+  importedLeads?: number;
+  attributedLeads?: number;
+  notAttributedLeads?: number;
+  duplicatedLeads?: number;
 };
 
 type User = { id: string; name: string; email: string; role: string };
@@ -36,6 +39,8 @@ export default function ImportPage() {
   const [campaignId, setCampaignId] = useState("");
   const [newCampaignName, setNewCampaignName] = useState("");
   const [newCampaignDescription, setNewCampaignDescription] = useState("");
+  const [newCampaignObjective, setNewCampaignObjective] = useState("");
+  const [newCampaignVertical, setNewCampaignVertical] = useState("");
   const [assignedUser, setAssignedUser] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [message, setMessage] = useState("");
@@ -44,6 +49,8 @@ export default function ImportPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [batchToDelete, setBatchToDelete] = useState<ImportBatch | null>(null);
+  const [assignmentType, setAssignmentType] = useState<"none" | "single" | "multi">("single");
+  const [multiConsultants, setMultiConsultants] = useState<string[]>([]);
 
   useEffect(() => {
     if (status === "authenticated" && session?.user.role !== "MASTER") {
@@ -111,7 +118,12 @@ export default function ImportPage() {
     const res = await fetch("/api/campanhas/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nome: newCampaignName, descricao: newCampaignDescription }),
+      body: JSON.stringify({
+        nome: newCampaignName,
+        descricao: newCampaignDescription,
+        objetivo: newCampaignObjective,
+        vertical: newCampaignVertical,
+      }),
     });
     if (res.ok) {
       setNewCampaignName("");
@@ -130,20 +142,16 @@ export default function ImportPage() {
       return;
     }
 
-    const buffer = await file.arrayBuffer();
-    const zipped = zipSync({ [file.name]: new Uint8Array(buffer) });
-    const zippedArray = new Uint8Array(zipped);
-
     const formData = new FormData();
-    formData.append(
-      "file",
-      new Blob([zippedArray], { type: "application/zip" }),
-      `${file.name}.zip`,
-    );
-    formData.append("compressed", "true");
+    formData.append("file", file);
+    formData.append("compressed", "false");
     if (campaignId) formData.append("campanhaId", campaignId);
     if (!campaignId && newCampaignName) formData.append("campanhaNome", newCampaignName);
     formData.append("consultorId", assignedUser);
+    formData.append("assignmentType", assignmentType);
+    if (assignmentType === "multi") {
+      multiConsultants.forEach((id) => formData.append("multiConsultants[]", id));
+    }
 
     setLoading(true);
     const res = await fetch("/api/campanhas/import", {
@@ -156,7 +164,9 @@ export default function ImportPage() {
       return;
     }
     const json = await res.json();
-    setMessage(`Importação concluída: ${json.created} criados.`);
+    setMessage(
+      `Importação concluída: ${json.importedLeads} criados, ${json.duplicatedLeads} duplicados, atribuídos: ${json.attributedLeads}, em estoque: ${json.notAttributedLeads}.`
+    );
     await loadCampaigns();
     await loadBatches();
   }
@@ -222,6 +232,34 @@ export default function ImportPage() {
               </select>
             </div>
             <div className="space-y-1">
+              <label className="text-xs text-slate-600">Tipo de atribuição</label>
+              <select
+                value={assignmentType}
+                onChange={(e) => setAssignmentType(e.target.value as "none" | "single" | "multi")}
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+              >
+                <option value="none">Não atribuir (estoque da campanha)</option>
+                <option value="single">Atribuir tudo para um consultor</option>
+                <option value="multi">Distribuir igualmente entre consultores</option>
+              </select>
+              {assignmentType === "multi" ? (
+                <select
+                  multiple
+                  value={multiConsultants}
+                  onChange={(e) =>
+                    setMultiConsultants(Array.from(e.target.selectedOptions).map((opt) => opt.value))
+                  }
+                  className="w-full border rounded-lg px-3 py-2 text-sm h-32"
+                >
+                  {consultants.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.email})
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+            </div>
+            <div className="space-y-1">
               <label className="text-xs text-slate-600">Arquivo Excel</label>
               <input
                 type="file"
@@ -265,6 +303,22 @@ export default function ImportPage() {
                 rows={2}
               />
             </div>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-600">Objetivo</label>
+              <input
+                value={newCampaignObjective}
+                onChange={(e) => setNewCampaignObjective(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-600">Vertical</label>
+              <input
+                value={newCampaignVertical}
+                onChange={(e) => setNewCampaignVertical(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
             <button
               onClick={createCampaign}
               className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-100"
@@ -292,7 +346,13 @@ export default function ImportPage() {
                 <p>Restantes: {c.restantes ?? "-"}</p>
                 <p>Consultores que receberam: {c.consultoresReceberam ?? 0}</p>
               </div>
-              <div className="mt-3 flex justify-end">
+              <div className="mt-3 flex justify-between">
+                <button
+                  onClick={() => router.push(`/admin/campanha/${c.id}`)}
+                  className="text-xs text-slate-700 underline"
+                >
+                  Ver detalhes
+                </button>
                 <button
                   onClick={() => {
                     setDeleteError("");
@@ -317,7 +377,11 @@ export default function ImportPage() {
               <tr className="text-left text-slate-500 border-b">
                 <th className="py-2 pr-3">Arquivo</th>
                 <th className="py-2 pr-3">Campanha</th>
-                <th className="py-2 pr-3">Total</th>
+                <th className="py-2 pr-3">Total lido</th>
+                <th className="py-2 pr-3">Importados</th>
+                <th className="py-2 pr-3">Duplicados</th>
+                <th className="py-2 pr-3">Atribuídos</th>
+                <th className="py-2 pr-3">Não atribuídos</th>
                 <th className="py-2 pr-3">Criado em</th>
                 <th className="py-2 pr-3">Ações</th>
               </tr>
@@ -328,6 +392,10 @@ export default function ImportPage() {
                   <td className="py-2 pr-3">{batch.nomeArquivoOriginal}</td>
                   <td className="py-2 pr-3">{batch.campaignName}</td>
                   <td className="py-2 pr-3">{batch.totalLeads}</td>
+                  <td className="py-2 pr-3">{batch.importedLeads ?? batch.totalLeads}</td>
+                  <td className="py-2 pr-3">{batch.duplicatedLeads ?? 0}</td>
+                  <td className="py-2 pr-3">{batch.attributedLeads ?? 0}</td>
+                  <td className="py-2 pr-3">{batch.notAttributedLeads ?? 0}</td>
                   <td className="py-2 pr-3">
                     {batch.createdAt ? new Date(batch.createdAt).toLocaleString("pt-BR") : "-"}
                   </td>

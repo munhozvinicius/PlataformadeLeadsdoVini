@@ -66,6 +66,10 @@ model Campanha {
   nome        String
   descricao   String?
   parceiro    String?
+  objetivo    String?
+  vertical    String?
+  periodoInicio DateTime?
+  periodoFim   DateTime?
   createdAt   DateTime @default(now())
   createdById String?  @db.ObjectId
   totalLeads      Int     @default(0)
@@ -183,9 +187,16 @@ model LeadActivity {
 model ImportBatch {
   id                  String    @id @default(auto()) @map("_id") @db.ObjectId
   nomeArquivoOriginal String
+  fileName            String?
   campaignId          String    @db.ObjectId
   campaign            Campanha  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   totalLeads          Int
+  importedLeads       Int       @default(0)
+  attributedLeads     Int       @default(0)
+  notAttributedLeads  Int       @default(0)
+  duplicatedLeads     Int       @default(0)
+  status              String    @default("completed")
+  errorMessage        String?
   criadoPorId         String?   @db.ObjectId
   criadoPor           User?     @relation("UserImportBatches", fields: [criadoPorId], references: [id])
   createdAt           DateTime  @default(now())

@@ -43,6 +43,8 @@ export async function POST(req: Request) {
   const file = formData.get("file") as File | null;
   const compressedFlag = formData.get("compressed") as string | null;
   const consultorId = formData.get("consultorId") as string | null;
+  const assignmentType = (formData.get("assignmentType") as string | null) ?? "single";
+  const multiConsultants = formData.getAll("multiConsultants[]").filter(Boolean) as string[];
   const campanhaId = formData.get("campanhaId") as string | null;
   const campanhaNome = formData.get("campanhaNome") as string | null;
   const originalFileName = file?.name ?? "arquivo.xlsx";
@@ -80,10 +82,14 @@ export async function POST(req: Request) {
   const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" }) as Record<string, unknown>[];
 
   let created = 0;
+  let duplicatedLeads = 0;
+  let attributedLeads = 0;
+  let notAttributedLeads = 0;
 
   const importBatch = await prisma.importBatch.create({
     data: {
       nomeArquivoOriginal: originalFileName,
+      fileName: originalFileName,
       campaignId: campanhaIdToUse!,
       totalLeads: rows.length,
       criadoPorId: session.user.id,
@@ -122,6 +128,25 @@ export async function POST(req: Request) {
     ].filter(Boolean) as { rotulo: string; valor: string }[];
     const site = norm["SITE"];
 
+    // Evitar duplicados por documento + campanha
+    if (cnpj) {
+      const exists = await prisma.lead.findFirst({ where: { campanhaId: campanhaIdToUse!, documento: cnpj } });
+      if (exists) {
+        duplicatedLeads += 1;
+        continue;
+      }
+    }
+
+    let consultorEscolhido: string | undefined = undefined;
+    if (assignmentType === "single") {
+      consultorEscolhido = consultorId || undefined;
+    } else if (assignmentType === "multi" && multiConsultants.length > 0) {
+      const index = created % multiConsultants.length;
+      consultorEscolhido = multiConsultants[index];
+    } else {
+      consultorEscolhido = undefined;
+    }
+
     await prisma.lead.create({
       data: {
         campanhaId: campanhaIdToUse!,
@@ -151,7 +176,7 @@ export async function POST(req: Request) {
         vlFatPresumido: vlFatPresumido || undefined,
         cnae: cnae || undefined,
         raw: norm,
-        consultorId: consultorId || undefined,
+        consultorId: assignmentType === "none" ? undefined : consultorEscolhido,
         status: LeadStatus.NOVO,
         historico: [],
         isWorked: false,
@@ -162,7 +187,34 @@ export async function POST(req: Request) {
       },
     });
     created += 1;
+    if (assignmentType === "none" || !consultorEscolhido) {
+      notAttributedLeads += 1;
+    } else {
+      attributedLeads += 1;
+    }
   }
 
-  return NextResponse.json({ created, campanhaId: campanhaIdToUse }, { status: 201 });
+  await prisma.importBatch.update({
+    where: { id: importBatch.id },
+    data: {
+      importedLeads: created,
+      duplicatedLeads,
+      attributedLeads,
+      notAttributedLeads,
+    },
+  });
+
+  return NextResponse.json(
+    {
+      campaignId: campanhaIdToUse,
+      importBatchId: importBatch.id,
+      fileName: originalFileName,
+      totalLeads: rows.length,
+      importedLeads: created,
+      duplicatedLeads,
+      attributedLeads,
+      notAttributedLeads,
+    },
+    { status: 201 }
+  );
 }

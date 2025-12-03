@@ -28,6 +28,11 @@ export async function GET() {
       campaignId: b.campaignId,
       campaignName: b.campaign?.nome ?? "",
       totalLeads: b.totalLeads ?? b._count.leads,
+      importedLeads: b.importedLeads ?? b._count.leads,
+      attributedLeads: b.attributedLeads ?? 0,
+      notAttributedLeads: b.notAttributedLeads ?? 0,
+      duplicatedLeads: b.duplicatedLeads ?? 0,
+      status: b.status,
       createdAt: b.createdAt,
       criadoPor: b.criadoPor,
     }))

@@ -17,27 +17,22 @@ export async function DELETE(_req: Request, { params }: Params) {
   const campaignId = params.id;
   const leads = await prisma.lead.findMany({
     where: { campanhaId: campaignId },
-    select: { id: true },
+    select: { id: true, status: true },
   });
-  const leadIds = leads.map((l) => l.id);
+  const targetIds = leads.filter((l) => l.status !== "FECHADO").map((l) => l.id);
 
   const deletedActivities =
-    leadIds.length > 0
-      ? await prisma.leadActivity.deleteMany({ where: { leadId: { in: leadIds } } })
+    targetIds.length > 0
+      ? await prisma.leadActivity.deleteMany({ where: { leadId: { in: targetIds } } })
       : { count: 0 };
-  const deletedCompanies = await prisma.lead.deleteMany({ where: { campanhaId: campaignId } });
-
-  let deletedCampaignId: string | null = null;
-  try {
-    const deletedCampaign = await prisma.campanha.delete({ where: { id: campaignId } });
-    deletedCampaignId = deletedCampaign.id;
-  } catch {
-    deletedCampaignId = null;
-  }
+  const deletedLeads = await prisma.lead.deleteMany({
+    where: { campanhaId: campaignId, status: { not: "FECHADO" } },
+  });
+  const deletedBatches = await prisma.importBatch.deleteMany({ where: { campaignId: campaignId } });
 
   return NextResponse.json({
-    deletedCampaignId,
-    deletedCompaniesCount: deletedCompanies.count,
+    deletedLeadsCount: deletedLeads.count,
     deletedActivitiesCount: deletedActivities.count,
+    deletedBatchesCount: deletedBatches.count,
   });
 }

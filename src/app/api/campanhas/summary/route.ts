@@ -35,6 +35,7 @@ export async function GET() {
       atribuidos,
       restantes,
       consultoresReceberam: consultores.length,
+      estoque: restantes,
     });
   }
 
