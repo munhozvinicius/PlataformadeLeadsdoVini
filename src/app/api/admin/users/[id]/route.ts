@@ -153,7 +153,7 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
   }
 
   const body = await req.json();
-  const { name, email, role, officeIds, ownerId, active, password } = body;
+  const { name, email, role, officeIds, ownerId, active, password, officeRecordId } = body;
 
   const updates: Prisma.UserUpdateInput = {};
   const finalRole = (role ?? targetUser.role) as Role;
@@ -211,7 +211,7 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
     updates.password = await bcrypt.hash(password, 10);
   }
 
-  if (Object.keys(updates).length === 0) {
+  if (Object.keys(updates).length === 0 && officeRecordId === undefined) {
     return NextResponse.json({ message: "Nenhuma alteração fornecida" }, { status: 400 });
   }
 
@@ -221,6 +221,11 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
       data: {
         ...updates,
         ...(ownerConnect ? { owner: ownerConnect } : {}),
+        ...(officeRecordId !== undefined
+          ? officeRecordId
+            ? { officeRecord: { connect: { id: officeRecordId } } }
+            : { officeRecord: { disconnect: true } }
+          : {}),
       },
       select: USER_SELECT,
     });

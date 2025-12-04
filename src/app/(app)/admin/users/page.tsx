@@ -7,7 +7,6 @@ import { Office, Role } from "@prisma/client";
 import UserDrawer, {
   DrawerMode,
   OwnerOption,
-  OfficeOption,
   UserDrawerPayload,
 } from "./UserDrawer";
 import { canManageUsers, isConsultor } from "@/lib/authRoles";
@@ -18,12 +17,13 @@ type AdminUser = {
   email: string;
   role: Role;
   office: Office;
-  officeRecord?: { id: string } | null;
+  officeRecord?: { id: string; name: string; code: string } | null;
   owner?: {
     id: string;
     name: string;
     email: string;
     senior?: { id: string; name?: string | null; email?: string | null } | null;
+    officeRecord?: { id: string; name: string; code: string } | null;
   } | null;
   senior?: { id: string; name?: string | null } | null;
   offices: { office: Office }[];
@@ -32,17 +32,17 @@ type AdminUser = {
   derivedGN?: { id: string; name?: string | null; email?: string | null } | null;
 };
 
+type OfficeRecordDto = {
+  id: string;
+  code: string;
+  name: string;
+  createdAt: string;
+};
+
 const OFFICE_LABELS: Record<Office, string> = {
   SAFE_TI: "Safe TI",
   JLC_TECH: "JLC Tech",
 };
-
-const formatOfficeList = (offices: { office: Office }[]) =>
-  offices.length
-    ? offices
-        .map((entry) => OFFICE_LABELS[entry.office] ?? entry.office)
-        .join(", ")
-    : "-";
 
 function generatePassword() {
   return `P${Math.random().toString(36).slice(2, 10)}!`;
@@ -54,7 +54,7 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [offices, setOffices] = useState<OfficeOption[]>([]);
+const [offices, setOffices] = useState<OfficeRecordDto[]>([]);
   const [officesLoading, setOfficesLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<DrawerMode>("create");
@@ -103,7 +103,7 @@ export default function AdminUsersPage() {
       if (!response.ok) {
         throw new Error("Não foi possível carregar os escritórios.");
       }
-      const data: OfficeOption[] = await response.json();
+      const data: OfficeRecordDto[] = await response.json();
       setOffices(data);
     } catch (err) {
       console.error("Erro ao carregar escritórios", err);
@@ -128,7 +128,7 @@ export default function AdminUsersPage() {
           id: owner.id,
           name: owner.name,
           email: owner.email,
-          office: owner.office,
+          officeRecordId: owner.officeRecord?.id ?? null,
         })),
     [users]
   );
@@ -396,7 +396,9 @@ export default function AdminUsersPage() {
                       <span style={{ paddingLeft: `${row.depth * 1.5}rem` }}>{row.user.name}</span>
                     </td>
                     <td className="py-2 pr-3">{row.user.email}</td>
-                    <td className="py-2 pr-3">{formatOfficeList(row.user.offices)}</td>
+                    <td className="py-2 pr-3">
+                      {row.user.officeRecord?.name ?? row.user.officeRecord?.code ?? "-"}
+                    </td>
                     <td className="py-2 pr-3">{row.user.role}</td>
                     <td className="py-2 pr-3">{row.gsName}</td>
                     <td className="py-2 pr-3">{row.gnName}</td>

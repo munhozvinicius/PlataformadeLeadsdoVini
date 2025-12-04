@@ -21,7 +21,7 @@ const USER_SELECT = {
   role: true,
   profile: true,
   office: true,
-  officeRecord: { select: { id: true } },
+  officeRecord: { select: { id: true, name: true, code: true } },
   owner: { select: { id: true, name: true, email: true } },
   senior: { select: { id: true, name: true, email: true } },
   offices: { select: { office: true } },
@@ -65,11 +65,13 @@ export async function GET() {
     include: {
       owner: {
         include: {
+          officeRecord: { select: { id: true, name: true, code: true } },
           senior: { select: { id: true, name: true, email: true } },
           offices: { select: { office: true } },
         },
       },
       senior: { select: { id: true, name: true, email: true } },
+      officeRecord: { select: { id: true, name: true, code: true } },
       offices: { select: { office: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -139,7 +141,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const { name, email, password, role, officeIds, ownerId, seniorId, active } = body;
+  const { name, email, password, role, officeIds, ownerId, seniorId, active, officeRecordId } = body;
 
   if (!name || !email || !password || !role) {
     return NextResponse.json({ message: "Dados insuficientes" }, { status: 400 });
@@ -214,6 +216,7 @@ export async function POST(req: Request) {
       role,
       profile: role as Profile,
       office: targetOffices[0] ?? Office.SAFE_TI,
+      ...(officeRecordId ? { officeRecord: { connect: { id: officeRecordId } } } : {}),
       ...(ownerConnect ? { owner: ownerConnect } : {}),
       ...(seniorConnect ? { senior: seniorConnect } : {}),
       active: typeof active === "boolean" ? active : true,

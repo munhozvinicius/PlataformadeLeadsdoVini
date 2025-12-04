@@ -8,13 +8,20 @@ export type OwnerOption = {
   id: string;
   name: string;
   email: string;
-  office: Office;
+  officeRecordId?: string | null;
 };
 
 export type OfficeOption = {
   id: string;
   name: string;
-  office: Office;
+  code: string;
+};
+
+const mapOfficeCodeToEnum = (code?: string): Office | null => {
+  if (!code) return null;
+  const normalized = code.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+  const values = Object.values(Office) as string[];
+  return values.includes(normalized) ? (normalized as Office) : null;
 };
 
 export type DrawerMode = "create" | "edit";
@@ -112,18 +119,17 @@ export default function UserDrawer({
     return Object.values(Role);
   }, [currentUserIsOwner]);
 
-  const ownerOfficeCode = useMemo<Office | null>(() => {
-    if (showSingleOffice && singleOffice) return singleOffice;
-    const officeOfSelection = offices.find((office) => office.id === selectedOfficeId);
-    return officeOfSelection ? officeOfSelection.office : null;
-  }, [selectedOfficeId, singleOffice, offices, showSingleOffice]);
-
   const ownersForOffice = useMemo(() => {
-    if (!ownerOfficeCode) return [];
-    return owners.filter((owner) => owner.office === ownerOfficeCode);
-  }, [owners, ownerOfficeCode]);
+    if (!selectedOfficeId) return [];
+    return owners.filter((owner) => owner.officeRecordId === selectedOfficeId);
+  }, [owners, selectedOfficeId]);
 
-  const officeOptions = useMemo(() => Array.from(new Set(offices.map((office) => office.office))), [offices]);
+  const officeOptions = useMemo(() => {
+    const list = offices
+      .map((office) => mapOfficeCodeToEnum(office.code))
+      .filter((code): code is Office => Boolean(code));
+    return Array.from(new Set(list));
+  }, [offices]);
 
   useEffect(() => {
     if (!open) {
@@ -144,8 +150,8 @@ export default function UserDrawer({
         ? currentUserOfficeRecordId
         : user?.officeRecord?.id ?? offices[0]?.id ?? null;
     setSelectedOfficeId(defaultOfficeId);
-    const defaultSingleOffice = offices.find((office) => office.id === defaultOfficeId)?.office ?? "";
-    setSingleOffice(defaultSingleOffice);
+    const defaultOfficeCode = offices.find((office) => office.id === defaultOfficeId)?.code;
+    setSingleOffice(mapOfficeCodeToEnum(defaultOfficeCode) ?? "");
     setSelectedOffices([]);
     setOwnerId(currentUserIsOwner ? currentUserId ?? "" : user?.owner?.id ?? "");
   }, [open, user, offices, currentUserIsOwner, currentUserOfficeRecordId, currentUserId]);
@@ -172,12 +178,8 @@ export default function UserDrawer({
       return;
     }
 
-    if (!currentUserIsOwner && showMultiOffice && selectedOffices.length === 0) {
-      setError("Selecione ao menos um escritório para o gerente de negócios.");
-      return;
-    }
-    if (!currentUserIsOwner && showSingleOffice && !singleOffice) {
-      setError("Selecione um escritório válido.");
+    if (role === Role.CONSULTOR && !selectedOfficeId) {
+      setError("Consultor precisa ter um escritório.");
       return;
     }
 
@@ -207,8 +209,9 @@ export default function UserDrawer({
         ? currentUserRole === Role.GERENTE_SENIOR
           ? currentUserId ?? null
           : null
-      : null,
+        : null,
       active,
+      officeRecordId: selectedOfficeId,
     };
     if (mode === "create") {
       payload.password = password;
