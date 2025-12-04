@@ -35,11 +35,17 @@ export async function ensureMasterUser() {
       updates.role = Role.MASTER;
       updates.ownerId = null;
       updates.officeId = null;
-      updates.escritorio = null;
+      updates.escritorio = Escritorio.NONE;
     }
-    const matches = await bcrypt.compare(password, existingByEmail.password);
+    const matches = await bcrypt.compare(password, existingByEmail.passwordHash);
     if (!matches) {
-      updates.password = await bcrypt.hash(password, 10);
+      updates.passwordHash = await bcrypt.hash(password, 10);
+    }
+    if (existingByEmail.mustResetPassword) {
+      updates.mustResetPassword = false;
+    }
+    if (existingByEmail.isBlocked) {
+      updates.isBlocked = false;
     }
     if (Object.keys(updates).length > 0) {
       await prisma.user.update({ where: { id: existingByEmail.id }, data: updates });
@@ -59,8 +65,11 @@ export async function ensureMasterUser() {
     data: {
       name: "Vinicius Munhoz",
       email,
-      password: hashed,
+      passwordHash: hashed,
       role: Role.MASTER,
+      escritorio: Escritorio.NONE,
+      mustResetPassword: false,
+      isBlocked: false,
     },
   });
   masterSeeded = true;

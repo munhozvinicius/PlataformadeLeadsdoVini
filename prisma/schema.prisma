@@ -9,13 +9,16 @@ datasource db {
 
 enum Role {
   MASTER
-  OWNER
+  GERENTE_SENIOR
+  GERENTE_CONTAS
+  PROPRIETARIO
   CONSULTOR
 }
 
 enum Escritorio {
   JLC_TECH
   SAFE_TI
+  NONE
 }
 
 enum LeadStatus {
@@ -35,33 +38,33 @@ enum ActivityChannel {
 }
 
 model User {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  name          String
-  email         String   @unique
-  password      String
-  passwordHash  String?
-  role          Role
-  companyTag    String?
-  ativo         Boolean  @default(true)
-  escritorio    Escritorio?
-  ownerId       String?  @db.ObjectId
-  owner         User?    @relation("OwnerConsultor", fields: [ownerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  team          User[]   @relation("OwnerConsultor")
-  officeId      String?  @db.ObjectId
-  office        Office?  @relation(fields: [officeId], references: [id])
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                 String   @id @default(auto()) @map("_id") @db.ObjectId
+  name               String
+  email              String   @unique
+  passwordHash       String
+  role               Role
+  companyTag         String?
+  ativo              Boolean  @default(true)
+  escritorio         Escritorio @default(NONE)
+  officeId           String?  @db.ObjectId
+  office             Office?  @relation(fields: [officeId], references: [id])
+  ownerId            String?  @db.ObjectId
+  owner              User?    @relation("OwnerConsultor", fields: [ownerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  team               User[]   @relation("OwnerConsultor")
+  mustResetPassword  Boolean  @default(false)
+  isBlocked          Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  leadsAssigned Lead[]   @relation("AssignedLeads")
-  leadsOwned    Lead[]   @relation("LeadOwner")
-  isActive      Boolean  @default(true)
-  leadActivities LeadActivity[] @relation("UserLeadActivities")
-  importBatches ImportBatch[] @relation("UserImportBatches")
-  leadNotes     LeadNote[]
-  leadLosses    LeadLoss[]
+  leadsAssigned      Lead[]   @relation("AssignedLeads")
+  leadsOwned         Lead[]   @relation("LeadOwner")
+  leadActivities     LeadActivity[] @relation("UserLeadActivities")
+  importBatches      ImportBatch[] @relation("UserImportBatches")
+  leadNotes          LeadNote[]
+  leadLosses         LeadLoss[]
   adminDistributionLogs      DistributionLog[] @relation("AdminDistributionLog")
   consultantDistributionLogs DistributionLog[] @relation("ConsultantDistributionLog")
-  leadHistories LeadHistory[] @relation("UserLeadHistory")
+  leadHistories     LeadHistory[] @relation("UserLeadHistory")
 }
 
 model Campanha {
@@ -129,6 +132,7 @@ model Lead {
   owner         User?       @relation("LeadOwner", fields: [ownerId], references: [id])
   officeId      String?     @db.ObjectId
   office        Office?     @relation(fields: [officeId], references: [id])
+  escritorio    Escritorio  @default(NONE)
   historico     Json?
   raw           Json?
   lastStatusChangeAt DateTime?

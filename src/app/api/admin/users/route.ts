@@ -80,7 +80,7 @@ export async function POST(req: Request) {
         data: {
           name,
           email,
-          password: hashed,
+          passwordHash: hashed,
           role,
           escritorio: owner.escritorio,
           ownerId: owner.id,
@@ -114,7 +114,7 @@ export async function POST(req: Request) {
       data: {
         name,
         email,
-        password: hashed,
+        passwordHash: hashed,
         role,
         escritorio: escritorioEnum,
         ownerId: role === Role.CONSULTOR ? ownerId : null,
