@@ -221,11 +221,13 @@ export default function UserDrawer({
   const submitLabel = mode === "create" ? "Criar usuário" : "Salvar alterações";
 
   return (
-    <div className="fixed inset-0 z-50 flex" onClick={onClose}>
-      <div className="absolute inset-0 bg-slate-900/40" aria-hidden="true" />
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-slate-900/40"
+      onClick={onClose}
+    >
       <div
         ref={panelRef}
-        className="ml-auto h-full w-full max-w-md bg-white p-6 shadow-lg"
+        className="h-full w-full max-w-md bg-white p-6 shadow-lg overflow-y-auto"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
