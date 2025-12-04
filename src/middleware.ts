@@ -21,6 +21,21 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  const needsSecurityReset =
+    Boolean(token.mustResetPassword) || Boolean(token.isBlocked);
+  const isResetPage = pathname === "/reset-password";
+  const isResetApi = pathname.startsWith("/api/users/reset-password");
+
+  if (needsSecurityReset && !isResetPage && !isResetApi) {
+    const url = new URL("/reset-password", req.url);
+    return NextResponse.redirect(url);
+  }
+
+  if (!needsSecurityReset && isResetPage) {
+    const url = new URL("/", req.url);
+    return NextResponse.redirect(url);
+  }
+
   const role = token.role as Role;
   const isAdminArea = pathname.startsWith("/admin");
   const isBoard = pathname.startsWith("/board");

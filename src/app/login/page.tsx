@@ -6,17 +6,23 @@ import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { status } = useSession();
+  const { status, data: session } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const sessionUser = session?.user;
+
   useEffect(() => {
-    if (status === "authenticated") {
-      router.replace("/");
+    if (status === "authenticated" && sessionUser) {
+      if (sessionUser.mustResetPassword || sessionUser.isBlocked) {
+        router.replace("/reset-password");
+      } else {
+        router.replace("/");
+      }
     }
-  }, [status, router]);
+  }, [status, sessionUser, router]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
