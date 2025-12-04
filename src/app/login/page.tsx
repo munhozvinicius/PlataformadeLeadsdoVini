@@ -16,11 +16,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (status === "authenticated" && sessionUser) {
-      if (sessionUser.isBlocked) {
-        router.replace("/reset-password");
-      } else {
-        router.replace("/");
-      }
+      router.replace("/");
     }
   }, [status, sessionUser, router]);
 

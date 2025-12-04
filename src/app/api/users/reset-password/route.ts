@@ -26,7 +26,6 @@ export async function PATCH(req: NextRequest) {
     where: { id: session.user.id },
     data: {
       password: hashed,
-      isBlocked: false,
     },
   });
 

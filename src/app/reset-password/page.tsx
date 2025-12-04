@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
@@ -17,12 +17,7 @@ export default function ResetPasswordPage() {
       router.replace("/login");
       return;
     }
-    if (status === "authenticated" && session?.user) {
-      if (!session.user.isBlocked) {
-        router.replace("/");
-      }
-    }
-  }, [status, session, router]);
+  }, [status, router]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
