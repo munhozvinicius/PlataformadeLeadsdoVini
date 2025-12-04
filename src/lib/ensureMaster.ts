@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { Office, Role, Profile, Prisma } from "@prisma/client";
+import { slugifyOfficeCode } from "@/lib/officeSlug";
 
 let masterSeeded = false;
 
@@ -11,10 +12,11 @@ async function ensureOffices() {
   ];
   const records: Record<Office, { id: string }> = {} as Record<Office, { id: string }>;
   for (const office of offices) {
+    const code = slugifyOfficeCode(office.name);
     const record = await prisma.officeRecord.upsert({
-      where: { office: office.office },
+      where: { code },
       update: { name: office.name },
-      create: { office: office.office, name: office.name },
+      create: { code, office: office.office, name: office.name },
     });
     records[office.office] = record;
   }

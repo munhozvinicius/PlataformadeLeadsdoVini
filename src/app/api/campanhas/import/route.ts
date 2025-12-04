@@ -88,12 +88,12 @@ export async function POST(req: Request) {
   let notAttributedLeads = 0;
 
   const offices = await prisma.officeRecord.findMany({
-    select: { id: true, office: true, name: true },
+    select: { id: true, office: true, code: true, name: true },
   });
   const officeLookup = new Map<string, string>();
   const normalizeOfficeKey = (value?: string) => (value ? value.trim().toUpperCase() : "");
   offices.forEach((office) => {
-    const codeKey = normalizeOfficeKey(office.office);
+    const codeKey = normalizeOfficeKey(office.office ?? office.code);
     const nameKey = normalizeOfficeKey(office.name);
     if (codeKey) officeLookup.set(codeKey, office.id);
     if (nameKey) officeLookup.set(nameKey, office.id);

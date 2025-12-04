@@ -5,19 +5,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
+import { slugifyOfficeCode } from "@/lib/officeSlug";
 
 function isOfficeAdmin(role?: Role) {
   return role === Role.MASTER || role === Role.GERENTE_SENIOR;
-}
-
-function slugifyOfficeCode(name: string) {
-  return name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)+/g, "");
 }
 
 export async function GET() {

@@ -36,7 +36,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Consultor precisa de proprietário" }, { status: 400 });
   }
 
-  const officeRecord = await prisma.officeRecord.findUnique({ where: { office: officeEnum } });
+  const officeRecord = await prisma.officeRecord.findFirst({
+    where: {
+      OR: [{ code: officeEnum }, { office: officeEnum }],
+    },
+  });
   if (!officeRecord) {
     return NextResponse.json({ message: "Escritório não encontrado" }, { status: 400 });
   }
