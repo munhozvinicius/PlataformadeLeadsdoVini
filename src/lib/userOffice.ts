@@ -57,3 +57,19 @@ export async function buildUsersFilter(role: Role, userId: string): Promise<Pris
 export function hasOfficeOverlap(a: Office[], b: Office[]): boolean {
   return a.some((office) => b.includes(office));
 }
+
+export async function ensureUserOffice(userId: string, office: Office) {
+  await prisma.userOffice.upsert({
+    where: {
+      userId_office: {
+        userId,
+        office,
+      },
+    },
+    update: {},
+    create: {
+      userId,
+      office,
+    },
+  });
+}

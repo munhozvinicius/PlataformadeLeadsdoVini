@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Office, Role } from "@prisma/client";
@@ -60,6 +60,14 @@ export default function AdminUsersPage() {
   const [drawerMode, setDrawerMode] = useState<DrawerMode>("create");
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [drawerSubmitting, setDrawerSubmitting] = useState(false);
+  const [officeModalOpen, setOfficeModalOpen] = useState(false);
+  const [officeCode, setOfficeCode] = useState<Office | "">("");
+  const [officeName, setOfficeName] = useState("");
+  const [officeSeniorId, setOfficeSeniorId] = useState("");
+  const [officeBusinessManagerId, setOfficeBusinessManagerId] = useState("");
+  const [officeOwnerId, setOfficeOwnerId] = useState("");
+  const [officeSubmitting, setOfficeSubmitting] = useState(false);
+  const [officeError, setOfficeError] = useState("");
 
   useEffect(() => {
     if (status === "authenticated" && isConsultor(session?.user.role)) {
@@ -121,6 +129,77 @@ export default function AdminUsersPage() {
           office: owner.office,
         })),
     [users]
+  );
+
+  const gsOptions = useMemo(() => users.filter((user) => user.role === Role.GERENTE_SENIOR), [users]);
+  const gnOptions = useMemo(() => users.filter((user) => user.role === Role.GERENTE_NEGOCIOS), [users]);
+  const proprietorOptions = useMemo(() => ownerOptions, [ownerOptions]);
+
+  const canManageOffices = (session?.user.role === Role.MASTER || session?.user.role === Role.GERENTE_SENIOR) ?? false;
+
+  const resetOfficeForm = useCallback(() => {
+    setOfficeCode("");
+    setOfficeName("");
+    setOfficeSeniorId("");
+    setOfficeBusinessManagerId("");
+    setOfficeOwnerId("");
+    setOfficeError("");
+  }, []);
+
+  const closeOfficeModal = useCallback(() => {
+    resetOfficeForm();
+    setOfficeModalOpen(false);
+  }, [resetOfficeForm]);
+
+  const handleOfficeSubmit = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      setOfficeError("");
+      if (!officeCode) {
+        setOfficeError("Selecione o código do escritório.");
+        return;
+      }
+      if (!officeName.trim()) {
+        setOfficeError("Informe o nome do escritório.");
+        return;
+      }
+      setOfficeSubmitting(true);
+      try {
+        const response = await fetch("/api/admin/offices", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            code: officeCode,
+            name: officeName.trim(),
+            seniorId: officeSeniorId || undefined,
+            businessManagerId: officeBusinessManagerId || undefined,
+            ownerId: officeOwnerId || undefined,
+          }),
+        });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body?.message ?? "Não foi possível criar o escritório.");
+        }
+        await loadOffices();
+        await loadUsers();
+        closeOfficeModal();
+      } catch (submitError) {
+        console.error("Erro ao criar escritório", submitError);
+        setOfficeError((submitError as Error)?.message ?? "Não foi possível criar o escritório.");
+      } finally {
+        setOfficeSubmitting(false);
+      }
+    },
+    [
+      officeCode,
+      officeName,
+      officeSeniorId,
+      officeBusinessManagerId,
+      officeOwnerId,
+      loadOffices,
+      loadUsers,
+      closeOfficeModal,
+    ]
   );
 
   const filteredUsers = useMemo(() => {
@@ -273,6 +352,15 @@ export default function AdminUsersPage() {
             >
               Novo usuário
             </button>
+            {canManageOffices && (
+              <button
+                type="button"
+                onClick={() => setOfficeModalOpen(true)}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-100"
+              >
+                Criar escritório
+              </button>
+            )}
             <button
               onClick={loadUsers}
               className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100"
@@ -361,6 +449,116 @@ export default function AdminUsersPage() {
         currentUserId={session?.user.id}
         currentUserOfficeRecordId={currentSessionUser?.officeRecord?.id ?? null}
       />
+      {officeModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40"
+          onMouseDown={closeOfficeModal}
+        >
+          <div
+            className="w-full max-w-md rounded-xl bg-white p-6 shadow-lg"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-900">Novo escritório</h3>
+              <button
+                type="button"
+                className="text-slate-500 hover:text-slate-900"
+                onClick={closeOfficeModal}
+              >
+                Fechar
+              </button>
+            </div>
+            <form className="space-y-4" onSubmit={handleOfficeSubmit}>
+              {officeError ? <p className="text-sm text-red-600">{officeError}</p> : null}
+              <div className="space-y-1">
+                <label className="text-xs text-slate-600">Código do escritório</label>
+                <select
+                  value={officeCode}
+                  onChange={(event) => setOfficeCode(event.target.value as Office)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="">Selecione</option>
+                  {Object.values(Office).map((officeValue) => (
+                    <option key={officeValue} value={officeValue}>
+                      {OFFICE_LABELS[officeValue]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-slate-600">Nome</label>
+                <input
+                  value={officeName}
+                  onChange={(event) => setOfficeName(event.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-slate-600">Gerente Sênior</label>
+                <select
+                  value={officeSeniorId}
+                  onChange={(event) => setOfficeSeniorId(event.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="">Nenhum</option>
+                  {gsOptions.map((gs) => (
+                    <option key={gs.id} value={gs.id}>
+                      {gs.name} ({gs.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-slate-600">Gerente de Negócios</label>
+                <select
+                  value={officeBusinessManagerId}
+                  onChange={(event) => setOfficeBusinessManagerId(event.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="">Nenhum</option>
+                  {gnOptions.map((gn) => (
+                    <option key={gn.id} value={gn.id}>
+                      {gn.name} ({gn.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-slate-600">Proprietário</label>
+                <select
+                  value={officeOwnerId}
+                  onChange={(event) => setOfficeOwnerId(event.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="">Nenhum</option>
+                  {proprietorOptions.map((ownerOption) => (
+                    <option key={ownerOption.id} value={ownerOption.id}>
+                      {ownerOption.name} ({ownerOption.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closeOfficeModal}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={officeSubmitting}
+                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                >
+                  {officeSubmitting ? "Salvando..." : "Criar escritório"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
