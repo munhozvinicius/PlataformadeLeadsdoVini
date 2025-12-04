@@ -55,26 +55,31 @@ async function main() {
     officeIds[office.code] = o.id;
   }
 
+  const connectOffice = (code) => {
+    const id = officeIds[code];
+    if (!id) return {};
+    return { office: { connect: { id } } };
+  };
+
   // Cria/atualiza owners primeiro
   const owners = {};
   for (const u of rawUsers.filter((u) => u.role === Role.PROPRIETARIO)) {
     const hashed = await bcrypt.hash(u.password, 10);
+    const officeConnection = connectOffice(u.office);
     const user = await prisma.user.upsert({
       where: { email: u.email },
       update: {
         name: u.name,
         password: hashed,
-        office: u.office,
         role: u.role,
-        officeId: officeIds[u.office],
+        ...officeConnection,
       },
       create: {
         name: u.name,
         email: u.email,
         password: hashed,
-        office: u.office,
         role: u.role,
-        officeId: officeIds[u.office],
+        ...officeConnection,
       },
     });
     owners[u.email] = user.id;
@@ -84,23 +89,23 @@ async function main() {
   for (const u of rawUsers.filter((u) => u.role === Role.CONSULTOR)) {
     const hashed = await bcrypt.hash(u.password, 10);
     const ownerId = u.ownerEmail ? owners[u.ownerEmail] : null;
+    const officeConnection = connectOffice(u.office);
     await prisma.user.upsert({
       where: { email: u.email },
       update: {
         name: u.name,
         password: hashed,
-        office: u.office,
         role: u.role,
         ownerId,
+        ...officeConnection,
       },
       create: {
         name: u.name,
         email: u.email,
         password: hashed,
-        office: u.office,
         role: u.role,
         ownerId,
-        officeId: officeIds[u.office],
+        ...officeConnection,
       },
     });
   }

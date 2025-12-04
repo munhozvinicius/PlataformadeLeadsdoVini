@@ -97,6 +97,9 @@ export async function POST(req: Request) {
 
   const hashed = await bcrypt.hash(password, 10);
   const officeRecord = await prisma.officeRecord.findUnique({ where: { code: officeEnum } });
+  if (!officeRecord) {
+    return NextResponse.json({ message: "Escritório não encontrado" }, { status: 400 });
+  }
 
   try {
     const user = await prisma.user.create({
@@ -105,8 +108,11 @@ export async function POST(req: Request) {
         email,
         password: hashed,
         role: targetRole,
-        office: officeEnum,
-        officeId: officeRecord?.id ?? null,
+        office: {
+          connect: {
+            id: officeRecord.id,
+          },
+        },
         ownerId: targetRole === Role.CONSULTOR ? creatorOwnerId : null,
         active: true,
       },

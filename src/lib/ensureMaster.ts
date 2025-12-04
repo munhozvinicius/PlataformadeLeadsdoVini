@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { Office, Role } from "@prisma/client";
+import { Office, Role, Prisma } from "@prisma/client";
 
 let masterSeeded = false;
 
@@ -28,17 +28,22 @@ export async function ensureMasterUser() {
 
   const officeRecords = await ensureOffices();
   const defaultOffice = officeRecords[Office.SAFE_TI];
+  const defaultOfficeConnect = defaultOffice?.id
+    ? { connect: { id: defaultOffice.id } }
+    : undefined;
 
   const email = process.env.MASTER_EMAIL || "munhoz.vinicius@gmail.com";
   const password = process.env.MASTER_PASSWORD || "Theforce85!!";
 
   const existingByEmail = await prisma.user.findUnique({ where: { email } });
   if (existingByEmail) {
-    const updates: Partial<typeof existingByEmail> = {};
+    const updates: Prisma.UserUpdateInput = {};
     if (existingByEmail.role !== Role.MASTER) {
       updates.role = Role.MASTER;
       updates.ownerId = null;
-      updates.officeId = defaultOffice?.id ?? null;
+      if (defaultOfficeConnect) {
+        updates.office = defaultOfficeConnect;
+      }
     }
     const matches = await bcrypt.compare(password, existingByEmail.password);
     if (!matches) {
@@ -64,7 +69,7 @@ export async function ensureMasterUser() {
       email,
       password: hashed,
       role: Role.MASTER,
-      officeId: defaultOffice?.id ?? null,
+      ...(defaultOfficeConnect ? { office: defaultOfficeConnect } : {}),
       active: true,
     },
   });

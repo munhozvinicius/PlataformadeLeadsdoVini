@@ -31,6 +31,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Consultor precisa de proprietário" }, { status: 400 });
   }
 
+  const officeRecord = await prisma.officeRecord.findUnique({ where: { code: officeEnum } });
+  if (!officeRecord) {
+    return NextResponse.json({ message: "Escritório não encontrado" }, { status: 400 });
+  }
+
   const hashed = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
     data: {
@@ -38,7 +43,11 @@ export async function POST(req: Request) {
       email,
       password: hashed,
       role,
-      office: officeEnum,
+      office: {
+        connect: {
+          id: officeRecord.id,
+        },
+      },
       ownerId: role === Role.CONSULTOR ? ownerId : null,
     },
   });
