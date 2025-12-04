@@ -6,13 +6,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Office, Role, Profile, Prisma } from "@prisma/client";
-import {
-  canManageUsers,
-  isMaster,
-  isProprietario,
-  isGerenteNegocios,
-  isGerenteSenior,
-} from "@/lib/authRoles";
+import { canManageUsers, isMaster, isProprietario } from "@/lib/authRoles";
 
 const USER_SELECT = {
   id: true,
@@ -24,6 +18,16 @@ const USER_SELECT = {
   officeRecord: { select: { id: true } },
   owner: { select: { id: true, name: true, email: true } },
   active: true,
+};
+
+const ALL_ROLES = Object.values(Role) as Role[];
+
+const ALLOWED_CREATION: Record<Role, Role[]> = {
+  [Role.MASTER]: ALL_ROLES,
+  [Role.GERENTE_SENIOR]: [Role.GERENTE_NEGOCIOS, Role.PROPRIETARIO, Role.CONSULTOR],
+  [Role.GERENTE_NEGOCIOS]: [Role.PROPRIETARIO, Role.CONSULTOR],
+  [Role.PROPRIETARIO]: [Role.CONSULTOR],
+  [Role.CONSULTOR]: [],
 };
 
 async function fetchDefaultOffice() {
@@ -71,6 +75,7 @@ export async function POST(req: Request) {
   }
 
   const sessionRole = session.user.role;
+  const creatorRole = sessionRole as Role;
   if (!canManageUsers(sessionRole)) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
@@ -99,10 +104,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Sessão inválida" }, { status: 401 });
   }
 
-  const isManagerRole = isGerenteSenior(sessionRole) || isGerenteNegocios(sessionRole);
-  if (isManagerRole && role !== Role.CONSULTOR) {
-    return NextResponse.json({ message: "Gerentes só podem criar consultores" }, { status: 403 });
+  const allowedRoles = ALLOWED_CREATION[creatorRole];
+  if (!allowedRoles.includes(role)) {
+    return NextResponse.json({ message: "Você não pode criar esse tipo de usuário" }, { status: 403 });
   }
+
   if (isProprietario(sessionRole) && role !== Role.CONSULTOR) {
     return NextResponse.json({ message: "Proprietário só pode criar consultores" }, { status: 403 });
   }

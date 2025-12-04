@@ -223,11 +223,12 @@ export default function UserDrawer({
   return (
     <div
       className="fixed inset-0 z-50 flex justify-end bg-slate-900/40"
-      onClick={onClose}
+      onMouseDown={onClose}
     >
       <div
         ref={panelRef}
         className="h-full w-full max-w-md bg-white p-6 shadow-lg overflow-y-auto"
+        onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">

@@ -110,6 +110,60 @@ export default function AdminUsersPage() {
     return [];
   }, [users, session]);
 
+  const hierarchyRows = useMemo(() => {
+    const depthMap: Record<Role, number> = {
+      [Role.MASTER]: 0,
+      [Role.GERENTE_SENIOR]: 0,
+      [Role.GERENTE_NEGOCIOS]: 1,
+      [Role.PROPRIETARIO]: 2,
+      [Role.CONSULTOR]: 3,
+    };
+
+    const officeGroups = new Map<string, AdminUser[]>();
+    filteredUsers.forEach((user) => {
+      const key = user.office ?? "Sem escritório";
+      const list = officeGroups.get(key) ?? [];
+      list.push(user);
+      officeGroups.set(key, list);
+    });
+
+    const findManager = (officeValue: string | undefined, managerRole: Role) =>
+      filteredUsers.find((user) => user.office === officeValue && user.role === managerRole);
+
+    const rows: { user: AdminUser; depth: number; gsName: string; gnName: string; ownerName: string }[] = [];
+    const offices = Array.from(officeGroups.keys()).sort((a, b) => a.localeCompare(b));
+    offices.forEach((office) => {
+      const officeUsers = officeGroups.get(office) ?? [];
+      const sorted = [...officeUsers].sort((a, b) => {
+        const depthA = depthMap[a.role] ?? 0;
+        const depthB = depthMap[b.role] ?? 0;
+        if (depthA !== depthB) return depthA - depthB;
+        return a.name.localeCompare(b.name);
+      });
+
+      const officeGSName = findManager(office, Role.GERENTE_SENIOR)?.name ?? "-";
+      const officeGNName = findManager(office, Role.GERENTE_NEGOCIOS)?.name ?? "-";
+
+      sorted.forEach((user) => {
+        const gsName = user.role === Role.GERENTE_SENIOR ? user.name : officeGSName;
+        const gnName = user.role === Role.GERENTE_NEGOCIOS ? user.name : officeGNName;
+        const ownerName =
+          user.role === Role.PROPRIETARIO
+            ? user.name
+            : user.owner?.name ?? "-";
+
+        rows.push({
+          user,
+          depth: depthMap[user.role] ?? 0,
+          gsName,
+          gnName,
+          ownerName,
+        });
+      });
+    });
+    return rows;
+  }, [filteredUsers]);
+
   const canViewUsers = canManageUsers(session?.user.role);
   const currentSessionUser = users.find((user) => user.id === session?.user.id);
 
@@ -220,25 +274,29 @@ export default function AdminUsersPage() {
                 <tr className="text-left text-slate-500 border-b">
                   <th className="py-2 pr-3">Nome</th>
                   <th className="py-2 pr-3">Email</th>
-                  <th className="py-2 pr-3">Perfil</th>
                   <th className="py-2 pr-3">Escritório</th>
-                  <th className="py-2 pr-3">Owner</th>
+                  <th className="py-2 pr-3">Perfil</th>
+                  <th className="py-2 pr-3">Gerente Sênior</th>
+                  <th className="py-2 pr-3">Gerente de Negócios</th>
+                  <th className="py-2 pr-3">Proprietário</th>
                   <th className="py-2 pr-3">Status</th>
                   <th className="py-2 pr-3">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredUsers.map((user) => (
-                  <tr key={user.id} className="border-b last:border-b-0">
-                    <td className="py-2 pr-3">{user.name}</td>
-                    <td className="py-2 pr-3">{user.email}</td>
-                    <td className="py-2 pr-3">{user.role}</td>
-                    <td className="py-2 pr-3">{user.role === Role.MASTER ? "-" : user.office}</td>
+                {hierarchyRows.map((row) => (
+                  <tr key={row.user.id} className="border-b last:border-b-0">
                     <td className="py-2 pr-3">
-                      {user.owner ? `${user.owner.name} (${user.owner.email})` : "-"}
+                      <span style={{ paddingLeft: `${row.depth * 1.5}rem` }}>{row.user.name}</span>
                     </td>
+                    <td className="py-2 pr-3">{row.user.email}</td>
+                    <td className="py-2 pr-3">{row.user.office}</td>
+                    <td className="py-2 pr-3">{row.user.role}</td>
+                    <td className="py-2 pr-3">{row.gsName}</td>
+                    <td className="py-2 pr-3">{row.gnName}</td>
+                    <td className="py-2 pr-3">{row.ownerName}</td>
                     <td className="py-2 pr-3">
-                      {user.active ? (
+                      {row.user.active ? (
                         <span className="text-emerald-600">Ativo</span>
                       ) : (
                         <span className="text-red-600">Inativo</span>
@@ -247,7 +305,7 @@ export default function AdminUsersPage() {
                     <td className="py-2 pr-3">
                       <button
                         className="text-slate-600 hover:text-slate-900"
-                        onClick={() => openEditDrawer(user)}
+                        onClick={() => openEditDrawer(row.user)}
                       >
                         Editar
                       </button>
