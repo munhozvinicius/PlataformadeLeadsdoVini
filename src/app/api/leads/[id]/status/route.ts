@@ -50,7 +50,7 @@ export async function POST(req: Request, { params }: Params) {
   if (role === Role.CONSULTOR && lead.consultorId !== session.user.id) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
-  if (role === Role.OWNER && lead.ownerId !== session.user.id) {
+  if (role === Role.PROPRIETARIO && lead.ownerId !== session.user.id) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { Escritorio, Role } from "@prisma/client";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -8,9 +9,10 @@ type User = {
   id: string;
   name: string;
   email: string;
-  role: "MASTER" | "OWNER" | "CONSULTOR";
-  escritorio: "JLC_TECH" | "SAFE_TI";
+  role: Role;
+  escritorio?: Escritorio | null;
   owner?: { id: string; name: string; email: string };
+  isBlocked?: boolean;
 };
 
 export default function AdminUsersPage() {
@@ -18,13 +20,20 @@ export default function AdminUsersPage() {
   const { data: session, status } = useSession();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{
+    name: string;
+    email: string;
+    password: string;
+    role: Role;
+    owner: string;
+    escritorio: Escritorio;
+  }>({
     name: "",
     email: "",
     password: "",
-    role: "OWNER",
+    role: Role.PROPRIETARIO,
     owner: "",
-    escritorio: "JLC_TECH",
+    escritorio: Escritorio.SAFE_TI,
   });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -40,15 +49,22 @@ export default function AdminUsersPage() {
   }, []);
 
   const owners = useMemo(
-    () => users.filter((u) => u.role === "OWNER" && u.escritorio === form.escritorio),
+    () => users.filter((u) => u.role === Role.PROPRIETARIO && u.escritorio === form.escritorio),
     [users, form.escritorio]
   );
 
   const filteredUsers = useMemo(() => {
-    if (session?.user.role === "MASTER") return users;
-    // owner vê somente a si e consultores vinculados
-    return users.filter((u) => u.id === session?.user.id || u.owner?.id === session?.user.id);
+    if (session?.user.role === Role.MASTER) return users;
+    if (session?.user.role === Role.PROPRIETARIO) {
+      return users.filter(
+        (u) => u.id === session.user.id || u.owner?.id === session.user.id
+      );
+    }
+    return users.filter((u) => u.id === session?.user.id);
   }, [users, session]);
+
+  const showOwnerSelect =
+    session?.user.role === Role.MASTER && form.role === Role.CONSULTOR;
 
   async function loadUsers() {
     setLoading(true);
@@ -65,18 +81,28 @@ export default function AdminUsersPage() {
     setError("");
     setSaving(true);
 
-    const roleToSend =
-      session?.user.role === "OWNER"
-        ? ("CONSULTOR" as const)
-        : (form.role as "OWNER" | "CONSULTOR");
+    const sessionRole = session?.user.role;
+    const creatingAsProprietario = sessionRole === Role.PROPRIETARIO;
+    const roleToSend = creatingAsProprietario ? Role.CONSULTOR : form.role;
+
     const ownerIdToSend =
-      roleToSend === "CONSULTOR"
-        ? session?.user.role === "OWNER"
-          ? session.user.id
+      roleToSend === Role.CONSULTOR
+        ? creatingAsProprietario
+          ? session?.user.id
           : form.owner
         : null;
+
+    if (roleToSend === Role.CONSULTOR && !ownerIdToSend) {
+      setSaving(false);
+      setError("Selecione um proprietário responsável.");
+      return;
+    }
+
     const escritorioToSend =
-      session?.user.role === "OWNER" ? users.find((u) => u.id === session.user.id)?.escritorio : form.escritorio;
+      creatingAsProprietario && session?.user.id
+        ? users.find((u) => u.id === session.user.id)?.escritorio ?? form.escritorio
+        : form.escritorio;
+
     const payload = {
       name: form.name,
       email: form.email,
@@ -99,9 +125,9 @@ export default function AdminUsersPage() {
       name: "",
       email: "",
       password: "",
-      role: "OWNER",
+      role: Role.PROPRIETARIO,
       owner: "",
-      escritorio: "JLC_TECH",
+      escritorio: Escritorio.SAFE_TI,
     });
     await loadUsers();
   }
@@ -111,7 +137,7 @@ export default function AdminUsersPage() {
       <div>
         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Master</p>
         <h1 className="text-2xl font-semibold text-slate-900">Usuários</h1>
-        <p className="text-sm text-slate-500">Crie OWNER e CONSULTOR e vincule as equipes.</p>
+        <p className="text-sm text-slate-500">Crie PROPRIETÁRIOS e CONSULTORs e vincule as equipes.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -158,16 +184,18 @@ export default function AdminUsersPage() {
           <h2 className="text-lg font-semibold text-slate-900 mb-3">Novo usuário</h2>
           {error ? <div className="text-sm text-red-600 mb-2">{error}</div> : null}
           <form className="space-y-3" onSubmit={handleSubmit}>
-            {session?.user.role === "MASTER" ? (
+            {session?.user.role === Role.MASTER ? (
               <div className="space-y-1">
                 <label className="text-xs text-slate-600">Escritório</label>
                 <select
                   value={form.escritorio}
-                  onChange={(e) => setForm({ ...form, escritorio: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, escritorio: e.target.value as Escritorio })
+                  }
                   className="w-full border rounded-lg px-3 py-2 text-sm"
                 >
-                  <option value="JLC_TECH">JLC Tech</option>
-                  <option value="SAFE_TI">Safe TI</option>
+                  <option value={Escritorio.JLC_TECH}>JLC Tech</option>
+                  <option value={Escritorio.SAFE_TI}>Safe TI</option>
                 </select>
               </div>
             ) : (
@@ -178,6 +206,11 @@ export default function AdminUsersPage() {
                   disabled
                   className="w-full border rounded-lg px-3 py-2 text-sm bg-slate-100"
                 />
+                {session?.user.role === Role.PROPRIETARIO ? (
+                  <p className="text-xs text-slate-500">
+                    Consultores criados neste espaço automaticamente herdam seu escritório.
+                  </p>
+                ) : null}
               </div>
             )}
             <div className="space-y-1">
@@ -209,16 +242,16 @@ export default function AdminUsersPage() {
                 required
               />
             </div>
-            {session?.user.role === "MASTER" ? (
+            {session?.user.role === Role.MASTER ? (
               <div className="space-y-1">
                 <label className="text-xs text-slate-600">Perfil</label>
                 <select
                   value={form.role}
-                  onChange={(e) => setForm({ ...form, role: e.target.value })}
+                  onChange={(e) => setForm({ ...form, role: e.target.value as Role })}
                   className="w-full border rounded-lg px-3 py-2 text-sm"
                 >
-                  <option value="OWNER">OWNER</option>
-                  <option value="CONSULTOR">CONSULTOR</option>
+                  <option value={Role.PROPRIETARIO}>PROPRIETÁRIO</option>
+                  <option value={Role.CONSULTOR}>CONSULTOR</option>
                 </select>
               </div>
             ) : (
@@ -231,9 +264,9 @@ export default function AdminUsersPage() {
                 />
               </div>
             )}
-            {(session?.user.role === "MASTER" ? form.role === "CONSULTOR" : true) ? (
+            {showOwnerSelect ? (
               <div className="space-y-1">
-                <label className="text-xs text-slate-600">Owner responsável</label>
+                <label className="text-xs text-slate-600">Proprietário responsável</label>
                 <select
                   value={form.owner}
                   onChange={(e) => setForm({ ...form, owner: e.target.value })}

@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   if (campaignId && campaignId !== "all") where.campanhaId = campaignId;
   if (session.user.role === Role.CONSULTOR) {
     where.consultorId = session.user.id;
-  } else if (session.user.role === Role.OWNER) {
+  } else if (session.user.role === Role.PROPRIETARIO) {
     const team = await getOwnerTeamIds(session.user.id);
     where.consultorId = { in: team };
   } else if (session.user.role === Role.MASTER) {

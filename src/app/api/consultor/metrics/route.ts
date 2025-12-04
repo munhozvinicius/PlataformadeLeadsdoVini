@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
 
   if (session.user.role === Role.CONSULTOR) {
     where.consultorId = session.user.id;
-  } else if (session.user.role === Role.OWNER) {
+  } else if (session.user.role === Role.PROPRIETARIO) {
     const teamIds = await getOwnerTeamIds(session.user.id);
     where.consultorId = { in: teamIds };
   } else if (session.user.role === Role.MASTER) {

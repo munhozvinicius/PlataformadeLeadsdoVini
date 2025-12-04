@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   const where: Record<string, unknown> = { leadId };
   if (session.user.role === Role.CONSULTOR) {
     where.userId = session.user.id;
-  } else if (session.user.role === Role.OWNER) {
+  } else if (session.user.role === Role.PROPRIETARIO) {
     const teamIds = await getOwnerTeamIds(session.user.id);
     where.userId = { in: teamIds };
   }
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
   if (session.user.role === Role.CONSULTOR && lead.consultorId !== session.user.id) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
-  if (session.user.role === Role.OWNER) {
+  if (session.user.role === Role.PROPRIETARIO) {
     const teamIds = await getOwnerTeamIds(session.user.id);
     if (!teamIds.includes(lead.consultorId ?? "")) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });

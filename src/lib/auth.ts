@@ -3,7 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { ensureMasterUser } from "@/lib/ensureMaster";
 import { prisma } from "@/lib/prisma";
-import { Role } from "@prisma/client";
+import { Escritorio, Role } from "@prisma/client";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -58,7 +58,7 @@ export const authOptions: NextAuthOptions = {
           role?: Role;
           mustResetPassword?: boolean;
           isBlocked?: boolean;
-          escritorio?: string | null;
+          escritorio?: Escritorio | null;
         };
         token.id = typedUser.id;
         if (typedUser.role) {
@@ -81,7 +81,7 @@ export const authOptions: NextAuthOptions = {
         session.user.mustResetPassword = Boolean(token.mustResetPassword);
         session.user.isBlocked = Boolean(token.isBlocked);
         if (token.escritorio) {
-          session.user.escritorio = token.escritorio as string;
+          session.user.escritorio = token.escritorio;
         }
       }
       return session;

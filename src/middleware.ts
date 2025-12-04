@@ -30,7 +30,12 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (isBoard && role !== Role.CONSULTOR && role !== Role.OWNER && role !== Role.MASTER) {
+  if (
+    isBoard &&
+    role !== Role.CONSULTOR &&
+    role !== Role.PROPRIETARIO &&
+    role !== Role.MASTER
+  ) {
     const url = new URL("/login", req.url);
     return NextResponse.redirect(url);
   }

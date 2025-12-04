@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import Company from "@/models/Company";
 import { companyAccessFilter, getSessionUser } from "@/lib/auth-helpers";
+import { Role } from "@prisma/client";
 
 type Params = { params: { id: string } };
 
@@ -18,9 +19,9 @@ export async function PATCH(req: Request, { params }: Params) {
   const { stage } = body;
 
   const filter: Record<string, unknown> = { _id: params.id };
-  if (sessionUser.role === "MASTER") {
+  if (sessionUser.role === Role.MASTER) {
     // all good
-  } else if (sessionUser.role === "OWNER") {
+  } else if (sessionUser.role === Role.PROPRIETARIO) {
     Object.assign(filter, await companyAccessFilter(sessionUser));
   } else {
     filter.assignedTo = sessionUser.id;

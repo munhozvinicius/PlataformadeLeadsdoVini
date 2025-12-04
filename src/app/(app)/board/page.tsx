@@ -11,8 +11,9 @@ import React, {
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { LEAD_STATUS, LeadStatusId } from "@/constants/leadStatus";
+import { Role } from "@prisma/client";
 
-type ViewerRole = "MASTER" | "OWNER" | "CONSULTOR";
+type ViewerRole = Role;
 
 type Lead = {
   id: string;

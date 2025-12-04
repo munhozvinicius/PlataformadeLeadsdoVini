@@ -7,7 +7,7 @@ import { Escritorio, Role } from "@prisma/client";
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session?.user || (session.user.role !== Role.MASTER && session.user.role !== Role.OWNER)) {
+  if (!session?.user || (session.user.role !== Role.MASTER && session.user.role !== Role.PROPRIETARIO)) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 

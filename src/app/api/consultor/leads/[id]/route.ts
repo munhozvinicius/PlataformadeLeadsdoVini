@@ -29,7 +29,7 @@ export async function PATCH(req: Request, { params }: Params) {
   const leadWhere: Prisma.LeadWhereInput = { id: params.id };
   if (session.user.role === Role.CONSULTOR) {
     leadWhere.consultorId = session.user.id;
-  } else if (session.user.role === Role.OWNER) {
+  } else if (session.user.role === Role.PROPRIETARIO) {
     const allowedIds = await getOwnerTeamIds(session.user.id);
     leadWhere.consultorId = { in: allowedIds };
   }

@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
 
   if (session.user.role === Role.CONSULTOR) {
     where.consultorId = session.user.id;
-  } else if (session.user.role === Role.OWNER) {
+  } else if (session.user.role === Role.PROPRIETARIO) {
     const allowedIds = await getOwnerTeamIds(session.user.id);
     if (consultantId) {
       if (!allowedIds.includes(consultantId)) {

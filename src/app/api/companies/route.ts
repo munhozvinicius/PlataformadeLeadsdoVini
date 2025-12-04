@@ -5,6 +5,7 @@ import { NextRequest } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { companyAccessFilter, getSessionUser } from "@/lib/auth-helpers";
 import Company from "@/models/Company";
+import { Role } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   await connectToDatabase();
@@ -22,9 +23,9 @@ export async function GET(req: NextRequest) {
   if (campaignId) filter.campaign = campaignId;
   if (stage) filter.stage = stage;
 
-  if (sessionUser.role === "MASTER") {
+  if (sessionUser.role === Role.MASTER) {
     if (assignedTo) filter.assignedTo = assignedTo;
-  } else if (sessionUser.role === "OWNER") {
+  } else if (sessionUser.role === Role.PROPRIETARIO) {
     Object.assign(filter, await companyAccessFilter(sessionUser));
   } else {
     filter.assignedTo = sessionUser.id;

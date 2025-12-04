@@ -31,7 +31,7 @@ export async function getOwnerTeamIds(ownerId: string) {
 
 export async function leadsAccessFilter(user: SessionUser) {
   if (user.role === Role.MASTER) return {};
-  if (user.role === Role.OWNER) {
+  if (user.role === Role.PROPRIETARIO) {
     const teamIds = await getOwnerTeamIds(user.id);
     return { consultorId: { in: teamIds } };
   }

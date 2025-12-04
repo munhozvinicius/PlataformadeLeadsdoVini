@@ -24,8 +24,8 @@ export async function GET() {
       },
       orderBy: { createdAt: "desc" },
     });
-  } else if (role === Role.OWNER) {
-    // Owner vê a si mesmo e consultores vinculados
+  } else if (role === Role.PROPRIETARIO) {
+    // Proprietário vê a si mesmo e consultores vinculados
     users = await prisma.user.findMany({
       where: {
         OR: [{ id: session.user.id }, { ownerId: session.user.id }],
@@ -58,7 +58,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Missing fields" }, { status: 400 });
   }
 
-  if (role !== Role.OWNER && role !== Role.CONSULTOR) {
+  if (role !== Role.PROPRIETARIO && role !== Role.CONSULTOR) {
     return NextResponse.json({ message: "Invalid role" }, { status: 400 });
   }
 
@@ -68,12 +68,15 @@ export async function POST(req: Request) {
   }
 
   // Dono só cria consultor do próprio escritório
-  if (sessionRole === Role.OWNER && role === Role.CONSULTOR) {
+  if (sessionRole === Role.PROPRIETARIO && role === Role.CONSULTOR) {
     const owner = await prisma.user.findUnique({ where: { id: session.user.id } });
-    if (!owner) return NextResponse.json({ message: "Owner inválido" }, { status: 400 });
-    if (owner.escritorio !== escritorioEnum) {
-      return NextResponse.json({ message: "Owner só cria consultor do próprio escritório" }, { status: 400 });
-    }
+      if (!owner) return NextResponse.json({ message: "Proprietário inválido" }, { status: 400 });
+      if (owner.escritorio !== escritorioEnum) {
+        return NextResponse.json(
+          { message: "Proprietário só cria consultor do próprio escritório" },
+          { status: 400 }
+        );
+      }
     const hashed = await bcrypt.hash(password, 10);
     try {
       const user = await prisma.user.create({
@@ -99,12 +102,12 @@ export async function POST(req: Request) {
     }
   }
 
-  if (sessionRole === Role.OWNER && role !== Role.CONSULTOR) {
-    return NextResponse.json({ message: "Owner só cria consultor" }, { status: 401 });
+  if (sessionRole === Role.PROPRIETARIO && role !== Role.CONSULTOR) {
+    return NextResponse.json({ message: "Proprietário só cria consultor" }, { status: 401 });
   }
 
   if (role === Role.CONSULTOR && !ownerId && sessionRole === Role.MASTER) {
-    return NextResponse.json({ message: "Consultor precisa de um OWNER" }, { status: 400 });
+    return NextResponse.json({ message: "Consultor precisa de um PROPRIETÁRIO" }, { status: 400 });
   }
 
   const hashed = await bcrypt.hash(password, 10);
