@@ -85,6 +85,7 @@ type ConsultantBoardProps = {
   campaignId?: string;
   refreshSignal: number;
   onCampaignsUpdate?: (campaigns: { id: string; name: string }[]) => void;
+  officeIds?: string[];
 };
 
 type Metrics = {
@@ -719,6 +720,7 @@ function ConsultantBoard({
   campaignId,
   refreshSignal,
   onCampaignsUpdate,
+  officeIds,
 }: ConsultantBoardProps) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(false);
@@ -737,6 +739,7 @@ function ConsultantBoard({
     const params = new URLSearchParams();
     if (consultantId) params.set("consultantId", consultantId);
     if (campaignId && campaignId !== "all") params.set("campaignId", campaignId);
+    if (officeIds && officeIds.length) params.set("officeIds", officeIds.join(","));
     try {
       const res = await fetch(`/api/consultor/leads?${params.toString()}`, { cache: "no-store" });
       if (!res.ok) {
@@ -760,7 +763,7 @@ function ConsultantBoard({
     } finally {
       setLoading(false);
     }
-  }, [viewerRole, consultantId, campaignId, onCampaignsUpdate]);
+  }, [viewerRole, consultantId, campaignId, onCampaignsUpdate, officeIds]);
 
   const loadMetrics = useCallback(async () => {
     if (viewerRole === "MASTER" && !consultantId) {
@@ -770,11 +773,12 @@ function ConsultantBoard({
     const params = new URLSearchParams();
     if (consultantId) params.set("consultantId", consultantId);
     if (campaignId) params.set("campaignId", campaignId);
+    if (officeIds && officeIds.length) params.set("officeIds", officeIds.join(","));
     const res = await fetch(`/api/consultor/metrics?${params.toString()}`, { cache: "no-store" });
     if (res.ok) {
       setMetrics(await res.json());
     }
-  }, [viewerRole, consultantId, campaignId]);
+  }, [viewerRole, consultantId, campaignId, officeIds]);
 
   useEffect(() => {
     loadLeads();
@@ -921,9 +925,13 @@ export default function BoardPage() {
   useEffect(() => {
     if (status !== "authenticated" || !session?.user) return;
     if (session.user.role === "CONSULTOR") return;
+    const sessionRole = session.user.role ?? "";
+    const canSelectOtherConsultant = ["MASTER", "GERENTE_SENIOR", "GERENTE_NEGOCIOS"].includes(
+      sessionRole,
+    );
     const consultantFromQuery = searchParams.get("consultantId");
     const campaignFromQuery = searchParams.get("campaignId");
-    if (consultantFromQuery) {
+    if (consultantFromQuery && canSelectOtherConsultant) {
       setSelectedConsultant(consultantFromQuery);
     }
     if (campaignFromQuery) {
@@ -1007,6 +1015,7 @@ export default function BoardPage() {
         campaignId={selectedCampaign}
         refreshSignal={refreshSignal}
         onCampaignsUpdate={setCampaignOptions}
+        officeIds={session.user.officeIds}
       />
     </div>
   );

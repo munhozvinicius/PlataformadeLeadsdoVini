@@ -27,6 +27,7 @@ export const authOptions: NextAuthOptions = {
             role: true,
             password: true,
             ownerId: true,
+            seniorId: true,
             offices: { select: { office: true } },
           },
         });
@@ -41,6 +42,7 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           role: user.role,
           ownerId: user.ownerId ?? null,
+          seniorId: user.seniorId ?? null,
           officeIds: user.offices.map((entry) => entry.office),
         };
       },
@@ -54,6 +56,7 @@ export const authOptions: NextAuthOptions = {
             id: string;
             role?: Role;
             ownerId?: string | null;
+            seniorId?: string | null;
             officeIds?: Office[];
           };
           token.id = typedUser.id;
@@ -62,6 +65,9 @@ export const authOptions: NextAuthOptions = {
           }
           if (typedUser.ownerId) {
             token.ownerId = typedUser.ownerId;
+          }
+          if (typedUser.seniorId) {
+            token.seniorId = typedUser.seniorId;
           }
           if (typedUser.officeIds) {
             token.officeIds = typedUser.officeIds;
@@ -74,10 +80,12 @@ export const authOptions: NextAuthOptions = {
           const id = token.id as string | undefined;
           const role = token.role as Role | undefined;
           const ownerId = token.ownerId as string | undefined;
+          const seniorId = token.seniorId as string | undefined;
           const officeIds = token.officeIds as Office[] | undefined;
           if (id) session.user.id = id;
           if (role) session.user.role = role;
           if (ownerId) session.user.ownerId = ownerId;
+          if (seniorId) session.user.seniorId = seniorId;
           if (officeIds) session.user.officeIds = officeIds;
         }
       return session;
