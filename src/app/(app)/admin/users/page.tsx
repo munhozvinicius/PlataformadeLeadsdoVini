@@ -20,6 +20,7 @@ type AdminUser = {
   office: Office;
   officeRecord?: { id: string } | null;
   owner?: { id: string; name: string; email: string } | null;
+  senior?: { id: string; name?: string | null } | null;
   active: boolean;
 };
 
@@ -278,7 +279,7 @@ export default function AdminUsersPage() {
                   <th className="py-2 pr-3">Perfil</th>
                   <th className="py-2 pr-3">Gerente Sênior</th>
                   <th className="py-2 pr-3">Gerente de Negócios</th>
-                  <th className="py-2 pr-3">Proprietário</th>
+                  <th className="py-2 pr-3">Owner</th>
                   <th className="py-2 pr-3">Status</th>
                   <th className="py-2 pr-3">Ações</th>
                 </tr>
@@ -294,7 +295,13 @@ export default function AdminUsersPage() {
                     <td className="py-2 pr-3">{row.user.role}</td>
                     <td className="py-2 pr-3">{row.gsName}</td>
                     <td className="py-2 pr-3">{row.gnName}</td>
-                    <td className="py-2 pr-3">{row.ownerName}</td>
+                    <td className="py-2 pr-3">
+                      {row.user.owner
+                        ? row.user.owner.name
+                        : row.user.senior
+                        ? `GS: ${row.user.senior.name}`
+                        : "-"}
+                    </td>
                     <td className="py-2 pr-3">
                       {row.user.active ? (
                         <span className="text-emerald-600">Ativo</span>

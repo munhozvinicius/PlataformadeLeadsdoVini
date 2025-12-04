@@ -27,6 +27,7 @@ export type UserDrawerPayload = {
   ownerId?: string | null;
   password?: string;
   active?: boolean;
+  seniorId?: string | null;
 };
 
 type UserData = {
@@ -64,7 +65,6 @@ const roleLabels: Record<Role, string> = {
 };
 
 const ownerRoles: Role[] = [Role.CONSULTOR];
-const officeRoles: Role[] = [Role.PROPRIETARIO, Role.CONSULTOR, Role.GERENTE_NEGOCIOS];
 
 export default function UserDrawer({
   open,
@@ -93,8 +93,9 @@ export default function UserDrawer({
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   const requiresOwner = ownerRoles.includes(role);
-  const showOfficeSelect = role === Role.PROPRIETARIO || officeRoles.includes(role);
+  const showOffice = ([Role.PROPRIETARIO, Role.CONSULTOR, Role.GERENTE_NEGOCIOS] as Role[]).includes(role);
   const showOwnerSelect = requiresOwner && !isProprietario(currentUserRole);
+  const showSenior = role === Role.GERENTE_NEGOCIOS;
   const currentUserIsOwner = isProprietario(currentUserRole);
 
   const availableRoles = useMemo(() => {
@@ -155,7 +156,7 @@ export default function UserDrawer({
       return;
     }
 
-    if (showOfficeSelect && !selectedOfficeId) {
+    if (!currentUserIsOwner && showOffice && !selectedOfficeId) {
       setError("Selecione um escritório válido.");
       return;
     }
@@ -172,7 +173,7 @@ export default function UserDrawer({
 
     const officeIdToSend = currentUserIsOwner
       ? currentUserOfficeRecordId ?? selectedOfficeId
-      : showOfficeSelect
+      : showOffice
       ? selectedOfficeId
       : null;
 
@@ -182,6 +183,11 @@ export default function UserDrawer({
       role,
       officeId: officeIdToSend ?? null,
       ownerId: ownerIdToSend ?? null,
+      seniorId: showSenior
+        ? currentUserRole === Role.GERENTE_SENIOR
+          ? currentUserId ?? null
+          : null
+        : null,
       active,
     };
     if (mode === "create") {
@@ -295,7 +301,7 @@ export default function UserDrawer({
                 {officeLabel || "Sem escritório"}
               </div>
             </div>
-          ) : showOfficeSelect ? (
+          ) : showOffice ? (
             <div className="space-y-1">
               <label className="text-xs text-slate-600">Escritório</label>
               <select

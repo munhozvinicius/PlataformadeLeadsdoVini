@@ -17,6 +17,7 @@ const USER_SELECT = {
   office: true,
   officeRecord: { select: { id: true } },
   owner: { select: { id: true, name: true, email: true } },
+  senior: { select: { id: true, name: true } },
   active: true,
 };
 
@@ -81,7 +82,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const { name, email, password, role, officeId, ownerId } = body;
+  const { name, email, password, role, officeId, ownerId, seniorId } = body;
 
   if (!name || !email || !password || !role) {
     return NextResponse.json({ message: "Dados insuficientes" }, { status: 400 });
@@ -155,6 +156,15 @@ export async function POST(req: Request) {
     }
   }
 
+  const seniorConnect =
+    role === Role.GERENTE_NEGOCIOS
+      ? sessionRole === Role.GERENTE_SENIOR
+        ? { connect: { id: session.user.id } }
+        : seniorId
+        ? { connect: { id: seniorId } }
+        : undefined
+      : undefined;
+
   try {
     const hashed = await bcrypt.hash(password, 10);
     const userData: Prisma.UserCreateInput = {
@@ -166,6 +176,7 @@ export async function POST(req: Request) {
       office: officeRecord.office,
       officeRecord: { connect: { id: officeRecord.id } },
       ...(ownerConnect ? { owner: ownerConnect } : {}),
+      ...(seniorConnect ? { senior: seniorConnect } : {}),
       active: true,
     };
     const user = await prisma.user.create({
