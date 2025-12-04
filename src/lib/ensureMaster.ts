@@ -27,9 +27,10 @@ export async function ensureMasterUser() {
   if (masterSeeded) return;
 
   const officeRecords = await ensureOffices();
-  const defaultOffice = officeRecords[Office.SAFE_TI];
-  const defaultOfficeConnect = defaultOffice?.id
-    ? { connect: { id: defaultOffice.id } }
+  const defaultOfficeCode = Office.SAFE_TI;
+  const defaultOfficeRecord = officeRecords[defaultOfficeCode];
+  const defaultOfficeRecordConnect = defaultOfficeRecord?.id
+    ? { connect: { id: defaultOfficeRecord.id } }
     : undefined;
 
   const email = process.env.MASTER_EMAIL || "munhoz.vinicius@gmail.com";
@@ -41,8 +42,9 @@ export async function ensureMasterUser() {
     if (existingByEmail.role !== Role.MASTER) {
       updates.role = Role.MASTER;
       updates.ownerId = null;
-      if (defaultOfficeConnect) {
-        updates.office = defaultOfficeConnect;
+      updates.office = defaultOfficeCode;
+      if (defaultOfficeRecordConnect) {
+        updates.officeRecord = defaultOfficeRecordConnect;
       }
     }
     const matches = await bcrypt.compare(password, existingByEmail.password);
@@ -69,7 +71,8 @@ export async function ensureMasterUser() {
       email,
       password: hashed,
       role: Role.MASTER,
-      ...(defaultOfficeConnect ? { office: defaultOfficeConnect } : {}),
+      office: defaultOfficeCode,
+      ...(defaultOfficeRecordConnect ? { officeRecord: defaultOfficeRecordConnect } : {}),
       active: true,
     },
   });

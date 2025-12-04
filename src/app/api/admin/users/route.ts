@@ -108,7 +108,8 @@ export async function POST(req: Request) {
         email,
         password: hashed,
         role: targetRole,
-        office: {
+        office: officeEnum,
+        officeRecord: {
           connect: {
             id: officeRecord.id,
           },

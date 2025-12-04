@@ -58,7 +58,7 @@ async function main() {
   const connectOffice = (code) => {
     const id = officeIds[code];
     if (!id) return {};
-    return { office: { connect: { id } } };
+    return { officeRecord: { connect: { id } } };
   };
 
   // Cria/atualiza owners primeiro
@@ -72,6 +72,7 @@ async function main() {
         name: u.name,
         password: hashed,
         role: u.role,
+        office: u.office,
         ...officeConnection,
       },
       create: {
@@ -79,6 +80,7 @@ async function main() {
         email: u.email,
         password: hashed,
         role: u.role,
+        office: u.office,
         ...officeConnection,
       },
     });
@@ -97,6 +99,7 @@ async function main() {
         password: hashed,
         role: u.role,
         ownerId,
+        office: u.office,
         ...officeConnection,
       },
       create: {
@@ -105,6 +108,7 @@ async function main() {
         password: hashed,
         role: u.role,
         ownerId,
+        office: u.office,
         ...officeConnection,
       },
     });
