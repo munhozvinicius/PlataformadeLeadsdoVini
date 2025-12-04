@@ -28,6 +28,7 @@ export type UserDrawerPayload = {
   password?: string;
   active?: boolean;
   seniorId?: string | null;
+  officeIds?: Office[];
 };
 
 type UserData = {
@@ -85,6 +86,8 @@ export default function UserDrawer({
   const [role, setRole] = useState<Role>(Role.PROPRIETARIO);
   const [password, setPassword] = useState("");
   const [selectedOfficeId, setSelectedOfficeId] = useState<string | null>(null);
+  const [selectedOffices, setSelectedOffices] = useState<Office[]>([]);
+  const [singleOffice, setSingleOffice] = useState<Office | "">("");
   const [ownerId, setOwnerId] = useState("");
   const [active, setActive] = useState(true);
   const [error, setError] = useState("");
@@ -93,9 +96,14 @@ export default function UserDrawer({
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   const requiresOwner = ownerRoles.includes(role);
-  const showOffice = ([Role.PROPRIETARIO, Role.CONSULTOR, Role.GERENTE_NEGOCIOS] as Role[]).includes(role);
+  const isGS = role === Role.GERENTE_SENIOR;
+  const isGN = role === Role.GERENTE_NEGOCIOS;
+  const isSingleOffice = role === Role.PROPRIETARIO || role === Role.CONSULTOR;
+  const showOffice = !isGS;
+  const showMultiOffice = isGN;
+  const showSingleOffice = isSingleOffice;
   const showOwnerSelect = requiresOwner && !isProprietario(currentUserRole);
-  const showSenior = role === Role.GERENTE_NEGOCIOS;
+  const showSenior = isGN;
   const currentUserIsOwner = isProprietario(currentUserRole);
 
   const availableRoles = useMemo(() => {
@@ -105,12 +113,18 @@ export default function UserDrawer({
     return Object.values(Role);
   }, [currentUserIsOwner]);
 
-  const ownersForOffice = useMemo(() => {
-    if (!selectedOfficeId) return [];
+  const ownerOfficeCode = useMemo<Office | null>(() => {
+    if (showSingleOffice && singleOffice) return singleOffice;
     const officeOfSelection = offices.find((office) => office.id === selectedOfficeId);
-    if (!officeOfSelection) return [];
-    return owners.filter((owner) => owner.office === officeOfSelection.office);
-  }, [owners, offices, selectedOfficeId]);
+    return officeOfSelection ? officeOfSelection.office : null;
+  }, [selectedOfficeId, singleOffice, offices, showSingleOffice]);
+
+  const ownersForOffice = useMemo(() => {
+    if (!ownerOfficeCode) return [];
+    return owners.filter((owner) => owner.office === ownerOfficeCode);
+  }, [owners, ownerOfficeCode]);
+
+  const officeOptions = useMemo(() => Array.from(new Set(offices.map((office) => office.office))), [offices]);
 
   useEffect(() => {
     if (!open) {
@@ -131,6 +145,9 @@ export default function UserDrawer({
         ? currentUserOfficeRecordId
         : user?.officeRecord?.id ?? offices[0]?.id ?? null;
     setSelectedOfficeId(defaultOfficeId);
+    const defaultSingleOffice = offices.find((office) => office.id === defaultOfficeId)?.office ?? "";
+    setSingleOffice(defaultSingleOffice);
+    setSelectedOffices([]);
     setOwnerId(currentUserIsOwner ? currentUserId ?? "" : user?.owner?.id ?? "");
   }, [open, user, offices, currentUserIsOwner, currentUserOfficeRecordId, currentUserId]);
 
@@ -156,7 +173,11 @@ export default function UserDrawer({
       return;
     }
 
-    if (!currentUserIsOwner && showOffice && !selectedOfficeId) {
+    if (!currentUserIsOwner && showMultiOffice && selectedOffices.length === 0) {
+      setError("Selecione ao menos um escritório para o gerente de negócios.");
+      return;
+    }
+    if (!currentUserIsOwner && showSingleOffice && !singleOffice) {
       setError("Selecione um escritório válido.");
       return;
     }
@@ -171,23 +192,23 @@ export default function UserDrawer({
       return;
     }
 
-    const officeIdToSend = currentUserIsOwner
-      ? currentUserOfficeRecordId ?? selectedOfficeId
-      : showOffice
-      ? selectedOfficeId
-      : null;
-
     const payload: UserDrawerPayload = {
       name: name.trim(),
       email: email.trim(),
       role,
-      officeId: officeIdToSend ?? null,
-      ownerId: ownerIdToSend ?? null,
+      officeIds: isGS
+        ? []
+        : isGN
+        ? selectedOffices
+        : isSingleOffice && singleOffice
+        ? [singleOffice]
+        : [],
+      ownerId: requiresOwner ? ownerIdToSend : null,
       seniorId: showSenior
         ? currentUserRole === Role.GERENTE_SENIOR
           ? currentUserId ?? null
           : null
-        : null,
+      : null,
       active,
     };
     if (mode === "create") {
@@ -301,12 +322,37 @@ export default function UserDrawer({
                 {officeLabel || "Sem escritório"}
               </div>
             </div>
-          ) : showOffice ? (
+          ) : showMultiOffice ? (
+            <div className="space-y-1">
+              <label className="text-xs text-slate-600">Escritórios</label>
+              <select
+                multiple
+                value={selectedOffices}
+                onChange={(event) => {
+                  const values = Array.from(event.target.selectedOptions).map(
+                    (option) => option.value as Office
+                  );
+                  setSelectedOffices(values);
+                }}
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+              >
+                {officeOptions.map((officeCode) => (
+                  <option key={officeCode} value={officeCode}>
+                    {officeCode}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : showSingleOffice ? (
             <div className="space-y-1">
               <label className="text-xs text-slate-600">Escritório</label>
               <select
                 value={selectedOfficeId ?? ""}
-                onChange={(event) => setSelectedOfficeId(event.target.value)}
+                onChange={(event) => {
+                  setSelectedOfficeId(event.target.value);
+                  const officeOption = offices.find((office) => office.id === event.target.value);
+                  setSingleOffice(officeOption?.office ?? "");
+                }}
                 className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
               >
                 <option value="">Selecione</option>

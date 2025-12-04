@@ -21,6 +21,7 @@ type AdminUser = {
   officeRecord?: { id: string } | null;
   owner?: { id: string; name: string; email: string } | null;
   senior?: { id: string; name?: string | null } | null;
+  offices: { office: Office }[];
   active: boolean;
 };
 

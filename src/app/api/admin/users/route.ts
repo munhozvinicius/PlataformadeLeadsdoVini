@@ -31,12 +31,6 @@ const ALLOWED_CREATION: Record<Role, Role[]> = {
   [Role.CONSULTOR]: [],
 };
 
-async function fetchDefaultOffice() {
-  const officeRecord = await prisma.officeRecord.findUnique({ where: { office: Office.SAFE_TI } });
-  if (officeRecord) return officeRecord;
-  return prisma.officeRecord.findFirst();
-}
-
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
@@ -62,7 +56,11 @@ export async function GET() {
 
   const users = await prisma.user.findMany({
     where,
-    select: USER_SELECT,
+    include: {
+      owner: true,
+      senior: true,
+      offices: { select: { office: true } },
+    },
     orderBy: { createdAt: "desc" },
   });
 
@@ -82,7 +80,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const { name, email, password, role, officeId, ownerId, seniorId } = body;
+  const { name, email, password, role, officeIds, ownerId, seniorId, active } = body;
 
   if (!name || !email || !password || !role) {
     return NextResponse.json({ message: "Dados insuficientes" }, { status: 400 });
@@ -91,14 +89,6 @@ export async function POST(req: Request) {
   if (!Object.values(Role).includes(role)) {
     return NextResponse.json({ message: "Perfil inválido" }, { status: 400 });
   }
-
-  const requiresOffice = [
-    Role.PROPRIETARIO,
-    Role.CONSULTOR,
-    Role.GERENTE_NEGOCIOS,
-    Role.GERENTE_SENIOR,
-  ].includes(role);
-  const requiresOwner = role === Role.CONSULTOR;
 
   const sessionUser = await prisma.user.findUnique({ where: { id: session.user.id } });
   if (!sessionUser) {
@@ -114,28 +104,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Proprietário só pode criar consultores" }, { status: 403 });
   }
 
-  const sessionOfficeId = sessionUser.officeId;
-  let officeRecord = null;
-  if (!isMaster(sessionRole) && sessionOfficeId) {
-    officeRecord = await prisma.officeRecord.findUnique({ where: { id: sessionOfficeId } });
-  } else if (requiresOffice && officeId) {
-    officeRecord = await prisma.officeRecord.findUnique({ where: { id: officeId } });
-  } else if (requiresOffice) {
-    return NextResponse.json({ message: "Escritório é obrigatório para este perfil" }, { status: 400 });
-  } else {
-    officeRecord = await fetchDefaultOffice();
-  }
-
-  if (!officeRecord) {
-    return NextResponse.json({ message: "Escritório não encontrado" }, { status: 400 });
-  }
-
-  if (!isMaster(sessionRole) && sessionOfficeId && officeRecord.id !== sessionOfficeId) {
-    return NextResponse.json({ message: "Você só pode criar usuários do seu escritório" }, { status: 403 });
-  }
-
   let ownerConnect;
-  if (requiresOwner) {
+  if (role === Role.CONSULTOR) {
     if (isProprietario(sessionRole)) {
       ownerConnect = { connect: { id: session.user.id } };
     } else {
@@ -145,12 +115,6 @@ export async function POST(req: Request) {
       const owner = await prisma.user.findUnique({ where: { id: ownerId } });
       if (!owner || owner.role !== Role.PROPRIETARIO) {
         return NextResponse.json({ message: "Proprietário inválido" }, { status: 400 });
-      }
-      if (owner.office !== officeRecord.office) {
-        return NextResponse.json(
-          { message: "Proprietário deve pertencer ao mesmo escritório" },
-          { status: 400 }
-        );
       }
       ownerConnect = { connect: { id: owner.id } };
     }
@@ -165,6 +129,11 @@ export async function POST(req: Request) {
         : undefined
       : undefined;
 
+  const officesForEnum = Array.isArray(officeIds)
+    ? officeIds.filter((value): value is Office => Object.values(Office).includes(value))
+    : [];
+  const firstOffice = officesForEnum[0] ?? Office.SAFE_TI;
+
   try {
     const hashed = await bcrypt.hash(password, 10);
     const userData: Prisma.UserCreateInput = {
@@ -173,16 +142,45 @@ export async function POST(req: Request) {
       password: hashed,
       role,
       profile: role as Profile,
-      office: officeRecord.office,
-      officeRecord: { connect: { id: officeRecord.id } },
+      office: firstOffice,
       ...(ownerConnect ? { owner: ownerConnect } : {}),
       ...(seniorConnect ? { senior: seniorConnect } : {}),
-      active: true,
+      active: typeof active === "boolean" ? active : true,
     };
     const user = await prisma.user.create({
       data: userData,
       select: USER_SELECT,
     });
+
+    if (role === Role.GERENTE_SENIOR) {
+      const allOffices = Object.values(Office);
+      await prisma.userOffice.createMany({
+        data: allOffices.map((office) => ({ userId: user.id, office })),
+        skipDuplicates: true,
+      });
+    } else if (role === Role.GERENTE_NEGOCIOS) {
+      if (!officesForEnum.length) {
+        return NextResponse.json(
+          { message: "GERENTE_NEGOCIOS precisa de ao menos um escritório" },
+          { status: 400 }
+        );
+      }
+      await prisma.userOffice.createMany({
+        data: officesForEnum.map((office) => ({ userId: user.id, office })),
+        skipDuplicates: true,
+      });
+    } else if (role === Role.PROPRIETARIO || role === Role.CONSULTOR) {
+      if (!officesForEnum.length) {
+        return NextResponse.json(
+          { message: `${role} precisa de um escritório` },
+          { status: 400 }
+        );
+      }
+      await prisma.userOffice.create({
+        data: { userId: user.id, office: officesForEnum[0] },
+      });
+    }
+
     return NextResponse.json(user, { status: 201 });
   } catch (error: unknown) {
     console.error("Error in /api/admin/users POST:", error);
