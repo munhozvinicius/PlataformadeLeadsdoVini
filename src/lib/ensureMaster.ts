@@ -27,7 +27,7 @@ export async function ensureMasterUser() {
   if (masterSeeded) return;
 
   const officeRecords = await ensureOffices();
-  const defaultOfficeCode = Office.SAFE_TI;
+  const defaultOfficeCode = Office.JLC_TECH;
   const defaultOfficeRecord = officeRecords[defaultOfficeCode];
   const defaultOfficeRecordConnect = defaultOfficeRecord?.id
     ? { connect: { id: defaultOfficeRecord.id } }
