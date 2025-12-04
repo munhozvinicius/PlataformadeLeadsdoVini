@@ -41,8 +41,8 @@ export async function ensureMasterUser() {
     const updates: Prisma.UserUpdateInput = {};
     if (existingByEmail.role !== Role.MASTER) {
       updates.role = Role.MASTER;
-      updates.ownerId = null;
       updates.profile = Profile.MASTER;
+      updates.owner = { disconnect: true };
       updates.office = defaultOfficeCode;
       if (defaultOfficeRecordConnect) {
         updates.officeRecord = defaultOfficeRecordConnect;
