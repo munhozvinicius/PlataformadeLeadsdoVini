@@ -21,8 +21,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  const needsSecurityReset =
-    Boolean(token.mustResetPassword) || Boolean(token.isBlocked);
+  const needsSecurityReset = Boolean(token.isBlocked);
   const isResetPage = pathname === "/reset-password";
   const isResetApi = pathname.startsWith("/api/users/reset-password");
 

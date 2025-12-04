@@ -18,7 +18,7 @@ export default function ResetPasswordPage() {
       return;
     }
     if (status === "authenticated" && session?.user) {
-      if (!session.user.mustResetPassword && !session.user.isBlocked) {
+      if (!session.user.isBlocked) {
         router.replace("/");
       }
     }
