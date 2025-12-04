@@ -38,7 +38,6 @@ export async function ensureMasterUser() {
     if (existingByEmail.role !== Role.MASTER) {
       updates.role = Role.MASTER;
       updates.ownerId = null;
-      updates.office = defaultOffice?.code ?? Office.SAFE_TI;
       updates.officeId = defaultOffice?.id ?? null;
     }
     const matches = await bcrypt.compare(password, existingByEmail.password);
@@ -65,7 +64,6 @@ export async function ensureMasterUser() {
       email,
       password: hashed,
       role: Role.MASTER,
-      office: defaultOffice?.code ?? Office.SAFE_TI,
       officeId: defaultOffice?.id ?? null,
       active: true,
     },
