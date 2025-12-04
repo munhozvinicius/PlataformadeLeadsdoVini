@@ -73,3 +73,19 @@ export async function ensureUserOffice(userId: string, office: Office) {
     },
   });
 }
+
+export async function ensureUserOffice(userId: string, office: Office) {
+  await prisma.userOffice.upsert({
+    where: {
+      userId_office: {
+        userId,
+        office,
+      },
+    },
+    update: {},
+    create: {
+      userId,
+      office,
+    },
+  });
+}
