@@ -4,11 +4,11 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Office, Role } from "@prisma/client";
+import { Office, Prisma, Role } from "@prisma/client";
 import { isGerenteSenior, isMaster, canManageUsers } from "@/lib/authRoles";
 import { ensureUserOffice } from "@/lib/userOffice";
 
-const OFFICE_INCLUDE = {
+const OFFICE_INCLUDE: Prisma.OfficeRecordInclude = {
   senior: { select: { id: true, name: true, email: true } },
   businessManager: { select: { id: true, name: true, email: true } },
   owner: { select: { id: true, name: true, email: true } },
