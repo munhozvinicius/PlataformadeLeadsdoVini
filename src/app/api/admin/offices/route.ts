@@ -14,7 +14,7 @@ export async function GET() {
 
   const offices = await prisma.officeRecord.findMany({
     orderBy: { name: "asc" },
-    select: { id: true, name: true, code: true },
+    select: { id: true, name: true, office: true },
   });
 
   return NextResponse.json(offices);
