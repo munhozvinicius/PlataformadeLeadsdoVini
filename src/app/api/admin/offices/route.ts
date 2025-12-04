@@ -12,7 +12,7 @@ export async function GET() {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const offices = await prisma.office.findMany({
+  const offices = await prisma.officeRecord.findMany({
     orderBy: { name: "asc" },
     select: { id: true, name: true, code: true },
   });

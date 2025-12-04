@@ -195,7 +195,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       return NextResponse.json({ message: "officeId é obrigatório" }, { status: 400 });
     }
 
-    const office = await prisma.office.findUnique({ where: { id: officeId } });
+    const office = await prisma.officeRecord.findUnique({ where: { id: officeId } });
     if (!office) {
       return NextResponse.json({ message: "Escritório inválido" }, { status: 400 });
     }

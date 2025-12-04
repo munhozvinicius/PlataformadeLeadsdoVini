@@ -5,20 +5,17 @@ import bcrypt from "bcryptjs";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Escritorio, Role } from "@prisma/client";
+import { Office, Role } from "@prisma/client";
 
-async function normalizeLegacyRoles() {
-  await prisma.$runCommandRaw({
-    update: "User",
-    updates: [
-      {
-        q: { role: "OWNER" },
-        u: { $set: { role: Role.PROPRIETARIO } },
-        multi: true,
-      },
-    ],
-  });
-}
+const USER_SELECT = {
+  id: true,
+  name: true,
+  email: true,
+  role: true,
+  office: true,
+  active: true,
+  owner: { select: { id: true, name: true, email: true } },
+};
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -26,39 +23,21 @@ export async function GET() {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  await normalizeLegacyRoles();
-
-  const userSelect = {
-    id: true,
-    name: true,
-    email: true,
-    role: true,
-    escritorio: true,
-    isBlocked: true,
-    owner: { select: { id: true, name: true, email: true, escritorio: true } },
-    office: { select: { id: true, name: true, code: true } },
-  };
-
   const role = session.user.role as Role;
-  let users;
-
-  if (role === Role.MASTER) {
-    users = await prisma.user.findMany({
-      select: userSelect,
-      orderBy: { createdAt: "desc" },
-    });
-  } else if (role === Role.PROPRIETARIO) {
-    // Proprietário vê a si mesmo e consultores vinculados
-    users = await prisma.user.findMany({
-      where: {
-        OR: [{ id: session.user.id }, { ownerId: session.user.id }],
-      },
-      select: userSelect,
-      orderBy: { createdAt: "desc" },
-    });
-  } else {
+  if (role !== Role.MASTER && role !== Role.PROPRIETARIO) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
+
+  const where =
+    role === Role.PROPRIETARIO
+      ? { OR: [{ id: session.user.id }, { ownerId: session.user.id }] }
+      : undefined;
+
+  const users = await prisma.user.findMany({
+    where,
+    select: USER_SELECT,
+    orderBy: { createdAt: "desc" },
+  });
 
   return NextResponse.json(users);
 }
@@ -69,83 +48,72 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
+  const role = session.user.role as Role;
+  if (role !== Role.MASTER && role !== Role.PROPRIETARIO) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await req.json();
-  const { name, email, password, role, ownerId, escritorio } = body;
+  const { name, email, password, role: targetRole, office, ownerId } = body;
 
-  const sessionRole = session.user.role as Role;
-
-  if (!name || !email || !password || !role || !escritorio) {
+  if (!name || !email || !password || !targetRole || !office) {
     return NextResponse.json({ message: "Missing fields" }, { status: 400 });
   }
 
-  if (role !== Role.PROPRIETARIO && role !== Role.CONSULTOR) {
+  if (targetRole !== Role.PROPRIETARIO && targetRole !== Role.CONSULTOR) {
     return NextResponse.json({ message: "Invalid role" }, { status: 400 });
   }
 
-  const escritorioEnum = Object.values(Escritorio).find((e) => e === escritorio);
-  if (!escritorioEnum) {
-    return NextResponse.json({ message: "Invalid escritorio" }, { status: 400 });
+  const officeEnum = (Object.values(Office) as Office[]).find((o) => o === office);
+  if (!officeEnum) {
+    return NextResponse.json({ message: "Invalid office" }, { status: 400 });
   }
 
-  // Dono só cria consultor do próprio escritório
-  if (sessionRole === Role.PROPRIETARIO && role === Role.CONSULTOR) {
-    const owner = await prisma.user.findUnique({ where: { id: session.user.id } });
-      if (!owner) return NextResponse.json({ message: "Proprietário inválido" }, { status: 400 });
-      if (owner.escritorio !== escritorioEnum) {
-        return NextResponse.json(
-          { message: "Proprietário só cria consultor do próprio escritório" },
-          { status: 400 }
-        );
+  let creatorOwnerId: string | null = null;
+
+  if (targetRole === Role.CONSULTOR) {
+    if (role === Role.PROPRIETARIO) {
+      const owner = await prisma.user.findUnique({ where: { id: session.user.id } });
+      if (!owner) {
+        return NextResponse.json({ message: "Owner not found" }, { status: 400 });
       }
-    const hashed = await bcrypt.hash(password, 10);
-    try {
-      const user = await prisma.user.create({
-        data: {
-          name,
-          email,
-          passwordHash: hashed,
-          role,
-          escritorio: owner.escritorio,
-          ownerId: owner.id,
-        },
-      });
-      return NextResponse.json(
-        { id: user.id, name: user.name, email: user.email, role: user.role },
-        { status: 201 }
-      );
-    } catch (err: unknown) {
-      const code = (err as { code?: string })?.code;
-      if (code === "P2002") {
-        return NextResponse.json({ message: "Email já cadastrado" }, { status: 409 });
+      if (owner.office !== officeEnum) {
+        return NextResponse.json({ message: "Owner only creates consultants for own office" }, { status: 400 });
       }
-      return NextResponse.json({ message: "Erro ao criar usuário" }, { status: 500 });
+      creatorOwnerId = owner.id;
+    } else if (role === Role.MASTER) {
+      if (!ownerId) {
+        return NextResponse.json({ message: "Consultor precisa de proprietário" }, { status: 400 });
+      }
+      const owner = await prisma.user.findUnique({ where: { id: ownerId } });
+      if (!owner || owner.role !== Role.PROPRIETARIO) {
+        return NextResponse.json({ message: "Owner inválido" }, { status: 400 });
+      }
+      creatorOwnerId = owner.id;
     }
-  }
-
-  if (sessionRole === Role.PROPRIETARIO && role !== Role.CONSULTOR) {
+  } else if (role === Role.PROPRIETARIO) {
     return NextResponse.json({ message: "Proprietário só cria consultor" }, { status: 401 });
   }
 
-  if (role === Role.CONSULTOR && !ownerId && sessionRole === Role.MASTER) {
-    return NextResponse.json({ message: "Consultor precisa de um PROPRIETÁRIO" }, { status: 400 });
-  }
-
   const hashed = await bcrypt.hash(password, 10);
+  const officeRecord = await prisma.officeRecord.findUnique({ where: { code: officeEnum } });
 
   try {
     const user = await prisma.user.create({
       data: {
         name,
         email,
-        passwordHash: hashed,
-        role,
-        escritorio: escritorioEnum,
-        ownerId: role === Role.CONSULTOR ? ownerId : null,
+        password: hashed,
+        role: targetRole,
+        office: officeEnum,
+        officeId: officeRecord?.id ?? null,
+        ownerId: targetRole === Role.CONSULTOR ? creatorOwnerId : null,
+        active: true,
       },
     });
 
     return NextResponse.json(
-      { id: user.id, name: user.name, email: user.email, role: user.role },
+      { id: user.id, name: user.name, email: user.email, role: user.role, office: user.office },
       { status: 201 }
     );
   } catch (err: unknown) {

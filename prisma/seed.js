@@ -1,12 +1,12 @@
 /* eslint-disable no-console */
-const { PrismaClient, Role, Escritorio } = require("@prisma/client");
+const { PrismaClient, Role, Office } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
 
 const prisma = new PrismaClient();
 
 const rawUsers = [
   {
-    escritorio: Escritorio.SAFE_TI,
+    office: Office.SAFE_TI,
     name: "JULIANA DE JESUS BARBOSA",
     email: "julianabarbosa@safeti.com.br",
     role: Role.CONSULTOR,
@@ -14,21 +14,21 @@ const rawUsers = [
     ownerEmail: "carlosjudice@safeti.com.br",
   },
   {
-    escritorio: Escritorio.SAFE_TI,
+    office: Office.SAFE_TI,
     name: "CARLOS EDUARDO JUDICE MARIA",
     email: "carlosjudice@safeti.com.br",
-    role: Role.OWNER,
+    role: Role.PROPRIETARIO,
     password: "Vivo@2025",
   },
   {
-    escritorio: Escritorio.JLC_TECH,
+    office: Office.JLC_TECH,
     name: "JULIANA LOSEVICIENE CARVALHO",
     email: "juliana@jlctech.com.br",
-    role: Role.OWNER,
+    role: Role.PROPRIETARIO,
     password: "Vivo@2025",
   },
   {
-    escritorio: Escritorio.JLC_TECH,
+    office: Office.JLC_TECH,
     name: "JOAO LUCAS PEREIRA DOS SANTOS",
     email: "joaolucas@jlctech.com.br",
     role: Role.CONSULTOR,
@@ -42,12 +42,12 @@ async function main() {
 
   // Offices
   const offices = [
-    { code: Escritorio.JLC_TECH, name: "JLC Tech" },
-    { code: Escritorio.SAFE_TI, name: "Safe TI" },
+    { code: Office.JLC_TECH, name: "JLC Tech" },
+    { code: Office.SAFE_TI, name: "Safe TI" },
   ];
   const officeIds = {};
   for (const office of offices) {
-    const o = await prisma.office.upsert({
+    const o = await prisma.officeRecord.upsert({
       where: { code: office.code },
       update: { name: office.name },
       create: { code: office.code, name: office.name },
@@ -57,24 +57,24 @@ async function main() {
 
   // Cria/atualiza owners primeiro
   const owners = {};
-  for (const u of rawUsers.filter((u) => u.role === Role.OWNER)) {
+  for (const u of rawUsers.filter((u) => u.role === Role.PROPRIETARIO)) {
     const hashed = await bcrypt.hash(u.password, 10);
     const user = await prisma.user.upsert({
       where: { email: u.email },
       update: {
         name: u.name,
         password: hashed,
-        escritorio: u.escritorio,
+        office: u.office,
         role: u.role,
-        officeId: officeIds[u.escritorio],
+        officeId: officeIds[u.office],
       },
       create: {
         name: u.name,
         email: u.email,
         password: hashed,
-        escritorio: u.escritorio,
+        office: u.office,
         role: u.role,
-        officeId: officeIds[u.escritorio],
+        officeId: officeIds[u.office],
       },
     });
     owners[u.email] = user.id;
@@ -89,7 +89,7 @@ async function main() {
       update: {
         name: u.name,
         password: hashed,
-        escritorio: u.escritorio,
+        office: u.office,
         role: u.role,
         ownerId,
       },
@@ -97,10 +97,10 @@ async function main() {
         name: u.name,
         email: u.email,
         password: hashed,
-        escritorio: u.escritorio,
+        office: u.office,
         role: u.role,
         ownerId,
-        officeId: officeIds[u.escritorio],
+        officeId: officeIds[u.office],
       },
     });
   }
