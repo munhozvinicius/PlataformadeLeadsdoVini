@@ -1,14 +1,9 @@
 // @ts-nocheck
-import "dotenv/config";
+import * as dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
 import { PrismaClient, Profile } from "@prisma/client";
 
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: process.env.MONGO_URL_MONGODB_URI,
-    },
-  },
-});
+const prisma = new PrismaClient();
 
 async function main() {
   const masters = await prisma.user.findMany({
@@ -25,7 +20,6 @@ async function main() {
     await prisma.user.update({
       where: { id: master.id },
       data: {
-        profile: Profile.MASTER,
         owner: { disconnect: true },
         officeRecord: { disconnect: true },
       },
