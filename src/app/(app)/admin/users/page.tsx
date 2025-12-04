@@ -19,10 +19,17 @@ type AdminUser = {
   role: Role;
   office: Office;
   officeRecord?: { id: string } | null;
-  owner?: { id: string; name: string; email: string } | null;
+  owner?: {
+    id: string;
+    name: string;
+    email: string;
+    senior?: { id: string; name?: string | null; email?: string | null } | null;
+  } | null;
   senior?: { id: string; name?: string | null } | null;
   offices: { office: Office }[];
   active: boolean;
+  derivedGS?: { id: string; name?: string | null; email?: string | null } | null;
+  derivedGN?: { id: string; name?: string | null; email?: string | null } | null;
 };
 
 const OFFICE_LABELS: Record<Office, string> = {
@@ -155,12 +162,14 @@ export default function AdminUsersPage() {
         return a.name.localeCompare(b.name);
       });
 
+
       const officeGSName = findManager(office, Role.GERENTE_SENIOR)?.name ?? "-";
       const officeGNName = findManager(office, Role.GERENTE_NEGOCIOS)?.name ?? "-";
 
       sorted.forEach((user) => {
-        const gsName = user.role === Role.GERENTE_SENIOR ? user.name : officeGSName;
-        const gnName = user.role === Role.GERENTE_NEGOCIOS ? user.name : officeGNName;
+        const gsName =
+          user.derivedGS?.name ?? (user.role === Role.GERENTE_SENIOR ? user.name : officeGSName);
+        const gnName = user.derivedGN?.name ?? (user.role === Role.GERENTE_NEGOCIOS ? user.name : officeGNName);
         const ownerName =
           user.role === Role.PROPRIETARIO
             ? user.name

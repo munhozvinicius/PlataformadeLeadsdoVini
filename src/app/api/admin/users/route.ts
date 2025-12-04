@@ -23,7 +23,7 @@ const USER_SELECT = {
   office: true,
   officeRecord: { select: { id: true } },
   owner: { select: { id: true, name: true, email: true } },
-  senior: { select: { id: true, name: true } },
+  senior: { select: { id: true, name: true, email: true } },
   offices: { select: { office: true } },
   active: true,
 };
@@ -63,14 +63,61 @@ export async function GET() {
   const users = await prisma.user.findMany({
     where,
     include: {
-      owner: true,
-      senior: true,
+      owner: {
+        include: {
+          senior: { select: { id: true, name: true, email: true } },
+          offices: { select: { office: true } },
+        },
+      },
+      senior: { select: { id: true, name: true, email: true } },
       offices: { select: { office: true } },
     },
     orderBy: { createdAt: "desc" },
   });
+  const officeManagers = new Map<Office, { gs?: typeof users[number]; gn?: typeof users[number] }>();
+  users.forEach((user) => {
+    user.offices.forEach((entry) => {
+      const current = officeManagers.get(entry.office) ?? {};
+      if (user.role === Role.GERENTE_SENIOR) {
+        current.gs = user;
+      }
+      if (user.role === Role.GERENTE_NEGOCIOS) {
+        current.gn = user;
+      }
+      officeManagers.set(entry.office, current);
+    });
+  });
 
-  return NextResponse.json(users);
+  const enhanced = users.map((user) => {
+    const firstOffice = user.offices[0]?.office;
+    const officeEntry = firstOffice ? officeManagers.get(firstOffice) : undefined;
+    const baseGS = user.senior ?? user.owner?.senior ?? officeEntry?.gs ?? null;
+    const baseGN = officeEntry?.gn ?? null;
+    const derivedGS =
+      baseGS && (baseGS as { id: string; name?: string | null; email?: string | null })
+        ? {
+            id: baseGS.id,
+            name: baseGS.name,
+            email: baseGS.email,
+          }
+        : null;
+    const derivedGN =
+      baseGN && (baseGN as { id: string; name?: string | null; email?: string | null })
+        ? {
+            id: baseGN.id,
+            name: baseGN.name,
+            email: baseGN.email,
+          }
+        : null;
+
+    return {
+      ...user,
+      derivedGS,
+      derivedGN,
+    };
+  });
+
+  return NextResponse.json(enhanced);
 }
 
 export async function POST(req: Request) {
