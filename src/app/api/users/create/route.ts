@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
-import { Escritorio, Role } from "@prisma/client";
+import { Office, Role } from "@prisma/client";
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -12,9 +12,9 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const { name, email, password, role, escritorio, ownerId } = body;
+  const { name, email, password, role, office, ownerId } = body;
 
-  if (!name || !email || !password || !role || !escritorio) {
+  if (!name || !email || !password || !role || !office) {
     return NextResponse.json({ message: "Missing fields" }, { status: 400 });
   }
 
@@ -22,9 +22,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Invalid role" }, { status: 400 });
   }
 
-  const escritorioEnum = Object.values(Escritorio).find((e) => e === escritorio);
-  if (!escritorioEnum) {
-    return NextResponse.json({ message: "Invalid escritorio" }, { status: 400 });
+  const officeEnum = Object.values(Office).find((e) => e === office);
+  if (!officeEnum) {
+    return NextResponse.json({ message: "Invalid office" }, { status: 400 });
   }
 
   if (role === Role.CONSULTOR && !ownerId) {
@@ -36,9 +36,9 @@ export async function POST(req: Request) {
     data: {
       name,
       email,
-      passwordHash: hashed,
+      password: hashed,
       role,
-      escritorio: escritorioEnum,
+      office: officeEnum,
       ownerId: role === Role.CONSULTOR ? ownerId : null,
     },
   });
