@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "fix:master": "tsx fix-master.ts",
     "prisma:seed": "node prisma/seed.js",
     "postinstall": "prisma generate"
   },

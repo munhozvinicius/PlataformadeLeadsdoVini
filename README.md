@@ -17,6 +17,12 @@ Aplicação web para gestão de leads industriais com autenticação por papéis
 
 O usuário MASTER padrão é `munhoz.vinicius@gmail.com / Theforce85!!`.
 
+## Script de saneamento de MASTERs
+
+- Garanta que `.env.local` contenha `MONGO_URL_MONGODB_URI="mongodb+srv://Vercel-Admin-atlas-violet-house:p2jqOzEqJGuwfrbM@atlas-violet-house.jizuipo.mongodb.net/plataforma_leads?retryWrites=true&w=majority"`
+- Rode `npm run fix:master` para limpar `owner` e `officeRecord` de todos os usuários `MASTER`.
+- O script é idempotente e não altera o campo `office`.
+
 ## Rodando em desenvolvimento
 
 ```bash
