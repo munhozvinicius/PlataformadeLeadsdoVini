@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isOfficeAdmin } from "@/lib/authRoles";
 import { LeadStatus, Prisma, Role } from "@prisma/client";
 
 type Params = { params: { id: string } };
@@ -54,6 +55,21 @@ export async function POST(req: Request, { params }: Params) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
+  const sessionUser = await prisma.user.findUnique({ where: { id: session.user.id } });
+  if (!sessionUser) {
+    return NextResponse.json({ message: "Sessão inválida" }, { status: 401 });
+  }
+
+  if (
+    isOfficeAdmin(role) &&
+    role !== Role.MASTER &&
+    sessionUser.officeId &&
+    lead.officeId &&
+    sessionUser.officeId !== lead.officeId
+  ) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
   const historicoAtual: Record<string, unknown>[] = Array.isArray(lead.historico)
     ? (lead.historico as Record<string, unknown>[])
     : [];
@@ -84,6 +100,24 @@ export async function POST(req: Request, { params }: Params) {
       lastOutcomeNote: observacao ?? lead.lastOutcomeNote ?? null,
       nextFollowUpAt: null,
       nextStepNote: null,
+    },
+  });
+
+  const motiveLabel = motivo ?? status;
+  const activityNote =
+    status === LeadStatus.PERDIDO
+      ? `Perdido. Motivo: ${motiveLabel}. Observação: ${observacao ?? ""}`
+      : `Status alterado para ${status}`;
+
+  await prisma.leadActivity.create({
+    data: {
+      leadId: lead.id,
+      campaignId: lead.campanhaId,
+      userId: session.user.id,
+      activityType: "STATUS_CHANGE",
+      stageBefore: lead.status,
+      stageAfter: status,
+      note: activityNote,
     },
   });
 

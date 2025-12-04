@@ -6,7 +6,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Role, Profile, Prisma } from "@prisma/client";
-import { canManageUsers, isProprietario } from "@/lib/authRoles";
+import { canManageUsers, isMaster, isProprietario } from "@/lib/authRoles";
 
 export async function PATCH(req: Request, { params }: { params: { id?: string } }) {
   const session = await getServerSession(authOptions);
@@ -42,6 +42,12 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
     }
   }
 
+  if (!isMaster(sessionRole)) {
+    if (sessionUser.officeId && targetUser.officeId && sessionUser.officeId !== targetUser.officeId) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+  }
+
   const body = await req.json();
   const { name, email, role, officeId, ownerId, active, password } = body;
   const updates: Prisma.UserUpdateInput = {};
@@ -65,6 +71,9 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
     const officeRecord = await prisma.officeRecord.findUnique({ where: { id: officeId } });
     if (!officeRecord) {
       return NextResponse.json({ message: "Escritório inválido" }, { status: 400 });
+    }
+    if (!isMaster(sessionRole) && sessionUser.officeId && officeRecord.id !== sessionUser.officeId) {
+      return NextResponse.json({ message: "Você só pode editar usuários do seu escritório" }, { status: 403 });
     }
     updates.office = officeRecord.office;
     updates.officeRecord = { connect: { id: officeRecord.id } };

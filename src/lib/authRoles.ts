@@ -40,6 +40,18 @@ export function isConsultor(role?: RoleLike) {
   return toRoleString(role) === AppRole.CONSULTOR;
 }
 
+export function isOfficeAdmin(role?: RoleLike) {
+  return isProprietario(role) || isGerenteSenior(role) || isGerenteNegocios(role);
+}
+
+export function canAccessAdmin(role?: RoleLike) {
+  return isMaster(role) || isOfficeAdmin(role);
+}
+
+export function canAccessBoard(role?: RoleLike) {
+  return isConsultor(role) || canAccessAdmin(role);
+}
+
 export function canManageUsers(role?: RoleLike) {
-  return isMaster(role) || isGerenteSenior(role);
+  return canAccessAdmin(role);
 }

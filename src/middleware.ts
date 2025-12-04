@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { Role } from "@prisma/client";
+import { canAccessAdmin, canAccessBoard } from "@/lib/authRoles";
 
 const PUBLIC_PATHS = ["/login", "/api/auth", "/favicon.ico", "/_next", "/api/health"];
 
@@ -25,17 +26,12 @@ export async function middleware(req: NextRequest) {
   const isAdminArea = pathname.startsWith("/admin");
   const isBoard = pathname.startsWith("/board");
 
-  if (isAdminArea && role === Role.CONSULTOR) {
-    const url = new URL("/board", req.url);
+  if (isAdminArea && !canAccessAdmin(role)) {
+    const url = new URL(role === Role.CONSULTOR ? "/board" : "/login", req.url);
     return NextResponse.redirect(url);
   }
 
-  if (
-    isBoard &&
-    role !== Role.CONSULTOR &&
-    role !== Role.PROPRIETARIO &&
-    role !== Role.MASTER
-  ) {
+  if (isBoard && !canAccessBoard(role)) {
     const url = new URL("/login", req.url);
     return NextResponse.redirect(url);
   }

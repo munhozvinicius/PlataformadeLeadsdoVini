@@ -5,8 +5,8 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Office, Role, Profile } from "@prisma/client";
-import { canManageUsers, isProprietario } from "@/lib/authRoles";
+import { Office, Role, Profile, Prisma } from "@prisma/client";
+import { canManageUsers, isMaster, isProprietario } from "@/lib/authRoles";
 
 const USER_SELECT = {
   id: true,
@@ -37,10 +37,17 @@ export async function GET() {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const where =
-    isProprietario(currentRole)
-      ? { OR: [{ id: session.user.id }, { ownerId: session.user.id }] }
-      : undefined;
+  const sessionUser = await prisma.user.findUnique({ where: { id: session.user.id } });
+  if (!sessionUser) {
+    return NextResponse.json({ message: "Sessão inválida" }, { status: 401 });
+  }
+
+  const officeScope: Prisma.UserWhereInput | undefined =
+    currentRole === Role.MASTER || !sessionUser.officeId
+      ? undefined
+      : { officeId: sessionUser.officeId };
+
+  const where = officeScope;
 
   const users = await prisma.user.findMany({
     where,
@@ -85,27 +92,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Proprietário só pode criar consultores" }, { status: 403 });
   }
 
-  let officeRecord =
-    requiresOffice && isProprietario(sessionRole) && sessionUser.officeId
-      ? await prisma.officeRecord.findUnique({ where: { id: sessionUser.officeId } })
-      : requiresOffice && officeId
-      ? await prisma.officeRecord.findUnique({ where: { id: officeId } })
-      : await fetchDefaultOffice();
+  const sessionOfficeId = sessionUser.officeId;
+  let officeRecord = null;
+  if (!isMaster(sessionRole) && sessionOfficeId) {
+    officeRecord = await prisma.officeRecord.findUnique({ where: { id: sessionOfficeId } });
+  } else if (requiresOffice && officeId) {
+    officeRecord = await prisma.officeRecord.findUnique({ where: { id: officeId } });
+  } else {
+    officeRecord = await fetchDefaultOffice();
+  }
 
   if (!officeRecord) {
     return NextResponse.json({ message: "Escritório não encontrado" }, { status: 400 });
   }
 
-  if (requiresOffice && !officeRecord) {
-    return NextResponse.json({ message: "Escritório obrigatório" }, { status: 400 });
-  }
-
-  if (isProprietario(sessionRole) && sessionUser.officeId && officeRecord.id !== sessionUser.officeId) {
-    officeRecord = await prisma.officeRecord.findUnique({ where: { id: sessionUser.officeId } });
-  }
-
-  if (!officeRecord) {
-    return NextResponse.json({ message: "Escritório do proprietário inválido" }, { status: 400 });
+  if (!isMaster(sessionRole) && sessionOfficeId && officeRecord.id !== sessionOfficeId) {
+    return NextResponse.json({ message: "Você só pode criar usuários do seu escritório" }, { status: 403 });
   }
 
   let ownerConnect;
@@ -128,10 +130,6 @@ export async function POST(req: Request) {
       }
       ownerConnect = { connect: { id: owner.id } };
     }
-  }
-
-  if (requiresOffice && !officeId && !isProprietario(sessionRole)) {
-    return NextResponse.json({ message: "Escritório é obrigatório" }, { status: 400 });
   }
 
   try {
