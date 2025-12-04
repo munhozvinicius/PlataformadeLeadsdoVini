@@ -13,15 +13,23 @@ export async function GET() {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
+  const userSelect = {
+    id: true,
+    name: true,
+    email: true,
+    role: true,
+    escritorio: true,
+    isBlocked: true,
+    owner: { select: { id: true, name: true, email: true, escritorio: true } },
+    office: { select: { id: true, name: true, code: true } },
+  };
+
   const role = session.user.role as Role;
   let users;
 
   if (role === Role.MASTER) {
     users = await prisma.user.findMany({
-      include: {
-        owner: { select: { id: true, name: true, email: true, escritorio: true } },
-        office: { select: { id: true, name: true, code: true } },
-      },
+      select: userSelect,
       orderBy: { createdAt: "desc" },
     });
   } else if (role === Role.PROPRIETARIO) {
@@ -30,10 +38,7 @@ export async function GET() {
       where: {
         OR: [{ id: session.user.id }, { ownerId: session.user.id }],
       },
-      include: {
-        owner: { select: { id: true, name: true, email: true, escritorio: true } },
-        office: { select: { id: true, name: true, code: true } },
-      },
+      select: userSelect,
       orderBy: { createdAt: "desc" },
     });
   } else {
