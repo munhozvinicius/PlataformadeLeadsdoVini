@@ -173,7 +173,8 @@ model Lead {
 
 model OfficeRecord {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  office    Office   @unique @map("code")
+  code      String   @unique
+  office    Office?  @map("office")
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
