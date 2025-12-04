@@ -60,6 +60,7 @@ model User {
   seniorId     String?       @db.ObjectId
   senior       User?         @relation("SeniorToGN", fields: [seniorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   managers     User[]        @relation("SeniorToGN")
+  offices      UserOffice[]
   active       Boolean       @default(true)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -178,6 +179,16 @@ model OfficeRecord {
   updatedAt DateTime @updatedAt
   users     User[]   @relation("OfficeUsers")
   leads     Lead[]
+}
+
+model UserOffice {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  office    Office
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, office])
 }
 
 model LeadActivity {
