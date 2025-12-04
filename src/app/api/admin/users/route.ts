@@ -6,6 +6,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Office, Role, Profile } from "@prisma/client";
+import { canManageUsers, isProprietario } from "@/lib/authRoles";
 
 const USER_SELECT = {
   id: true,
@@ -31,13 +32,13 @@ export async function GET() {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const role = session.user.role as Role;
-  if (role !== Role.MASTER && role !== Role.PROPRIETARIO) {
+  const currentRole = session.user.role;
+  if (!canManageUsers(currentRole)) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
   const where =
-    role === Role.PROPRIETARIO
+    isProprietario(currentRole)
       ? { OR: [{ id: session.user.id }, { ownerId: session.user.id }] }
       : undefined;
 
@@ -56,7 +57,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const sessionRole = session.user.role as Role;
+  const sessionRole = session.user.role;
+  if (!canManageUsers(sessionRole)) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await req.json();
   const { name, email, password, role, officeId, ownerId } = body;
 
@@ -68,17 +73,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Perfil inválido" }, { status: 400 });
   }
 
-  if (sessionRole === Role.PROPRIETARIO && role !== Role.CONSULTOR) {
-    return NextResponse.json({ message: "Proprietário só pode criar consultores" }, { status: 401 });
-  }
+  const requiresOffice = [Role.PROPRIETARIO, Role.CONSULTOR, Role.GERENTE_NEGOCIOS].includes(role);
+  const requiresOwner = role === Role.CONSULTOR;
 
   const sessionUser = await prisma.user.findUnique({ where: { id: session.user.id } });
   if (!sessionUser) {
     return NextResponse.json({ message: "Sessão inválida" }, { status: 401 });
   }
 
-  const officeRecord =
-    officeId && role !== Role.MASTER && role !== Role.GERENTE_SENIOR
+  if (isProprietario(sessionRole) && role !== Role.CONSULTOR) {
+    return NextResponse.json({ message: "Proprietário só pode criar consultores" }, { status: 403 });
+  }
+
+  let officeRecord =
+    requiresOffice && isProprietario(sessionRole) && sessionUser.officeId
+      ? await prisma.officeRecord.findUnique({ where: { id: sessionUser.officeId } })
+      : requiresOffice && officeId
       ? await prisma.officeRecord.findUnique({ where: { id: officeId } })
       : await fetchDefaultOffice();
 
@@ -86,25 +96,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Escritório não encontrado" }, { status: 400 });
   }
 
-  if ([Role.GERENTE_NEGOCIOS, Role.PROPRIETARIO, Role.CONSULTOR].includes(role) && !officeId) {
-    return NextResponse.json({ message: "Escritório é obrigatório para esse perfil" }, { status: 400 });
+  if (requiresOffice && !officeRecord) {
+    return NextResponse.json({ message: "Escritório obrigatório" }, { status: 400 });
   }
 
-  const targetOffice = officeRecord.office;
+  if (isProprietario(sessionRole) && sessionUser.officeId && officeRecord.id !== sessionUser.officeId) {
+    officeRecord = await prisma.officeRecord.findUnique({ where: { id: sessionUser.officeId } });
+  }
 
-  let ownerConnect = undefined;
-  if (role === Role.CONSULTOR) {
-    if (sessionRole === Role.PROPRIETARIO) {
-      if (sessionUser.role !== Role.PROPRIETARIO) {
-        return NextResponse.json({ message: "Owner inválido" }, { status: 400 });
-      }
-      if (sessionUser.office !== targetOffice) {
-        return NextResponse.json(
-          { message: "Owner deve pertencer ao mesmo escritório" },
-          { status: 400 }
-        );
-      }
-      ownerConnect = { connect: { id: sessionUser.id } };
+  if (!officeRecord) {
+    return NextResponse.json({ message: "Escritório do proprietário inválido" }, { status: 400 });
+  }
+
+  let ownerConnect;
+  if (requiresOwner) {
+    if (isProprietario(sessionRole)) {
+      ownerConnect = { connect: { id: session.user.id } };
     } else {
       if (!ownerId) {
         return NextResponse.json({ message: "Consultor precisa de proprietário" }, { status: 400 });
@@ -113,7 +120,7 @@ export async function POST(req: Request) {
       if (!owner || owner.role !== Role.PROPRIETARIO) {
         return NextResponse.json({ message: "Proprietário inválido" }, { status: 400 });
       }
-      if (owner.office !== targetOffice) {
+      if (owner.office !== officeRecord.office) {
         return NextResponse.json(
           { message: "Proprietário deve pertencer ao mesmo escritório" },
           { status: 400 }
@@ -121,6 +128,10 @@ export async function POST(req: Request) {
       }
       ownerConnect = { connect: { id: owner.id } };
     }
+  }
+
+  if (requiresOffice && !officeId && !isProprietario(sessionRole)) {
+    return NextResponse.json({ message: "Escritório é obrigatório" }, { status: 400 });
   }
 
   try {

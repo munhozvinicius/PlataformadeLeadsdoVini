@@ -2,6 +2,7 @@
 
 import { Office, Role } from "@prisma/client";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { isProprietario } from "@/lib/authRoles";
 
 export type OwnerOption = {
   id: string;
@@ -49,15 +50,21 @@ type UserDrawerProps = {
   onClose: () => void;
   onSubmit: (payload: UserDrawerPayload) => Promise<void>;
   onResetPassword?: () => Promise<string | void>;
+  currentUserRole?: Role;
+  currentUserId?: string;
+  currentUserOfficeRecordId?: string | null;
 };
 
 const roleLabels: Record<Role, string> = {
-  MASTER: "MASTER",
-  GERENTE_SENIOR: "GERENTE SÊNIOR",
-  GERENTE_NEGOCIOS: "GERENTE DE NEGÓCIOS",
-  PROPRIETARIO: "PROPRIETÁRIO",
-  CONSULTOR: "CONSULTOR",
+  MASTER: "Master",
+  GERENTE_SENIOR: "Gerente Sênior",
+  GERENTE_NEGOCIOS: "Gerente de Negócios",
+  PROPRIETARIO: "Proprietário",
+  CONSULTOR: "Consultor",
 };
+
+const ownerRoles: Role[] = [Role.CONSULTOR];
+const officeRoles: Role[] = [Role.PROPRIETARIO, Role.CONSULTOR, Role.GERENTE_NEGOCIOS];
 
 export default function UserDrawer({
   open,
@@ -69,22 +76,32 @@ export default function UserDrawer({
   onClose,
   onSubmit,
   onResetPassword,
+  currentUserRole,
+  currentUserId,
+  currentUserOfficeRecordId,
 }: UserDrawerProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>(Role.PROPRIETARIO);
   const [password, setPassword] = useState("");
   const [selectedOfficeId, setSelectedOfficeId] = useState<string | null>(null);
-  const [ownerId, setOwnerId] = useState<string>("");
+  const [ownerId, setOwnerId] = useState("");
   const [active, setActive] = useState(true);
   const [error, setError] = useState("");
   const [resetMessage, setResetMessage] = useState<string | null>(null);
   const [isResetting, setIsResetting] = useState(false);
 
-  const officeRoles: Role[] = [Role.GERENTE_NEGOCIOS, Role.PROPRIETARIO, Role.CONSULTOR];
-  const showOfficeField = officeRoles.includes(role);
-  const requiresOffice = showOfficeField;
-  const requiresOwner = role === Role.CONSULTOR;
+  const requiresOwner = ownerRoles.includes(role);
+  const showOfficeSelect = role === Role.PROPRIETARIO || officeRoles.includes(role);
+  const showOwnerSelect = requiresOwner && !isProprietario(currentUserRole);
+  const currentUserIsOwner = isProprietario(currentUserRole);
+
+  const availableRoles = useMemo(() => {
+    if (currentUserIsOwner) {
+      return [Role.CONSULTOR];
+    }
+    return Object.values(Role);
+  }, [currentUserIsOwner]);
 
   const ownersForOffice = useMemo(() => {
     if (!selectedOfficeId) return [];
@@ -107,10 +124,13 @@ export default function UserDrawer({
     setPassword("");
     setError("");
     setResetMessage(null);
-    const defaultOfficeId = user?.officeRecord?.id ?? offices[0]?.id ?? null;
+    const defaultOfficeId =
+      currentUserIsOwner && currentUserOfficeRecordId
+        ? currentUserOfficeRecordId
+        : user?.officeRecord?.id ?? offices[0]?.id ?? null;
     setSelectedOfficeId(defaultOfficeId);
-    setOwnerId(user?.owner?.id ?? "");
-  }, [open, user, offices]);
+    setOwnerId(currentUserIsOwner ? currentUserId ?? "" : user?.owner?.id ?? "");
+  }, [open, user, offices, currentUserIsOwner, currentUserOfficeRecordId, currentUserId]);
 
   useEffect(() => {
     if (ownerId && ownersForOffice.every((owner) => owner.id !== ownerId)) {
@@ -134,22 +154,33 @@ export default function UserDrawer({
       return;
     }
 
-    if (requiresOffice && !selectedOfficeId) {
+    if (showOfficeSelect && !selectedOfficeId) {
       setError("Selecione um escritório válido.");
       return;
     }
 
-    if (requiresOwner && !ownerId) {
+    let ownerIdToSend: string | null = null;
+    if (requiresOwner) {
+      ownerIdToSend = currentUserIsOwner ? currentUserId ?? "" : ownerId;
+    }
+
+    if (requiresOwner && !ownerIdToSend) {
       setError("Escolha um proprietário responsável.");
       return;
     }
+
+    const officeIdToSend = currentUserIsOwner
+      ? currentUserOfficeRecordId ?? selectedOfficeId
+      : showOfficeSelect
+      ? selectedOfficeId
+      : null;
 
     const payload: UserDrawerPayload = {
       name: name.trim(),
       email: email.trim(),
       role,
-      officeId: showOfficeField ? selectedOfficeId : null,
-      ownerId: requiresOwner ? ownerId : null,
+      officeId: officeIdToSend ?? null,
+      ownerId: ownerIdToSend ?? null,
       active,
     };
     if (mode === "create") {
@@ -179,6 +210,11 @@ export default function UserDrawer({
       setIsResetting(false);
     }
   };
+
+  const officeLabel =
+    offices.find((office) => office.id === (currentUserIsOwner ? currentUserOfficeRecordId : selectedOfficeId))
+      ?.name ?? "";
+  const ownerLabel = owners.find((owner) => owner.id === currentUserId)?.name ?? "Você mesmo";
 
   const heading = mode === "create" ? "Novo usuário" : "Editar usuário";
   const submitLabel = mode === "create" ? "Criar usuário" : "Salvar alterações";
@@ -238,25 +274,24 @@ export default function UserDrawer({
             <label className="text-xs text-slate-600">Perfil</label>
             <select
               value={role}
-              onChange={(event) => {
-                setRole(event.target.value as Role);
-                if (event.target.value !== Role.CONSULTOR) {
-                  setOwnerId("");
-                }
-                if (event.target.value !== Role.CONSULTOR && event.target.value !== Role.PROPRIETARIO && event.target.value !== Role.GERENTE_NEGOCIOS) {
-                  setSelectedOfficeId(offices[0]?.id ?? null);
-                }
-              }}
+              onChange={(event) => setRole(event.target.value as Role)}
               className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
             >
-              {Object.entries(roleLabels).map(([value, label]) => (
+              {availableRoles.map((value) => (
                 <option key={value} value={value}>
-                  {label}
+                  {roleLabels[value]}
                 </option>
               ))}
             </select>
           </div>
-          {showOfficeField && (
+          {currentUserIsOwner ? (
+            <div className="space-y-1">
+              <label className="text-xs text-slate-600">Escritório</label>
+              <div className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700">
+                {officeLabel || "Sem escritório"}
+              </div>
+            </div>
+          ) : showOfficeSelect ? (
             <div className="space-y-1">
               <label className="text-xs text-slate-600">Escritório</label>
               <select
@@ -272,8 +307,8 @@ export default function UserDrawer({
                 ))}
               </select>
             </div>
-          )}
-          {requiresOwner && (
+          ) : null}
+          {showOwnerSelect ? (
             <div className="space-y-1">
               <label className="text-xs text-slate-600">Proprietário</label>
               <select
@@ -289,7 +324,15 @@ export default function UserDrawer({
                 ))}
               </select>
             </div>
-          )}
+          ) : null}
+          {currentUserIsOwner && requiresOwner ? (
+            <div className="space-y-1">
+              <label className="text-xs text-slate-600">Proprietário</label>
+              <div className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700">
+                {ownerLabel}
+              </div>
+            </div>
+          ) : null}
           {mode === "edit" && (
             <div className="space-y-1">
               <label className="text-xs text-slate-600">Status</label>

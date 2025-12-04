@@ -10,6 +10,7 @@ import UserDrawer, {
   OfficeOption,
   UserDrawerPayload,
 } from "./UserDrawer";
+import { canManageUsers, isConsultor } from "@/lib/authRoles";
 
 type AdminUser = {
   id: string;
@@ -40,7 +41,7 @@ export default function AdminUsersPage() {
   const [drawerSubmitting, setDrawerSubmitting] = useState(false);
 
   useEffect(() => {
-    if (status === "authenticated" && session?.user.role !== Role.MASTER) {
+    if (status === "authenticated" && isConsultor(session?.user.role)) {
       router.replace("/board");
     }
   }, [status, session?.user.role, router]);
@@ -82,7 +83,7 @@ export default function AdminUsersPage() {
   }, []);
 
   useEffect(() => {
-    if (status === "authenticated" && session?.user.role === Role.MASTER) {
+    if (status === "authenticated" && canManageUsers(session?.user.role)) {
       loadUsers();
       loadOffices();
     }
@@ -102,12 +103,15 @@ export default function AdminUsersPage() {
   );
 
   const filteredUsers = useMemo(() => {
-    if (session?.user.role === Role.MASTER) return users;
+    if (session?.user.role === Role.MASTER || session?.user.role === Role.GERENTE_SENIOR) return users;
     if (session?.user.role === Role.PROPRIETARIO) {
       return users.filter((user) => user.id === session.user.id || user.owner?.id === session.user.id);
     }
-    return users.filter((user) => user.id === session?.user.id);
+    return [];
   }, [users, session]);
+
+  const canViewUsers = canManageUsers(session?.user.role);
+  const currentSessionUser = users.find((user) => user.id === session?.user.id);
 
   const openCreateDrawer = () => {
     setDrawerMode("create");
@@ -169,7 +173,7 @@ export default function AdminUsersPage() {
     return newPassword;
   }, [loadUsers, selectedUser]);
 
-  if (status === "loading" || session?.user.role !== Role.MASTER) {
+  if (status === "loading" || !canViewUsers) {
     return null;
   }
 
@@ -180,7 +184,9 @@ export default function AdminUsersPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Usuários</h1>
-            <p className="text-sm text-slate-500">Crie e gerencie proprietários e consultores.</p>
+            <p className="text-sm text-slate-500">
+              Crie e gerencie proprietários, consultores e gerentes de negócio.
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -264,6 +270,9 @@ export default function AdminUsersPage() {
         onClose={closeDrawer}
         onSubmit={handleUserSubmit}
         onResetPassword={drawerMode === "edit" ? handleResetPassword : undefined}
+        currentUserRole={session?.user.role}
+        currentUserId={session?.user.id}
+        currentUserOfficeRecordId={currentSessionUser?.officeRecord?.id ?? null}
       />
     </div>
   );
