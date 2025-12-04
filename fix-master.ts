@@ -1,7 +1,14 @@
 // @ts-nocheck
+import "dotenv/config";
 import { PrismaClient, Profile } from "@prisma/client";
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: process.env.MONGO_URL_MONGODB_URI,
+    },
+  },
+});
 
 async function main() {
   const masters = await prisma.user.findMany({
