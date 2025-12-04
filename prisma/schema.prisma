@@ -10,8 +10,8 @@ datasource db {
 enum Role {
   MASTER
   GERENTE_SENIOR
-  GERENTE_CONTAS
-  PROPRIETARIO
+  GERENTE_NEGOCIOS
+  PROPRIETARIO_SUPERVISOR
   CONSULTOR
 }
 
@@ -43,16 +43,12 @@ model User {
   email              String   @unique
   passwordHash       String
   role               Role
-  companyTag         String?
-  ativo              Boolean  @default(true)
-  escritorio         Escritorio @default(NONE)
-  officeId           String?  @db.ObjectId
-  office             Office?  @relation(fields: [officeId], references: [id])
+  officeId           String   @db.ObjectId
+  office             Office  @relation(fields: [officeId], references: [id])
   ownerId            String?  @db.ObjectId
   owner              User?    @relation("OwnerConsultor", fields: [ownerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  team               User[]   @relation("OwnerConsultor")
-  mustResetPassword  Boolean  @default(false)
-  isBlocked          Boolean  @default(false)
+  consultores        User[]   @relation("OwnerConsultor")
+  active             Boolean  @default(true)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -163,11 +159,12 @@ model Lead {
 }
 
 model Office {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  id        String     @id @default(auto()) @map("_id") @db.ObjectId
   code      Escritorio @unique
   name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  active    Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
   users     User[]
   leads     Lead[]
 }
