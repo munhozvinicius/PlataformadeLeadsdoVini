@@ -69,7 +69,7 @@ export async function GET() {
   // Performance por consultor
   const consultants = await prisma.user.findMany({
     where: { role: Role.CONSULTOR },
-    select: { id: true, name: true, email: true, office: { select: { name: true } } },
+    select: { id: true, name: true, email: true, office: true },
   });
 
   const performanceConsultores: ConsultantPerf[] = [];
@@ -133,7 +133,7 @@ export async function GET() {
       id: c.id,
       nome: c.name,
       email: c.email,
-      escritorio: c.office?.name ?? null,
+      escritorio: c.office ?? null,
       recebidos,
       trabalhados,
       ganhos,

@@ -124,7 +124,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
     const consultants = await prisma.user.findMany({
       where: { id: { in: consultorIds }, role: Role.CONSULTOR },
-      select: { id: true, name: true, email: true, office: { select: { name: true } } },
+      select: { id: true, name: true, email: true, office: true },
     });
 
     const consultantMap = new Map<
@@ -132,7 +132,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       { name?: string | null; email?: string | null; officeName?: string | null }
     >();
     consultants.forEach((c) => {
-      consultantMap.set(c.id, { name: c.name, email: c.email, officeName: c.office?.name ?? "" });
+      consultantMap.set(c.id, { name: c.name, email: c.email, officeName: c.office ?? "" });
     });
 
     const distribution = consultorIds.map((cid) => {
