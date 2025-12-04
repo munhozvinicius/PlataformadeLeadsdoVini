@@ -37,38 +37,60 @@ async function ensureOfficeRecords(): Promise<Map<Office, string>> {
   return officeMap;
 }
 
+type RawUser = {
+  _id: string;
+  role?: Role | null;
+  office?: Office | null;
+  profile?: Profile | null;
+  officeRecord?: { id?: string };
+};
+
 async function main() {
   console.log("🚧 Iniciando saneamento de usuários...");
   const officeRecords = await ensureOfficeRecords();
-  const users = await prisma.user.findMany({
-    select: {
-      id: true,
-      role: true,
-      profile: true,
-      office: true,
-      officeRecord: { select: { id: true, office: true } },
-    },
+  const rawUsersResponse = await prisma.$runCommandRaw<{
+    cursor: { firstBatch: RawUser[]; id?: number };
+  }>({
+    aggregate: "User",
+    pipeline: [
+      {
+        $project: {
+          _id: 1,
+          role: 1,
+          profile: 1,
+          office: 1,
+          officeRecord: 1,
+        },
+      },
+    ],
+    cursor: {},
   });
+  const users = rawUsersResponse.cursor?.firstBatch ?? [];
 
   for (const user of users) {
     const updates: Prisma.UserUpdateInput = {};
     const appliedChanges: string[] = [];
 
-    if (!user.profile) {
-      const derived = profileFromRole(user.role);
-      updates.profile = derived;
-      appliedChanges.push(`profile=${derived}`);
-    }
+    const rawId = user._id as unknown;
+    const userId =
+      typeof rawId === "string"
+        ? rawId
+        : typeof rawId === "object" && rawId && "$oid" in rawId
+        ? rawId.$oid
+        : rawId?.toString?.() ?? String(rawId);
+    const derivedProfile = profileFromRole(user.role);
+    updates.profile = derivedProfile;
+    appliedChanges.push(`profile=${derivedProfile}`);
 
     const targetOffice = user.office ?? DEFAULT_OFFICE;
-    if (!user.office) {
-      updates.office = DEFAULT_OFFICE;
-      appliedChanges.push(`office=${DEFAULT_OFFICE}`);
+    if (user.office !== targetOffice) {
+      updates.office = targetOffice;
+      appliedChanges.push(`office=${targetOffice}`);
     }
 
     const officeRecordId = officeRecords.get(targetOffice);
     if (!officeRecordId) {
-      console.warn(`⚠️  Escritório não encontrado para ${targetOffice}, pulando usuário ${user.id}`);
+      console.warn(`⚠️  Escritório não encontrado para ${targetOffice}, pulando usuário ${userId}`);
       continue;
     }
 
@@ -78,8 +100,8 @@ async function main() {
     }
 
     if (Object.keys(updates).length > 0) {
-      await prisma.user.update({ where: { id: user.id }, data: updates });
-      console.log(`✨ Usuário ${user.id} atualizado (${appliedChanges.join(", ")})`);
+      await prisma.user.update({ where: { id: userId }, data: updates });
+      console.log(`✨ Usuário ${userId} atualizado (${appliedChanges.join(", ")})`);
     }
   }
 
