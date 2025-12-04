@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
-import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -14,10 +14,16 @@ const USER_SELECT = {
   role: true,
   profile: true,
   office: true,
-  officeRecord: true,
-  active: true,
+  officeRecord: { select: { id: true } },
   owner: { select: { id: true, name: true, email: true } },
+  active: true,
 };
+
+async function fetchDefaultOffice() {
+  const officeRecord = await prisma.officeRecord.findUnique({ where: { office: Office.SAFE_TI } });
+  if (officeRecord) return officeRecord;
+  return prisma.officeRecord.findFirst();
+}
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -50,97 +56,92 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const role = session.user.role as Role;
-  if (role !== Role.MASTER && role !== Role.PROPRIETARIO) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
+  const sessionRole = session.user.role as Role;
   const body = await req.json();
-  const { name, email, password, role: targetRole, profile, office, ownerId } = body;
+  const { name, email, password, role, officeId, ownerId } = body;
 
-  if (!name || !email || !password || !targetRole || !office) {
-    return NextResponse.json({ message: "Missing fields" }, { status: 400 });
+  if (!name || !email || !password || !role) {
+    return NextResponse.json({ message: "Dados insuficientes" }, { status: 400 });
   }
 
-  if (targetRole !== Role.PROPRIETARIO && targetRole !== Role.CONSULTOR) {
-    return NextResponse.json({ message: "Invalid role" }, { status: 400 });
+  if (!Object.values(Role).includes(role)) {
+    return NextResponse.json({ message: "Perfil inválido" }, { status: 400 });
   }
 
-  const officeEnum = (Object.values(Office) as Office[]).find((o) => o === office);
-  if (!officeEnum) {
-    return NextResponse.json({ message: "Invalid office" }, { status: 400 });
+  if (sessionRole === Role.PROPRIETARIO && role !== Role.CONSULTOR) {
+    return NextResponse.json({ message: "Proprietário só pode criar consultores" }, { status: 401 });
   }
 
-  let creatorOwnerId: string | null = null;
+  const sessionUser = await prisma.user.findUnique({ where: { id: session.user.id } });
+  if (!sessionUser) {
+    return NextResponse.json({ message: "Sessão inválida" }, { status: 401 });
+  }
 
-  if (targetRole === Role.CONSULTOR) {
-    if (role === Role.PROPRIETARIO) {
-      const owner = await prisma.user.findUnique({ where: { id: session.user.id } });
-      if (!owner) {
-        return NextResponse.json({ message: "Owner not found" }, { status: 400 });
+  const officeRecord =
+    officeId && role !== Role.MASTER && role !== Role.GERENTE_SENIOR
+      ? await prisma.officeRecord.findUnique({ where: { id: officeId } })
+      : await fetchDefaultOffice();
+
+  if (!officeRecord) {
+    return NextResponse.json({ message: "Escritório não encontrado" }, { status: 400 });
+  }
+
+  if ([Role.GERENTE_NEGOCIOS, Role.PROPRIETARIO, Role.CONSULTOR].includes(role) && !officeId) {
+    return NextResponse.json({ message: "Escritório é obrigatório para esse perfil" }, { status: 400 });
+  }
+
+  const targetOffice = officeRecord.office;
+
+  let ownerConnect = undefined;
+  if (role === Role.CONSULTOR) {
+    if (sessionRole === Role.PROPRIETARIO) {
+      if (sessionUser.role !== Role.PROPRIETARIO) {
+        return NextResponse.json({ message: "Owner inválido" }, { status: 400 });
       }
-      if (owner.office !== officeEnum) {
-        return NextResponse.json({ message: "Owner only creates consultants for own office" }, { status: 400 });
+      if (sessionUser.office !== targetOffice) {
+        return NextResponse.json(
+          { message: "Owner deve pertencer ao mesmo escritório" },
+          { status: 400 }
+        );
       }
-      creatorOwnerId = owner.id;
-    } else if (role === Role.MASTER) {
+      ownerConnect = { connect: { id: sessionUser.id } };
+    } else {
       if (!ownerId) {
         return NextResponse.json({ message: "Consultor precisa de proprietário" }, { status: 400 });
       }
       const owner = await prisma.user.findUnique({ where: { id: ownerId } });
       if (!owner || owner.role !== Role.PROPRIETARIO) {
-        return NextResponse.json({ message: "Owner inválido" }, { status: 400 });
+        return NextResponse.json({ message: "Proprietário inválido" }, { status: 400 });
       }
-      creatorOwnerId = owner.id;
+      if (owner.office !== targetOffice) {
+        return NextResponse.json(
+          { message: "Proprietário deve pertencer ao mesmo escritório" },
+          { status: 400 }
+        );
+      }
+      ownerConnect = { connect: { id: owner.id } };
     }
-  } else if (role === Role.PROPRIETARIO) {
-    return NextResponse.json({ message: "Proprietário só cria consultor" }, { status: 401 });
-  }
-
-  const hashed = await bcrypt.hash(password, 10);
-  const officeRecord = await prisma.officeRecord.findUnique({ where: { office: officeEnum } });
-  if (!officeRecord) {
-    return NextResponse.json({ message: "Escritório não encontrado" }, { status: 400 });
-  }
-
-  const profileValue = (profile ?? targetRole) as Profile | undefined;
-  if (!profileValue || !Object.values(Profile).includes(profileValue)) {
-    return NextResponse.json({ message: "Invalid profile" }, { status: 400 });
   }
 
   try {
+    const hashed = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
       data: {
         name,
         email,
         password: hashed,
-        role: targetRole,
-        profile: profileValue,
-        office: officeEnum,
-        officeRecord: {
-          connect: {
-            id: officeRecord.id,
-          },
-        },
-        ...(targetRole === Role.CONSULTOR && creatorOwnerId
-          ? { owner: { connect: { id: creatorOwnerId } } }
-          : {}),
+        role,
+        profile: role as Profile,
+        office: officeRecord.office,
+        officeRecord: { connect: { id: officeRecord.id } },
+        ...(ownerConnect ? { owner: ownerConnect } : {}),
         active: true,
       },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        profile: true,
-        office: true,
-        officeRecord: true,
-        owner: true,
-      },
+      select: USER_SELECT,
     });
-
     return NextResponse.json(user, { status: 201 });
-  } catch (err: unknown) {
-    const code = (err as { code?: string })?.code;
+  } catch (error: unknown) {
+    const code = (error as { code?: string })?.code;
     if (code === "P2002") {
       return NextResponse.json({ message: "Email já cadastrado" }, { status: 409 });
     }

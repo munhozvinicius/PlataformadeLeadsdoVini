@@ -1,166 +1,213 @@
 "use client";
 
-import { Office, Role } from "@prisma/client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { Office, Role } from "@prisma/client";
+import UserDrawer, {
+  DrawerMode,
+  OwnerOption,
+  OfficeOption,
+  UserDrawerPayload,
+} from "./UserDrawer";
 
-type User = {
+type AdminUser = {
   id: string;
   name: string;
   email: string;
   role: Role;
   office: Office;
-  owner?: { id: string; name: string; email: string };
+  officeRecord?: { id: string } | null;
+  owner?: { id: string; name: string; email: string } | null;
   active: boolean;
 };
+
+function generatePassword() {
+  return `P${Math.random().toString(36).slice(2, 10)}!`;
+}
 
 export default function AdminUsersPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState<{
-    name: string;
-    email: string;
-    password: string;
-    role: Role;
-    ownerId: string;
-    office: Office;
-  }>({
-    name: "",
-    email: "",
-    password: "",
-    role: Role.PROPRIETARIO,
-    ownerId: "",
-    office: Office.SAFE_TI,
-  });
   const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [offices, setOffices] = useState<OfficeOption[]>([]);
+  const [officesLoading, setOfficesLoading] = useState(true);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerMode, setDrawerMode] = useState<DrawerMode>("create");
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+  const [drawerSubmitting, setDrawerSubmitting] = useState(false);
 
   useEffect(() => {
-    if (status === "authenticated" && session?.user.role !== "MASTER") {
+    if (status === "authenticated" && session?.user.role !== Role.MASTER) {
       router.replace("/board");
     }
-  }, [status, session, router]);
-
-  const owners = useMemo(
-    () => users.filter((u) => u.role === Role.PROPRIETARIO && u.office === form.office),
-    [users, form.office]
-  );
-
-  const filteredUsers = useMemo(() => {
-    if (session?.user.role === Role.MASTER) return users;
-    if (session?.user.role === Role.PROPRIETARIO) {
-      return users.filter(
-        (u) => u.id === session.user.id || u.owner?.id === session.user.id
-      );
-    }
-    return users.filter((u) => u.id === session?.user.id);
-  }, [users, session]);
+  }, [status, session?.user.role, router]);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/admin/users", { cache: "no-store" });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setError(body?.message ?? "Não foi possível carregar os usuários.");
-        return;
+      const response = await fetch("/api/admin/users", { cache: "no-store" });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body?.message ?? "Não foi possível carregar os usuários.");
       }
-      const data = await res.json();
+      const data: AdminUser[] = await response.json();
       setUsers(data);
     } catch (err) {
       console.error("Erro ao carregar usuários", err);
-      setError("Não foi possível carregar os usuários.");
+      setError((err as Error)?.message ?? "Não foi possível carregar os usuários.");
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const loadOffices = useCallback(async () => {
+    setOfficesLoading(true);
+    try {
+      const response = await fetch("/api/admin/offices", { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error("Não foi possível carregar os escritórios.");
+      }
+      const data: OfficeOption[] = await response.json();
+      setOffices(data);
+    } catch (err) {
+      console.error("Erro ao carregar escritórios", err);
+      setOffices([]);
+    } finally {
+      setOfficesLoading(false);
     }
   }, []);
 
   useEffect(() => {
     if (status === "authenticated" && session?.user.role === Role.MASTER) {
       loadUsers();
+      loadOffices();
     }
-  }, [status, session?.user.role, loadUsers]);
+  }, [status, session?.user.role, loadUsers, loadOffices]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    setSaving(true);
+  const ownerOptions: OwnerOption[] = useMemo(
+    () =>
+      users
+        .filter((user) => user.role === Role.PROPRIETARIO)
+        .map((owner) => ({
+          id: owner.id,
+          name: owner.name,
+          email: owner.email,
+          office: owner.office,
+        })),
+    [users]
+  );
 
-    const sessionRole = session?.user.role;
-    const creatingAsProprietario = sessionRole === Role.PROPRIETARIO;
-    const roleToSend = creatingAsProprietario ? Role.CONSULTOR : form.role;
-
-    const ownerIdToSend =
-      roleToSend === Role.CONSULTOR
-        ? creatingAsProprietario
-          ? session?.user.id
-          : form.ownerId
-        : null;
-
-    if (roleToSend === Role.CONSULTOR && !ownerIdToSend) {
-      setSaving(false);
-      setError("Selecione um proprietário responsável.");
-      return;
+  const filteredUsers = useMemo(() => {
+    if (session?.user.role === Role.MASTER) return users;
+    if (session?.user.role === Role.PROPRIETARIO) {
+      return users.filter((user) => user.id === session.user.id || user.owner?.id === session.user.id);
     }
+    return users.filter((user) => user.id === session?.user.id);
+  }, [users, session]);
 
-    const officeToSend =
-      creatingAsProprietario && session?.user.id
-        ? users.find((u) => u.id === session.user.id)?.office ?? form.office
-        : form.office;
+  const openCreateDrawer = () => {
+    setDrawerMode("create");
+    setSelectedUser(null);
+    setDrawerOpen(true);
+  };
 
-    const payload = {
-      name: form.name,
-      email: form.email,
-      password: form.password,
-      role: roleToSend,
-      ownerId: ownerIdToSend,
-      office: officeToSend,
-    };
-    const res = await fetch("/api/admin/users", {
-      method: "POST",
+  const openEditDrawer = (user: AdminUser) => {
+    setDrawerMode("edit");
+    setSelectedUser(user);
+    setDrawerOpen(true);
+  };
+
+  const closeDrawer = () => {
+    setDrawerOpen(false);
+    setSelectedUser(null);
+    setDrawerMode("create");
+  };
+
+  const handleUserSubmit = useCallback(
+    async (payload: UserDrawerPayload) => {
+      setDrawerSubmitting(true);
+      try {
+        const endpoint =
+          drawerMode === "create" ? "/api/admin/users" : `/api/admin/users/${selectedUser?.id}`;
+        const response = await fetch(endpoint, {
+          method: drawerMode === "create" ? "POST" : "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body?.message ?? "Não foi possível salvar o usuário.");
+        }
+        await loadUsers();
+      } finally {
+        setDrawerSubmitting(false);
+      }
+    },
+    [drawerMode, loadUsers, selectedUser?.id]
+  );
+
+  const handleResetPassword = useCallback(async () => {
+    if (!selectedUser) {
+      throw new Error("Selecione um usuário antes de resetar a senha.");
+    }
+    const newPassword = generatePassword();
+
+    const response = await fetch(`/api/admin/users/${selectedUser.id}`, {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ password: newPassword }),
     });
-    setSaving(false);
-    if (!res.ok) {
-      setError("Não foi possível criar o usuário.");
-      return;
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body?.message ?? "Não foi possível resetar a senha.");
     }
-    setForm({
-      name: "",
-      email: "",
-      password: "",
-      role: Role.PROPRIETARIO,
-      ownerId: "",
-      office: Office.SAFE_TI,
-    });
     await loadUsers();
+    return newPassword;
+  }, [loadUsers, selectedUser]);
+
+  if (status === "loading" || session?.user.role !== Role.MASTER) {
+    return null;
   }
 
   return (
     <div className="space-y-6">
       <div>
         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Master</p>
-        <h1 className="text-2xl font-semibold text-slate-900">Usuários</h1>
-        <p className="text-sm text-slate-500">Crie PROPRIETÁRIOS e CONSULTORs e vincule as equipes.</p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 rounded-xl border bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold text-slate-900">Lista</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">Usuários</h1>
+            <p className="text-sm text-slate-500">Crie e gerencie proprietários e consultores.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={openCreateDrawer}
+              disabled={officesLoading || offices.length === 0}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              Novo usuário
+            </button>
             <button
               onClick={loadUsers}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-100"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100"
             >
               Atualizar
             </button>
           </div>
-          {loading ? <div>Carregando...</div> : null}
+        </div>
+      </div>
+
+      <div className="rounded-xl border bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-slate-900">Lista</h2>
+        </div>
+        {error ? <div className="text-sm text-red-600 mb-2">{error}</div> : null}
+        {loading ? (
+          <div className="text-sm text-slate-500">Carregando...</div>
+        ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
@@ -171,6 +218,7 @@ export default function AdminUsersPage() {
                   <th className="py-2 pr-3">Escritório</th>
                   <th className="py-2 pr-3">Owner</th>
                   <th className="py-2 pr-3">Status</th>
+                  <th className="py-2 pr-3">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -179,7 +227,7 @@ export default function AdminUsersPage() {
                     <td className="py-2 pr-3">{user.name}</td>
                     <td className="py-2 pr-3">{user.email}</td>
                     <td className="py-2 pr-3">{user.role}</td>
-                    <td className="py-2 pr-3">{user.office}</td>
+                    <td className="py-2 pr-3">{user.role === Role.MASTER ? "-" : user.office}</td>
                     <td className="py-2 pr-3">
                       {user.owner ? `${user.owner.name} (${user.owner.email})` : "-"}
                     </td>
@@ -190,123 +238,33 @@ export default function AdminUsersPage() {
                         <span className="text-red-600">Inativo</span>
                       )}
                     </td>
+                    <td className="py-2 pr-3">
+                      <button
+                        className="text-slate-600 hover:text-slate-900"
+                        onClick={() => openEditDrawer(user)}
+                      >
+                        Editar
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
-
-        <div className="rounded-xl border bg-white p-4 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900 mb-3">Novo usuário</h2>
-          {error ? <div className="text-sm text-red-600 mb-2">{error}</div> : null}
-          <form className="space-y-3" onSubmit={handleSubmit}>
-            {session?.user.role === Role.MASTER ? (
-              <div className="space-y-1">
-                <label className="text-xs text-slate-600">Escritório</label>
-                <select
-                  value={form.office}
-                  onChange={(e) => setForm({ ...form, office: e.target.value as Office })}
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                >
-                  <option value={Office.JLC_TECH}>JLC Tech</option>
-                  <option value={Office.SAFE_TI}>Safe TI</option>
-                </select>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                <label className="text-xs text-slate-600">Escritório</label>
-                <input
-                  value={users.find((u) => u.id === session?.user.id)?.office ?? ""}
-                  disabled
-                  className="w-full border rounded-lg px-3 py-2 text-sm bg-slate-100"
-                />
-                {session?.user.role === Role.PROPRIETARIO ? (
-                  <p className="text-xs text-slate-500">
-                    Consultores criados neste espaço automaticamente herdam seu escritório.
-                  </p>
-                ) : null}
-              </div>
-            )}
-            <div className="space-y-1">
-              <label className="text-xs text-slate-600">Nome</label>
-              <input
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2 text-sm"
-                required
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-slate-600">Email</label>
-              <input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2 text-sm"
-                required
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-slate-600">Senha</label>
-              <input
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2 text-sm"
-                required
-              />
-            </div>
-            {session?.user.role === Role.MASTER ? (
-              <div className="space-y-1">
-                <label className="text-xs text-slate-600">Perfil</label>
-                <select
-                  value={form.role}
-                  onChange={(e) => setForm({ ...form, role: e.target.value as Role })}
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                >
-                  <option value={Role.PROPRIETARIO}>PROPRIETÁRIO</option>
-                  <option value={Role.CONSULTOR}>CONSULTOR</option>
-                </select>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                <label className="text-xs text-slate-600">Perfil</label>
-                <input
-                  value="CONSULTOR"
-                  disabled
-                  className="w-full border rounded-lg px-3 py-2 text-sm bg-slate-100"
-                />
-              </div>
-            )}
-            {session?.user.role === Role.MASTER && form.role === Role.CONSULTOR ? (
-              <div className="space-y-1">
-                <label className="text-xs text-slate-600">Proprietário responsável</label>
-                <select
-                  value={form.ownerId}
-                  onChange={(e) => setForm({ ...form, ownerId: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                  required
-                >
-                  <option value="">Selecione</option>
-                  {owners.map((owner) => (
-                    <option key={owner.id} value={owner.id}>
-                      {owner.name} ({owner.email})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : null}
-            <button
-              type="submit"
-              disabled={saving}
-              className="w-full rounded-lg bg-slate-900 text-white py-2 text-sm font-semibold hover:bg-slate-800 disabled:opacity-50"
-            >
-              {saving ? "Salvando..." : "Criar usuário"}
-            </button>
-          </form>
-        </div>
+        )}
       </div>
+
+      <UserDrawer
+        open={drawerOpen}
+        mode={drawerMode}
+        user={selectedUser ?? undefined}
+        offices={offices}
+        owners={ownerOptions}
+        isSubmitting={drawerSubmitting}
+        onClose={closeDrawer}
+        onSubmit={handleUserSubmit}
+        onResetPassword={drawerMode === "edit" ? handleResetPassword : undefined}
+      />
     </div>
   );
 }
