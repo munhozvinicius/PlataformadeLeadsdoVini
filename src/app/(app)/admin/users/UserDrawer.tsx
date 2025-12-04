@@ -99,7 +99,6 @@ export default function UserDrawer({
   const isGS = role === Role.GERENTE_SENIOR;
   const isGN = role === Role.GERENTE_NEGOCIOS;
   const isSingleOffice = role === Role.PROPRIETARIO || role === Role.CONSULTOR;
-  const showOffice = !isGS;
   const showMultiOffice = isGN;
   const showSingleOffice = isSingleOffice;
   const showOwnerSelect = requiresOwner && !isProprietario(currentUserRole);

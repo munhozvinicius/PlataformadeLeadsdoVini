@@ -6,7 +6,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Office, Role, Profile, Prisma } from "@prisma/client";
-import { canManageUsers, isMaster, isProprietario } from "@/lib/authRoles";
+import { canManageUsers, isProprietario } from "@/lib/authRoles";
 
 const USER_SELECT = {
   id: true,
@@ -156,7 +156,6 @@ export async function POST(req: Request) {
       const allOffices = Object.values(Office);
       await prisma.userOffice.createMany({
         data: allOffices.map((office) => ({ userId: user.id, office })),
-        skipDuplicates: true,
       });
     } else if (role === Role.GERENTE_NEGOCIOS) {
       if (!officesForEnum.length) {
@@ -167,7 +166,6 @@ export async function POST(req: Request) {
       }
       await prisma.userOffice.createMany({
         data: officesForEnum.map((office) => ({ userId: user.id, office })),
-        skipDuplicates: true,
       });
     } else if (role === Role.PROPRIETARIO || role === Role.CONSULTOR) {
       if (!officesForEnum.length) {
