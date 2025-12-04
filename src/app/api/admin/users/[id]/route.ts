@@ -6,7 +6,13 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Role, Profile, Prisma } from "@prisma/client";
-import { canManageUsers, isMaster, isProprietario } from "@/lib/authRoles";
+import {
+  canManageUsers,
+  isGerenteNegocios,
+  isGerenteSenior,
+  isMaster,
+  isProprietario,
+} from "@/lib/authRoles";
 
 export async function PATCH(req: Request, { params }: { params: { id?: string } }) {
   const session = await getServerSession(authOptions);
@@ -56,6 +62,10 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
   if (name) updates.name = name;
   if (email) updates.email = email;
 
+  const isManagerRole = isGerenteSenior(sessionRole) || isGerenteNegocios(sessionRole);
+  if (isManagerRole && role && role !== Role.CONSULTOR) {
+    return NextResponse.json({ message: "Gerentes só podem manter consultores" }, { status: 403 });
+  }
   if (role) {
     if (isProprietario(sessionRole) && role !== Role.CONSULTOR) {
       return NextResponse.json({ message: "Proprietário só pode manter consultores" }, { status: 401 });
@@ -64,9 +74,9 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
     updates.profile = role as Profile;
   }
 
-  const requiresOffice = ([Role.PROPRIETARIO, Role.CONSULTOR, Role.GERENTE_NEGOCIOS] as Role[]).includes(
-    finalRole
-  );
+  const requiresOffice = (
+    [Role.PROPRIETARIO, Role.CONSULTOR, Role.GERENTE_NEGOCIOS, Role.GERENTE_SENIOR] as Role[]
+  ).includes(finalRole);
   if (officeId && !isProprietario(sessionRole)) {
     const officeRecord = await prisma.officeRecord.findUnique({ where: { id: officeId } });
     if (!officeRecord) {
@@ -142,6 +152,7 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
     });
     return NextResponse.json(updated);
   } catch (error: unknown) {
+    console.error("Error in /api/admin/users/[id] PATCH:", error);
     const code = (error as { code?: string })?.code;
     if (code === "P2002") {
       return NextResponse.json({ message: "Email já cadastrado" }, { status: 409 });

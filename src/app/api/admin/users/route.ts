@@ -6,7 +6,13 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Office, Role, Profile, Prisma } from "@prisma/client";
-import { canManageUsers, isMaster, isProprietario } from "@/lib/authRoles";
+import {
+  canManageUsers,
+  isMaster,
+  isProprietario,
+  isGerenteNegocios,
+  isGerenteSenior,
+} from "@/lib/authRoles";
 
 const USER_SELECT = {
   id: true,
@@ -80,7 +86,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Perfil inválido" }, { status: 400 });
   }
 
-  const requiresOffice = [Role.PROPRIETARIO, Role.CONSULTOR, Role.GERENTE_NEGOCIOS].includes(role);
+  const requiresOffice = [
+    Role.PROPRIETARIO,
+    Role.CONSULTOR,
+    Role.GERENTE_NEGOCIOS,
+    Role.GERENTE_SENIOR,
+  ].includes(role);
   const requiresOwner = role === Role.CONSULTOR;
 
   const sessionUser = await prisma.user.findUnique({ where: { id: session.user.id } });
@@ -88,6 +99,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Sessão inválida" }, { status: 401 });
   }
 
+  const isManagerRole = isGerenteSenior(sessionRole) || isGerenteNegocios(sessionRole);
+  if (isManagerRole && role !== Role.CONSULTOR) {
+    return NextResponse.json({ message: "Gerentes só podem criar consultores" }, { status: 403 });
+  }
   if (isProprietario(sessionRole) && role !== Role.CONSULTOR) {
     return NextResponse.json({ message: "Proprietário só pode criar consultores" }, { status: 403 });
   }
@@ -98,6 +113,8 @@ export async function POST(req: Request) {
     officeRecord = await prisma.officeRecord.findUnique({ where: { id: sessionOfficeId } });
   } else if (requiresOffice && officeId) {
     officeRecord = await prisma.officeRecord.findUnique({ where: { id: officeId } });
+  } else if (requiresOffice) {
+    return NextResponse.json({ message: "Escritório é obrigatório para este perfil" }, { status: 400 });
   } else {
     officeRecord = await fetchDefaultOffice();
   }
@@ -150,6 +167,7 @@ export async function POST(req: Request) {
     });
     return NextResponse.json(user, { status: 201 });
   } catch (error: unknown) {
+    console.error("Error in /api/admin/users POST:", error);
     const code = (error as { code?: string })?.code;
     if (code === "P2002") {
       return NextResponse.json({ message: "Email já cadastrado" }, { status: 409 });
