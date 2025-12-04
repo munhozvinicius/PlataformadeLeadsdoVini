@@ -1,7 +1,7 @@
 "use client";
 
 import { Office, Role } from "@prisma/client";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { isProprietario } from "@/lib/authRoles";
 
 export type OwnerOption = {
@@ -90,6 +90,7 @@ export default function UserDrawer({
   const [error, setError] = useState("");
   const [resetMessage, setResetMessage] = useState<string | null>(null);
   const [isResetting, setIsResetting] = useState(false);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
   const requiresOwner = ownerRoles.includes(role);
   const showOfficeSelect = role === Role.PROPRIETARIO || officeRoles.includes(role);
@@ -220,13 +221,13 @@ export default function UserDrawer({
   const submitLabel = mode === "create" ? "Criar usuário" : "Salvar alterações";
 
   return (
-    <div className="fixed inset-0 z-50 flex">
+    <div className="fixed inset-0 z-50 flex" onClick={onClose}>
+      <div className="absolute inset-0 bg-slate-900/40" aria-hidden="true" />
       <div
-        className="absolute inset-0 bg-slate-900/40"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <div className="ml-auto h-full w-full max-w-md bg-white p-6 shadow-lg">
+        ref={panelRef}
+        className="ml-auto h-full w-full max-w-md bg-white p-6 shadow-lg"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-slate-900">{heading}</h3>
           <button
