@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
-import { Office, Role } from "@prisma/client";
+import { Office, Role, Profile } from "@prisma/client";
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -12,13 +12,13 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const { name, email, password, role, office, ownerId } = body;
+  const { name, email, password, role, profile, office, ownerId } = body;
 
-  if (!name || !email || !password || !role || !office) {
+  if (!name || !email || !password || (!role && !profile) || !office) {
     return NextResponse.json({ message: "Missing fields" }, { status: 400 });
   }
 
-  if (!Object.values(Role).includes(role)) {
+  if (role && !Object.values(Role).includes(role)) {
     return NextResponse.json({ message: "Invalid role" }, { status: 400 });
   }
 
@@ -27,11 +27,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Invalid office" }, { status: 400 });
   }
 
-  if (role === Role.CONSULTOR && !ownerId) {
+  const profileValue = (profile ?? role) as Profile | undefined;
+  if (!profileValue || !Object.values(Profile).includes(profileValue)) {
+    return NextResponse.json({ message: "Invalid profile" }, { status: 400 });
+  }
+
+  if (profileValue === Profile.CONSULTOR && !ownerId) {
     return NextResponse.json({ message: "Consultor precisa de proprietário" }, { status: 400 });
   }
 
-  const officeRecord = await prisma.officeRecord.findUnique({ where: { code: officeEnum } });
+  const officeRecord = await prisma.officeRecord.findUnique({ where: { office: officeEnum } });
   if (!officeRecord) {
     return NextResponse.json({ message: "Escritório não encontrado" }, { status: 400 });
   }
@@ -42,16 +47,26 @@ export async function POST(req: Request) {
       name,
       email,
       password: hashed,
-      role,
+      role: role ?? (profileValue as Role),
+      profile: profileValue,
       office: officeEnum,
       officeRecord: {
         connect: {
           id: officeRecord.id,
         },
       },
-      ownerId: role === Role.CONSULTOR ? ownerId : null,
+      ...(profileValue === Profile.CONSULTOR ? { owner: { connect: { id: ownerId } } } : {}),
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      profile: true,
+      office: true,
+      officeRecord: true,
+      owner: true,
     },
   });
 
-  return NextResponse.json({ id: user.id, email: user.email, role: user.role }, { status: 201 });
+  return NextResponse.json(user, { status: 201 });
 }

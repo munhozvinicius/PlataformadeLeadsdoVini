@@ -5,14 +5,16 @@ import bcrypt from "bcryptjs";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Office, Role } from "@prisma/client";
+import { Office, Role, Profile } from "@prisma/client";
 
 const USER_SELECT = {
   id: true,
   name: true,
   email: true,
   role: true,
+  profile: true,
   office: true,
+  officeRecord: true,
   active: true,
   owner: { select: { id: true, name: true, email: true } },
 };
@@ -54,7 +56,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const { name, email, password, role: targetRole, office, ownerId } = body;
+  const { name, email, password, role: targetRole, profile, office, ownerId } = body;
 
   if (!name || !email || !password || !targetRole || !office) {
     return NextResponse.json({ message: "Missing fields" }, { status: 400 });
@@ -96,9 +98,14 @@ export async function POST(req: Request) {
   }
 
   const hashed = await bcrypt.hash(password, 10);
-  const officeRecord = await prisma.officeRecord.findUnique({ where: { code: officeEnum } });
+  const officeRecord = await prisma.officeRecord.findUnique({ where: { office: officeEnum } });
   if (!officeRecord) {
     return NextResponse.json({ message: "Escritório não encontrado" }, { status: 400 });
+  }
+
+  const profileValue = (profile ?? targetRole) as Profile | undefined;
+  if (!profileValue || !Object.values(Profile).includes(profileValue)) {
+    return NextResponse.json({ message: "Invalid profile" }, { status: 400 });
   }
 
   try {
@@ -108,21 +115,30 @@ export async function POST(req: Request) {
         email,
         password: hashed,
         role: targetRole,
+        profile: profileValue,
         office: officeEnum,
         officeRecord: {
           connect: {
             id: officeRecord.id,
           },
         },
-        ...(targetRole === Role.CONSULTOR ? { ownerId: creatorOwnerId as string } : {}),
+        ...(targetRole === Role.CONSULTOR && creatorOwnerId
+          ? { owner: { connect: { id: creatorOwnerId } } }
+          : {}),
         active: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        profile: true,
+        office: true,
+        officeRecord: true,
+        owner: true,
       },
     });
 
-    return NextResponse.json(
-      { id: user.id, name: user.name, email: user.email, role: user.role, office: user.office },
-      { status: 201 }
-    );
+    return NextResponse.json(user, { status: 201 });
   } catch (err: unknown) {
     const code = (err as { code?: string })?.code;
     if (code === "P2002") {

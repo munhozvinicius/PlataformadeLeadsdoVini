@@ -1,5 +1,5 @@
 /* eslint-disable no-console */
-const { PrismaClient, Role, Office } = require("@prisma/client");
+const { PrismaClient, Role, Office, Profile } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
 
 const prisma = new PrismaClient();
@@ -42,17 +42,17 @@ async function main() {
 
   // Offices
   const offices = [
-    { code: Office.JLC_TECH, name: "JLC Tech" },
-    { code: Office.SAFE_TI, name: "Safe TI" },
+    { office: Office.JLC_TECH, name: "JLC Tech" },
+    { office: Office.SAFE_TI, name: "Safe TI" },
   ];
   const officeIds = {};
   for (const office of offices) {
     const o = await prisma.officeRecord.upsert({
-      where: { code: office.code },
+      where: { office: office.office },
       update: { name: office.name },
-      create: { code: office.code, name: office.name },
+      create: { office: office.office, name: office.name },
     });
-    officeIds[office.code] = o.id;
+    officeIds[office.office] = o.id;
   }
 
   const connectOffice = (code) => {
@@ -72,6 +72,7 @@ async function main() {
         name: u.name,
         password: hashed,
         role: u.role,
+        profile: u.role,
         office: u.office,
         ...officeConnection,
       },
@@ -80,6 +81,7 @@ async function main() {
         email: u.email,
         password: hashed,
         role: u.role,
+        profile: u.role,
         office: u.office,
         ...officeConnection,
       },
@@ -98,8 +100,9 @@ async function main() {
         name: u.name,
         password: hashed,
         role: u.role,
-        ownerId,
+        profile: u.role,
         office: u.office,
+        owner: ownerId ? { connect: { id: ownerId } } : undefined,
         ...officeConnection,
       },
       create: {
@@ -107,8 +110,9 @@ async function main() {
         email: u.email,
         password: hashed,
         role: u.role,
-        ownerId,
+        profile: u.role,
         office: u.office,
+        owner: ownerId ? { connect: { id: ownerId } } : undefined,
         ...officeConnection,
       },
     });

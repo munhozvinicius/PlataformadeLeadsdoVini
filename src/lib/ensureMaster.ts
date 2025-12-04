@@ -1,22 +1,22 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { Office, Role, Prisma } from "@prisma/client";
+import { Office, Role, Profile, Prisma } from "@prisma/client";
 
 let masterSeeded = false;
 
 async function ensureOffices() {
   const offices = [
-    { code: Office.JLC_TECH, name: "JLC Tech" },
-    { code: Office.SAFE_TI, name: "Safe TI" },
+    { office: Office.JLC_TECH, name: "JLC Tech" },
+    { office: Office.SAFE_TI, name: "Safe TI" },
   ];
   const records: Record<Office, { id: string }> = {} as Record<Office, { id: string }>;
   for (const office of offices) {
     const record = await prisma.officeRecord.upsert({
-      where: { code: office.code },
+      where: { office: office.office },
       update: { name: office.name },
-      create: { code: office.code, name: office.name },
+      create: { office: office.office, name: office.name },
     });
-    records[office.code] = record;
+    records[office.office] = record;
   }
   return records;
 }
@@ -42,6 +42,7 @@ export async function ensureMasterUser() {
     if (existingByEmail.role !== Role.MASTER) {
       updates.role = Role.MASTER;
       updates.ownerId = null;
+      updates.profile = Profile.MASTER;
       updates.office = defaultOfficeCode;
       if (defaultOfficeRecordConnect) {
         updates.officeRecord = defaultOfficeRecordConnect;
@@ -71,6 +72,7 @@ export async function ensureMasterUser() {
       email,
       password: hashed,
       role: Role.MASTER,
+      profile: Profile.MASTER,
       office: defaultOfficeCode,
       ...(defaultOfficeRecordConnect ? { officeRecord: defaultOfficeRecordConnect } : {}),
       active: true,

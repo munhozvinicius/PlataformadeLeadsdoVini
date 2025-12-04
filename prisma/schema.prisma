@@ -13,6 +13,12 @@ enum Role {
   CONSULTOR
 }
 
+enum Profile {
+  MASTER
+  PROPRIETARIO
+  CONSULTOR
+}
+
 enum Office {
   SAFE_TI
   JLC_TECH
@@ -40,6 +46,7 @@ model User {
   email        String        @unique
   password     String
   role         Role
+  profile      Profile
   office       Office
   officeId     String?       @db.ObjectId
   officeRecord OfficeRecord? @relation("OfficeUsers", fields: [officeId], references: [id])
@@ -158,7 +165,7 @@ model Lead {
 
 model OfficeRecord {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  code      Office   @unique
+  office    Office   @unique @map("code")
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
