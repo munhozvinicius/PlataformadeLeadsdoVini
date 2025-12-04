@@ -1,7 +1,7 @@
 "use client";
 
 import { Escritorio, Role } from "@prisma/client";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
@@ -44,10 +44,6 @@ export default function AdminUsersPage() {
     }
   }, [status, session, router]);
 
-  useEffect(() => {
-    loadUsers();
-  }, []);
-
   const owners = useMemo(
     () => users.filter((u) => u.role === Role.PROPRIETARIO && u.escritorio === form.escritorio),
     [users, form.escritorio]
@@ -66,15 +62,31 @@ export default function AdminUsersPage() {
   const showOwnerSelect =
     session?.user.role === Role.MASTER && form.role === Role.CONSULTOR;
 
-  async function loadUsers() {
+  const loadUsers = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/admin/users", { cache: "no-store" });
-    if (res.ok) {
+    setError("");
+    try {
+      const res = await fetch("/api/admin/users", { cache: "no-store" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body?.message ?? "Não foi possível carregar os usuários.");
+        return;
+      }
       const data = await res.json();
       setUsers(data);
+    } catch (err) {
+      console.error("Erro ao carregar usuários", err);
+      setError("Não foi possível carregar os usuários.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  }
+  }, []);
+
+  useEffect(() => {
+    if (status === "authenticated" && session?.user.role === Role.MASTER) {
+      loadUsers();
+    }
+  }, [status, session?.user.role, loadUsers]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
