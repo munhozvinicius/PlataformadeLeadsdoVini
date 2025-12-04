@@ -1,6 +1,6 @@
 "use client";
 
-import { Escritorio, Role } from "@prisma/client";
+import { Office, Role } from "@prisma/client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -10,9 +10,9 @@ type User = {
   name: string;
   email: string;
   role: Role;
-  escritorio?: Escritorio | null;
+  office: Office;
   owner?: { id: string; name: string; email: string };
-  isBlocked?: boolean;
+  active: boolean;
 };
 
 export default function AdminUsersPage() {
@@ -25,15 +25,15 @@ export default function AdminUsersPage() {
     email: string;
     password: string;
     role: Role;
-    owner: string;
-    escritorio: Escritorio;
+    ownerId: string;
+    office: Office;
   }>({
     name: "",
     email: "",
     password: "",
     role: Role.PROPRIETARIO,
-    owner: "",
-    escritorio: Escritorio.SAFE_TI,
+    ownerId: "",
+    office: Office.SAFE_TI,
   });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -45,8 +45,8 @@ export default function AdminUsersPage() {
   }, [status, session, router]);
 
   const owners = useMemo(
-    () => users.filter((u) => u.role === Role.PROPRIETARIO && u.escritorio === form.escritorio),
-    [users, form.escritorio]
+    () => users.filter((u) => u.role === Role.PROPRIETARIO && u.office === form.office),
+    [users, form.office]
   );
 
   const filteredUsers = useMemo(() => {
@@ -58,9 +58,6 @@ export default function AdminUsersPage() {
     }
     return users.filter((u) => u.id === session?.user.id);
   }, [users, session]);
-
-  const showOwnerSelect =
-    session?.user.role === Role.MASTER && form.role === Role.CONSULTOR;
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -101,7 +98,7 @@ export default function AdminUsersPage() {
       roleToSend === Role.CONSULTOR
         ? creatingAsProprietario
           ? session?.user.id
-          : form.owner
+          : form.ownerId
         : null;
 
     if (roleToSend === Role.CONSULTOR && !ownerIdToSend) {
@@ -110,10 +107,10 @@ export default function AdminUsersPage() {
       return;
     }
 
-    const escritorioToSend =
+    const officeToSend =
       creatingAsProprietario && session?.user.id
-        ? users.find((u) => u.id === session.user.id)?.escritorio ?? form.escritorio
-        : form.escritorio;
+        ? users.find((u) => u.id === session.user.id)?.office ?? form.office
+        : form.office;
 
     const payload = {
       name: form.name,
@@ -121,7 +118,7 @@ export default function AdminUsersPage() {
       password: form.password,
       role: roleToSend,
       ownerId: ownerIdToSend,
-      escritorio: escritorioToSend,
+      office: officeToSend,
     };
     const res = await fetch("/api/admin/users", {
       method: "POST",
@@ -138,8 +135,8 @@ export default function AdminUsersPage() {
       email: "",
       password: "",
       role: Role.PROPRIETARIO,
-      owner: "",
-      escritorio: Escritorio.SAFE_TI,
+      ownerId: "",
+      office: Office.SAFE_TI,
     });
     await loadUsers();
   }
@@ -173,6 +170,7 @@ export default function AdminUsersPage() {
                   <th className="py-2 pr-3">Perfil</th>
                   <th className="py-2 pr-3">Escritório</th>
                   <th className="py-2 pr-3">Owner</th>
+                  <th className="py-2 pr-3">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -181,9 +179,16 @@ export default function AdminUsersPage() {
                     <td className="py-2 pr-3">{user.name}</td>
                     <td className="py-2 pr-3">{user.email}</td>
                     <td className="py-2 pr-3">{user.role}</td>
-                    <td className="py-2 pr-3">{user.escritorio}</td>
+                    <td className="py-2 pr-3">{user.office}</td>
                     <td className="py-2 pr-3">
                       {user.owner ? `${user.owner.name} (${user.owner.email})` : "-"}
+                    </td>
+                    <td className="py-2 pr-3">
+                      {user.active ? (
+                        <span className="text-emerald-600">Ativo</span>
+                      ) : (
+                        <span className="text-red-600">Inativo</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -200,21 +205,19 @@ export default function AdminUsersPage() {
               <div className="space-y-1">
                 <label className="text-xs text-slate-600">Escritório</label>
                 <select
-                  value={form.escritorio}
-                  onChange={(e) =>
-                    setForm({ ...form, escritorio: e.target.value as Escritorio })
-                  }
+                  value={form.office}
+                  onChange={(e) => setForm({ ...form, office: e.target.value as Office })}
                   className="w-full border rounded-lg px-3 py-2 text-sm"
                 >
-                  <option value={Escritorio.JLC_TECH}>JLC Tech</option>
-                  <option value={Escritorio.SAFE_TI}>Safe TI</option>
+                  <option value={Office.JLC_TECH}>JLC Tech</option>
+                  <option value={Office.SAFE_TI}>Safe TI</option>
                 </select>
               </div>
             ) : (
               <div className="space-y-1">
                 <label className="text-xs text-slate-600">Escritório</label>
                 <input
-                  value={users.find((u) => u.id === session?.user.id)?.escritorio ?? ""}
+                  value={users.find((u) => u.id === session?.user.id)?.office ?? ""}
                   disabled
                   className="w-full border rounded-lg px-3 py-2 text-sm bg-slate-100"
                 />
@@ -276,12 +279,12 @@ export default function AdminUsersPage() {
                 />
               </div>
             )}
-            {showOwnerSelect ? (
+            {session?.user.role === Role.MASTER && form.role === Role.CONSULTOR ? (
               <div className="space-y-1">
                 <label className="text-xs text-slate-600">Proprietário responsável</label>
                 <select
-                  value={form.owner}
-                  onChange={(e) => setForm({ ...form, owner: e.target.value })}
+                  value={form.ownerId}
+                  onChange={(e) => setForm({ ...form, ownerId: e.target.value })}
                   className="w-full border rounded-lg px-3 py-2 text-sm"
                   required
                 >

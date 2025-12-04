@@ -87,7 +87,7 @@ export async function POST(req: Request) {
   let attributedLeads = 0;
   let notAttributedLeads = 0;
 
-  const offices = await prisma.office.findMany({
+  const offices = await prisma.officeRecord.findMany({
     select: { id: true, code: true, name: true },
   });
   const officeLookup = new Map<string, string>();

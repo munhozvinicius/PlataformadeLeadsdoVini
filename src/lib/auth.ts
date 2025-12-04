@@ -3,7 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { ensureMasterUser } from "@/lib/ensureMaster";
 import { prisma } from "@/lib/prisma";
-import { Escritorio, Role } from "@prisma/client";
+import { Office, Role } from "@prisma/client";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -25,15 +25,13 @@ export const authOptions: NextAuthOptions = {
             name: true,
             email: true,
             role: true,
-            passwordHash: true,
-            mustResetPassword: true,
-            isBlocked: true,
-            escritorio: true,
+            password: true,
+            office: true,
           },
         });
         if (!user) return null;
 
-        const isValid = await bcrypt.compare(credentials.password, user.passwordHash);
+        const isValid = await bcrypt.compare(credentials.password, user.password);
         if (!isValid) return null;
 
         return {
@@ -41,9 +39,7 @@ export const authOptions: NextAuthOptions = {
           name: user.name,
           email: user.email,
           role: user.role,
-          mustResetPassword: user.mustResetPassword,
-          isBlocked: user.isBlocked,
-          escritorio: user.escritorio,
+          office: user.office,
         };
       },
     }),
@@ -55,34 +51,27 @@ export const authOptions: NextAuthOptions = {
         const typedUser = user as {
           id: string;
           role?: Role;
-          mustResetPassword?: boolean;
-          isBlocked?: boolean;
-          escritorio?: Escritorio | null;
+          office?: Office | null;
         };
         token.id = typedUser.id;
         if (typedUser.role) {
           token.role = typedUser.role;
         }
-        token.mustResetPassword = Boolean(typedUser.mustResetPassword);
-        token.isBlocked = Boolean(typedUser.isBlocked);
-        if (typedUser.escritorio) {
-          token.escritorio = typedUser.escritorio;
+        if (typedUser.office) {
+          token.office = typedUser.office;
         }
       }
       return token;
     },
     async session({ session, token }) {
-      if (session.user) {
-        const id = token.id as string | undefined;
-        const role = token.role as Role | undefined;
-        if (id) session.user.id = id;
-        if (role) session.user.role = role;
-        session.user.mustResetPassword = Boolean(token.mustResetPassword);
-        session.user.isBlocked = Boolean(token.isBlocked);
-        if (token.escritorio) {
-          session.user.escritorio = token.escritorio;
+        if (session.user) {
+          const id = token.id as string | undefined;
+          const role = token.role as Role | undefined;
+          const office = token.office as Office | undefined;
+          if (id) session.user.id = id;
+          if (role) session.user.role = role;
+          if (office) session.user.office = office;
         }
-      }
       return session;
     },
   },

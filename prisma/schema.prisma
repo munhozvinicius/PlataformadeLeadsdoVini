@@ -9,16 +9,13 @@ datasource db {
 
 enum Role {
   MASTER
-  GERENTE_SENIOR
-  GERENTE_CONTAS
   PROPRIETARIO
   CONSULTOR
 }
 
-enum Escritorio {
-  JLC_TECH
+enum Office {
   SAFE_TI
-  NONE
+  JLC_TECH
 }
 
 enum LeadStatus {
@@ -38,148 +35,145 @@ enum ActivityChannel {
 }
 
 model User {
-  id                 String   @id @default(auto()) @map("_id") @db.ObjectId
-  name               String
-  email              String   @unique
-  passwordHash       String
-  role               Role
-  companyTag         String?
-  ativo              Boolean  @default(true)
-  escritorio         Escritorio @default(NONE)
-  officeId           String?  @db.ObjectId
-  office             Office?  @relation(fields: [officeId], references: [id])
-  ownerId            String?  @db.ObjectId
-  owner              User?    @relation("OwnerConsultor", fields: [ownerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  team               User[]   @relation("OwnerConsultor")
-  mustResetPassword  Boolean  @default(false)
-  isBlocked          Boolean  @default(false)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id           String        @id @default(cuid()) @map("_id") @db.ObjectId
+  name         String
+  email        String        @unique
+  password     String
+  role         Role
+  office       Office
+  officeId     String?       @db.ObjectId
+  officeRecord OfficeRecord? @relation("OfficeUsers", fields: [officeId], references: [id])
+  ownerId      String?       @db.ObjectId
+  owner        User?         @relation("OwnerConsultor", fields: [ownerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  consultores  User[]        @relation("OwnerConsultor")
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
-  leadsAssigned      Lead[]   @relation("AssignedLeads")
-  leadsOwned         Lead[]   @relation("LeadOwner")
-  leadActivities     LeadActivity[] @relation("UserLeadActivities")
-  importBatches      ImportBatch[] @relation("UserImportBatches")
-  leadNotes          LeadNote[]
-  leadLosses         LeadLoss[]
+  leadsAssigned              Lead[]            @relation("AssignedLeads")
+  leadsOwned                 Lead[]            @relation("LeadOwner")
+  leadActivities             LeadActivity[]    @relation("UserLeadActivities")
+  importBatches              ImportBatch[]     @relation("UserImportBatches")
+  leadNotes                  LeadNote[]
+  leadLosses                 LeadLoss[]
   adminDistributionLogs      DistributionLog[] @relation("AdminDistributionLog")
   consultantDistributionLogs DistributionLog[] @relation("ConsultantDistributionLog")
-  leadHistories     LeadHistory[] @relation("UserLeadHistory")
+  leadHistories              LeadHistory[]     @relation("UserLeadHistory")
 }
 
 model Campanha {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  nome        String
-  descricao   String?
-  parceiro    String?
-  objetivo    String?
-  vertical    String?
-  regiaoUf    String?
-  regiaoCidade String?
-  observacoes String?
-  status      String?   @default("ATIVA")
-  periodoInicio DateTime?
-  periodoFim   DateTime?
-  createdAt   DateTime @default(now())
-  createdById String?  @db.ObjectId
-  totalLeads      Int     @default(0)
-  assignedLeads   Int     @default(0)
-  remainingLeads  Int     @default(0)
-  isActive        Boolean @default(true)
+  id             String    @id @default(auto()) @map("_id") @db.ObjectId
+  nome           String
+  descricao      String?
+  parceiro       String?
+  objetivo       String?
+  vertical       String?
+  regiaoUf       String?
+  regiaoCidade   String?
+  observacoes    String?
+  status         String?   @default("ATIVA")
+  periodoInicio  DateTime?
+  periodoFim     DateTime?
+  createdAt      DateTime  @default(now())
+  createdById    String?   @db.ObjectId
+  totalLeads     Int       @default(0)
+  assignedLeads  Int       @default(0)
+  remainingLeads Int       @default(0)
+  isActive       Boolean   @default(true)
 
-  leadsBrutos Lead[]   @relation("CampanhaLeads")
-  importBatches ImportBatch[]
-  activities    LeadActivity[]
+  leadsBrutos      Lead[]            @relation("CampanhaLeads")
+  importBatches    ImportBatch[]
+  activities       LeadActivity[]
   distributionLogs DistributionLog[] @relation("CampanhaDistributionLogs")
 }
 
 model Lead {
-  id            String      @id @default(auto()) @map("_id") @db.ObjectId
-  campanhaId    String      @db.ObjectId
-  campanha      Campanha    @relation("CampanhaLeads", fields: [campanhaId], references: [id])
-  importBatchId String?     @db.ObjectId
+  id            String       @id @default(auto()) @map("_id") @db.ObjectId
+  campanhaId    String       @db.ObjectId
+  campanha      Campanha     @relation("CampanhaLeads", fields: [campanhaId], references: [id])
+  importBatchId String?      @db.ObjectId
   importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
 
-  cnpj          String?
-  documento     String?
-  razaoSocial   String?
-  nomeFantasia  String?
-  vertical      String?
-  cidade        String?
-  estado        String?
-  telefone      String?
-  email         String?
-  telefone1     String?
-  telefone2     String?
-  telefone3     String?
-  logradouro    String?
-  numero        String?
-  bairro        String?
-  cep           String?
-  endereco      String?
-  territorio    String?
-  ofertaMkt     String?
-  estrategia    String?
-  armario       String?
-  idPruma       String?
+  cnpj           String?
+  documento      String?
+  razaoSocial    String?
+  nomeFantasia   String?
+  vertical       String?
+  cidade         String?
+  estado         String?
+  telefone       String?
+  email          String?
+  telefone1      String?
+  telefone2      String?
+  telefone3      String?
+  logradouro     String?
+  numero         String?
+  bairro         String?
+  cep            String?
+  endereco       String?
+  territorio     String?
+  ofertaMkt      String?
+  estrategia     String?
+  armario        String?
+  idPruma        String?
   vlFatPresumido String?
-  cnae          String?
+  cnae           String?
 
-  status        LeadStatus  @default(NOVO)
-  consultorId   String?     @db.ObjectId
-  consultor     User?       @relation("AssignedLeads", fields: [consultorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  ownerId       String?     @db.ObjectId
-  owner         User?       @relation("LeadOwner", fields: [ownerId], references: [id])
-  officeId      String?     @db.ObjectId
-  office        Office?     @relation(fields: [officeId], references: [id])
-  escritorio    Escritorio  @default(NONE)
-  historico     Json?
-  raw           Json?
+  status             LeadStatus    @default(NOVO)
+  consultorId        String?       @db.ObjectId
+  consultor          User?         @relation("AssignedLeads", fields: [consultorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ownerId            String?       @db.ObjectId
+  owner              User?         @relation("LeadOwner", fields: [ownerId], references: [id])
+  officeId           String?       @db.ObjectId
+  officeRecord       OfficeRecord? @relation(fields: [officeId], references: [id])
+  escritorio         Office        @default(SAFE_TI)
+  historico          Json?
+  raw                Json?
   lastStatusChangeAt DateTime?
-  lastInteractionAt DateTime?
-  interactionCount  Int      @default(0)
-  isWorked      Boolean     @default(false)
-  lastActivityAt DateTime?
-  lastOutcomeCode String?
-  lastOutcomeLabel String?
-  lastOutcomeNote  String?
-  nextFollowUpAt   DateTime?
-  nextStepNote     String?
-  telefones        Json?
-  emails           String[]
-  site             String?
-  contatoPrincipal Json?
-  observacoesGerais String?
-  origem           String?
-  externalData     Json?
+  lastInteractionAt  DateTime?
+  interactionCount   Int           @default(0)
+  isWorked           Boolean       @default(false)
+  lastActivityAt     DateTime?
+  lastOutcomeCode    String?
+  lastOutcomeLabel   String?
+  lastOutcomeNote    String?
+  nextFollowUpAt     DateTime?
+  nextStepNote       String?
+  telefones          Json?
+  emails             String[]
+  site               String?
+  contatoPrincipal   Json?
+  observacoesGerais  String?
+  origem             String?
+  externalData       Json?
 
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  activities    LeadActivity[]
-  notes         LeadNote[]
-  losses        LeadLoss[]
-  histories     LeadHistory[] @relation("LeadToHistories")
+  activities LeadActivity[]
+  notes      LeadNote[]
+  losses     LeadLoss[]
+  histories  LeadHistory[]  @relation("LeadToHistories")
 }
 
-model Office {
+model OfficeRecord {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  code      Escritorio @unique
+  code      Office   @unique
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  users     User[]
+  users     User[]   @relation("OfficeUsers")
   leads     Lead[]
 }
 
 model LeadActivity {
-  id             String        @id @default(auto()) @map("_id") @db.ObjectId
-  leadId         String        @db.ObjectId
-  lead           Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  userId         String        @db.ObjectId
-  user           User          @relation("UserLeadActivities", fields: [userId], references: [id])
-  campaignId     String        @db.ObjectId
-  campaign       Campanha      @relation(fields: [campaignId], references: [id])
+  id             String           @id @default(auto()) @map("_id") @db.ObjectId
+  leadId         String           @db.ObjectId
+  lead           Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId         String           @db.ObjectId
+  user           User             @relation("UserLeadActivities", fields: [userId], references: [id])
+  campaignId     String           @db.ObjectId
+  campaign       Campanha         @relation(fields: [campaignId], references: [id])
   activityType   String
   channel        ActivityChannel?
   outcomeCode    String?
@@ -189,8 +183,8 @@ model LeadActivity {
   stageAfter     LeadStatus?
   nextFollowUpAt DateTime?
   nextStepNote   String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   @@index([leadId])
   @@index([userId])
@@ -198,21 +192,21 @@ model LeadActivity {
 }
 
 model ImportBatch {
-  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  id                  String   @id @default(auto()) @map("_id") @db.ObjectId
   nomeArquivoOriginal String
   fileName            String?
-  campaignId          String    @db.ObjectId
-  campaign            Campanha  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaignId          String   @db.ObjectId
+  campaign            Campanha @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   totalLeads          Int
-  importedLeads       Int       @default(0)
-  attributedLeads     Int       @default(0)
-  notAttributedLeads  Int       @default(0)
-  duplicatedLeads     Int       @default(0)
-  status              String    @default("completed")
+  importedLeads       Int      @default(0)
+  attributedLeads     Int      @default(0)
+  notAttributedLeads  Int      @default(0)
+  duplicatedLeads     Int      @default(0)
+  status              String   @default("completed")
   errorMessage        String?
-  criadoPorId         String?   @db.ObjectId
-  criadoPor           User?     @relation("UserImportBatches", fields: [criadoPorId], references: [id])
-  createdAt           DateTime  @default(now())
+  criadoPorId         String?  @db.ObjectId
+  criadoPor           User?    @relation("UserImportBatches", fields: [criadoPorId], references: [id])
+  createdAt           DateTime @default(now())
   leads               Lead[]
 }
 
@@ -225,9 +219,9 @@ model DistributionLog {
   rulesApplied String?
   createdAt    DateTime @default(now())
 
-  campaign     Campanha @relation("CampanhaDistributionLogs", fields: [campaignId], references: [id])
-  admin        User     @relation("AdminDistributionLog", fields: [adminId], references: [id])
-  consultant   User     @relation("ConsultantDistributionLog", fields: [consultantId], references: [id])
+  campaign   Campanha @relation("CampanhaDistributionLogs", fields: [campaignId], references: [id])
+  admin      User     @relation("AdminDistributionLog", fields: [adminId], references: [id])
+  consultant User     @relation("ConsultantDistributionLog", fields: [consultantId], references: [id])
 }
 
 model LeadHistory {
@@ -256,14 +250,14 @@ model LeadNote {
 }
 
 model LeadLoss {
-  id           String   @id @default(auto()) @map("_id") @db.ObjectId
-  leadId       String   @db.ObjectId
-  lead         Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  userId       String   @db.ObjectId
-  user         User     @relation(fields: [userId], references: [id])
-  motivo       String
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  leadId        String   @db.ObjectId
+  lead          Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId        String   @db.ObjectId
+  user          User     @relation(fields: [userId], references: [id])
+  motivo        String
   justificativa String
-  createdAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
 
   @@index([leadId])
   @@index([userId])

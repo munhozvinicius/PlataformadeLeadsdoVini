@@ -1,21 +1,24 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { Escritorio, Role } from "@prisma/client";
+import { Office, Role } from "@prisma/client";
 
 let masterSeeded = false;
 
 async function ensureOffices() {
   const offices = [
-    { code: Escritorio.JLC_TECH, name: "JLC Tech" },
-    { code: Escritorio.SAFE_TI, name: "Safe TI" },
+    { code: Office.JLC_TECH, name: "JLC Tech" },
+    { code: Office.SAFE_TI, name: "Safe TI" },
   ];
+  const records: Record<Office, { id: string }> = {} as Record<Office, { id: string }>;
   for (const office of offices) {
-    await prisma.office.upsert({
+    const record = await prisma.officeRecord.upsert({
       where: { code: office.code },
       update: { name: office.name },
       create: { code: office.code, name: office.name },
     });
+    records[office.code] = record;
   }
+  return records;
 }
 
 // Ensures there is at least one MASTER user in the database.
@@ -23,7 +26,8 @@ async function ensureOffices() {
 export async function ensureMasterUser() {
   if (masterSeeded) return;
 
-  await ensureOffices();
+  const officeRecords = await ensureOffices();
+  const defaultOffice = officeRecords[Office.SAFE_TI];
 
   const email = process.env.MASTER_EMAIL || "munhoz.vinicius@gmail.com";
   const password = process.env.MASTER_PASSWORD || "Theforce85!!";
@@ -34,18 +38,12 @@ export async function ensureMasterUser() {
     if (existingByEmail.role !== Role.MASTER) {
       updates.role = Role.MASTER;
       updates.ownerId = null;
-      updates.officeId = null;
-      updates.escritorio = Escritorio.NONE;
+      updates.office = defaultOffice?.code ?? Office.SAFE_TI;
+      updates.officeId = defaultOffice?.id ?? null;
     }
-    const matches = await bcrypt.compare(password, existingByEmail.passwordHash);
+    const matches = await bcrypt.compare(password, existingByEmail.password);
     if (!matches) {
-      updates.passwordHash = await bcrypt.hash(password, 10);
-    }
-    if (existingByEmail.mustResetPassword) {
-      updates.mustResetPassword = false;
-    }
-    if (existingByEmail.isBlocked) {
-      updates.isBlocked = false;
+      updates.password = await bcrypt.hash(password, 10);
     }
     if (Object.keys(updates).length > 0) {
       await prisma.user.update({ where: { id: existingByEmail.id }, data: updates });
@@ -65,11 +63,11 @@ export async function ensureMasterUser() {
     data: {
       name: "Vinicius Munhoz",
       email,
-      passwordHash: hashed,
+      password: hashed,
       role: Role.MASTER,
-      escritorio: Escritorio.NONE,
-      mustResetPassword: false,
-      isBlocked: false,
+      office: defaultOffice?.code ?? Office.SAFE_TI,
+      officeId: defaultOffice?.id ?? null,
+      active: true,
     },
   });
   masterSeeded = true;

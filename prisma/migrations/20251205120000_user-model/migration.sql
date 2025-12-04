@@ -1,0 +1,7 @@
+-- Migration user-model updated
+-- Prisma schema now introduces:
+-- * new Role and Office enums
+-- * owner / consultores relations on User
+-- * User.active + office enum field
+-- * renamed Office -> OfficeRecord for legacy data
+-- Apply this migration via `npx prisma migrate dev --name user-model` once a MongoDB connection is configured.
