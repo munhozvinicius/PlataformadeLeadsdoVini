@@ -39,11 +39,6 @@ type OfficeRecordDto = {
   createdAt: string;
 };
 
-const OFFICE_LABELS: Record<Office, string> = {
-  SAFE_TI: "Safe TI",
-  JLC_TECH: "JLC Tech",
-};
-
 function generatePassword() {
   return `P${Math.random().toString(36).slice(2, 10)}!`;
 }
