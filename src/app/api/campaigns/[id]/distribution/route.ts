@@ -9,7 +9,7 @@ import { LeadStatus, Prisma, Role } from "@prisma/client";
 
 type Params = { params: { id: string } };
 
-type ConsultantDetail = { id: string; officeId?: string | null };
+type ConsultantDetail = { id: string; officeRecordId?: string | null };
 
 type LeadAssignment = Record<string, string[]>;
 
@@ -207,24 +207,24 @@ export async function POST(req: NextRequest, { params }: Params) {
     let targetConsultants: ConsultantDetail[] = [];
 
     if (takeAll) {
-      const autoWhere: { role: Role; id?: { in: string[] }; officeId: string } = {
+      const autoWhere: { role: Role; id?: { in: string[] }; officeRecordId: string } = {
         role: Role.CONSULTOR,
-        officeId,
+        officeRecordId: officeId,
       };
       if (rawConsultantIds.length > 0) {
         autoWhere.id = { in: rawConsultantIds };
       }
       targetConsultants = await prisma.user.findMany({
         where: autoWhere,
-        select: { id: true, officeId: true },
+        select: { id: true, officeRecordId: true },
       });
     } else {
       if (rawConsultantIds.length === 0) {
         return NextResponse.json({ message: "Selecione ao menos um consultor para distribuir." }, { status: 400 });
       }
       const consultants = await prisma.user.findMany({
-        where: { id: { in: rawConsultantIds }, role: Role.CONSULTOR, officeId },
-        select: { id: true, officeId: true },
+        where: { id: { in: rawConsultantIds }, role: Role.CONSULTOR, officeRecordId: officeId },
+        select: { id: true, officeRecordId: true },
       });
       const consultantMap = new Map(consultants.map((c) => [c.id, c]));
       const resolvedConsultants: ConsultantDetail[] = [];
@@ -295,7 +295,7 @@ export async function POST(req: NextRequest, { params }: Params) {
           where: { id: { in: leadIds } },
           data: {
             consultorId: consultant.id,
-            officeId: consultant.officeId ?? null,
+            officeId: consultant.officeRecordId ?? null,
             status: LeadStatus.NOVO,
             isWorked: false,
             nextFollowUpAt: null,

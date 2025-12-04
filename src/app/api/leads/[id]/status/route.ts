@@ -63,9 +63,9 @@ export async function POST(req: Request, { params }: Params) {
   if (
     isOfficeAdmin(role) &&
     role !== Role.MASTER &&
-    sessionUser.officeId &&
+    sessionUser.officeRecordId &&
     lead.officeId &&
-    sessionUser.officeId !== lead.officeId
+    sessionUser.officeRecordId !== lead.officeId
   ) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }

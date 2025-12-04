@@ -30,9 +30,9 @@ async function ensureOfficeRecords(): Promise<Map<Office, string>> {
   for (const office of offices) {
     const name = OFFICE_NAMES[office] ?? office;
     const record = await prisma.officeRecord.upsert({
-      where: { office },
-      create: { office, name },
-      update: { name },
+      where: { code: office },
+      create: { office, code: office, name },
+      update: { name, office },
     });
     officeMap.set(office, record.id);
   }

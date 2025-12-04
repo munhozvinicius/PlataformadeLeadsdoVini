@@ -28,9 +28,9 @@ export async function PATCH(req: Request) {
 
   if (
     !isMaster(session.user.role) &&
-    sessionUser.officeId &&
+    sessionUser.officeRecordId &&
     lead.officeId &&
-    sessionUser.officeId !== lead.officeId
+    sessionUser.officeRecordId !== lead.officeId
   ) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }

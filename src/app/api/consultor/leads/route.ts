@@ -38,17 +38,17 @@ export async function GET(req: NextRequest) {
       where.consultorId = { in: allowedIds };
     }
   } else if (isOfficeAdmin(session.user.role)) {
-    if (!sessionUser.officeId) {
+    if (!sessionUser.officeRecordId) {
       return NextResponse.json({ message: "Office inválido" }, { status: 401 });
     }
     if (consultantId) {
       const consultant = await prisma.user.findUnique({ where: { id: consultantId } });
-      if (!consultant || consultant.officeId !== sessionUser.officeId) {
+      if (!consultant || consultant.officeRecordId !== sessionUser.officeRecordId) {
         return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
       }
       where.consultorId = consultantId;
     } else {
-      where.officeId = sessionUser.officeId;
+      where.officeId = sessionUser.officeRecordId;
     }
   } else {
     if (consultantId) where.consultorId = consultantId;

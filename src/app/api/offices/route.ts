@@ -1,68 +1,82 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { PrismaClient, Role } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { slugifyOfficeCode } from "@/lib/officeSlug";
-
-const prisma = new PrismaClient();
-
-function isMaster(role?: Role) {
-  return role === Role.MASTER;
-}
+import {
+  buildOfficeResponse,
+  getOfficeUserCounts,
+  normalizeOptionalString,
+} from "@/app/api/offices/helpers";
+import { requireMaster } from "@/lib/requireMaster";
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user || !isMaster(session.user.role)) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireMaster();
+  if ("response" in auth) return auth.response;
 
   const offices = await prisma.officeRecord.findMany({
     select: {
       id: true,
-      code: true,
       name: true,
+      code: true,
+      region: true,
+      uf: true,
+      city: true,
+      notes: true,
+      active: true,
       createdAt: true,
-      _count: {
-        select: { users: true },
-      },
     },
     orderBy: { name: "asc" },
   });
 
-  return NextResponse.json(
-    offices.map((office) => ({
-      id: office.id,
-      code: office.code,
-      name: office.name,
-      createdAt: office.createdAt,
-      userCount: office._count?.users ?? 0,
-    }))
-  );
+  const counts = await getOfficeUserCounts();
+  return NextResponse.json(offices.map((office) => buildOfficeResponse(office, counts)));
 }
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user || !isMaster(session.user.role)) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  const auth = await requireMaster();
+  if ("response" in auth) return auth.response;
+
+  const body = await req.json().catch(() => ({}));
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const rawCode = typeof body.code === "string" ? body.code.trim() : "";
+  const region = normalizeOptionalString(body.region);
+  const uf = normalizeOptionalString(body.uf)?.toUpperCase() ?? null;
+  const city = normalizeOptionalString(body.city);
+  const notes = normalizeOptionalString(body.notes);
+  const active = typeof body.active === "boolean" ? body.active : true;
+
+  if (!name) {
+    return NextResponse.json({ error: "Nome do escritório é obrigatório." }, { status: 400 });
   }
 
-  const body = (await req.json()) as { name?: string };
-  const name = (body.name ?? "").toString().trim();
-  if (!name) {
-    return NextResponse.json({ message: "Nome do escritório é obrigatório" }, { status: 400 });
+  const code = slugifyOfficeCode(rawCode || name);
+  if (!code) {
+    return NextResponse.json({ error: "Código do escritório é obrigatório." }, { status: 400 });
   }
-  const code = slugifyOfficeCode(name);
+
   const existing = await prisma.officeRecord.findUnique({ where: { code } });
   if (existing) {
-    return NextResponse.json({ message: "Escritório já existe" }, { status: 409 });
+    return NextResponse.json({ error: "Código já está em uso." }, { status: 409 });
   }
 
   const office = await prisma.officeRecord.create({
-    data: { name, code },
-    select: { id: true, code: true, name: true, createdAt: true },
+    data: { name, code, region, uf, city, notes, active },
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      region: true,
+      uf: true,
+      city: true,
+      notes: true,
+      active: true,
+      createdAt: true,
+    },
   });
 
-  return NextResponse.json(office, { status: 201 });
+  return NextResponse.json(
+    buildOfficeResponse(office, new Map([[office.id, { totalUsers: 0, totalProprietarios: 0, totalConsultores: 0 }]])),
+    { status: 201 }
+  );
 }

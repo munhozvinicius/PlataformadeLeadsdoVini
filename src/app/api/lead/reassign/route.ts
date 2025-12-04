@@ -26,13 +26,13 @@ export async function POST(req: NextRequest) {
 
   const consultant = await prisma.user.findUnique({
     where: { id: consultantId },
-    select: { officeId: true },
+    select: { officeRecordId: true },
   });
   if (!consultant) {
     return NextResponse.json({ message: "Consultor não encontrado" }, { status: 404 });
   }
 
-  if (lead.officeId && consultant.officeId && lead.officeId !== consultant.officeId) {
+  if (lead.officeId && consultant.officeRecordId && lead.officeId !== consultant.officeRecordId) {
     return NextResponse.json(
       { message: "A reatribuição só pode ocorrer entre consultores do mesmo escritório." },
       { status: 400 }
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     where: { id: leadId },
     data: {
       consultorId: consultantId,
-      officeId: consultant.officeId ?? lead.officeId ?? null,
+      officeId: consultant.officeRecordId ?? lead.officeId ?? null,
       isWorked: false,
     },
   });

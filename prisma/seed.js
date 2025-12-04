@@ -47,10 +47,11 @@ async function main() {
   ];
   const officeIds = {};
   for (const office of offices) {
+    const code = office.office || office.name;
     const o = await prisma.officeRecord.upsert({
-      where: { office: office.office },
-      update: { name: office.name },
-      create: { office: office.office, name: office.name },
+      where: { code },
+      update: { name: office.name, office: office.office },
+      create: { office: office.office, code, name: office.name },
     });
     officeIds[office.office] = o.id;
   }

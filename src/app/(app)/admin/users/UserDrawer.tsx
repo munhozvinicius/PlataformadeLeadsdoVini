@@ -30,7 +30,7 @@ export type UserDrawerPayload = {
   name: string;
   email: string;
   role: Role;
-  officeId?: string | null;
+  officeRecordId?: string | null;
   ownerId?: string | null;
   password?: string;
   active?: boolean;
@@ -353,7 +353,7 @@ export default function UserDrawer({
                 onChange={(event) => {
                   setSelectedOfficeId(event.target.value);
                   const officeOption = offices.find((office) => office.id === event.target.value);
-                  setSingleOffice(officeOption?.office ?? "");
+                  setSingleOffice(mapOfficeCodeToEnum(officeOption?.code) ?? "");
                 }}
                 className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
               >

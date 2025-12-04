@@ -52,8 +52,8 @@ model User {
   role         Role
   profile      Profile
   office       Office
-  officeId     String?       @db.ObjectId
-  officeRecord OfficeRecord? @relation("OfficeUsers", fields: [officeId], references: [id])
+  officeRecordId String?       @map("officeId") @db.ObjectId
+  officeRecord   OfficeRecord? @relation("OfficeUsers", fields: [officeRecordId], references: [id])
   ownerId      String?       @db.ObjectId
   owner        User?         @relation("OwnerConsultor", fields: [ownerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   consultores  User[]        @relation("OwnerConsultor")
@@ -173,13 +173,20 @@ model Lead {
 
 model OfficeRecord {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  code      String   @unique
-  office    Office?  @map("office")
   name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  code      String   @unique
+  region    String?
+  uf        String?
+  city      String?
+  notes     String?
+  active    Boolean  @default(true)
+
+  office    Office?  @map("office")
   users     User[]   @relation("OfficeUsers")
   leads     Lead[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model UserOffice {
