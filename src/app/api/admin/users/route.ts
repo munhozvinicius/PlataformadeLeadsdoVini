@@ -114,7 +114,7 @@ export async function POST(req: Request) {
             id: officeRecord.id,
           },
         },
-        ownerId: targetRole === Role.CONSULTOR ? creatorOwnerId : null,
+        ...(targetRole === Role.CONSULTOR ? { ownerId: creatorOwnerId as string } : {}),
         active: true,
       },
     });
