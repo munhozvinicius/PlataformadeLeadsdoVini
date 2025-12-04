@@ -25,6 +25,18 @@ type AdminUser = {
   active: boolean;
 };
 
+const OFFICE_LABELS: Record<Office, string> = {
+  SAFE_TI: "Safe TI",
+  JLC_TECH: "JLC Tech",
+};
+
+const formatOfficeList = (offices: { office: Office }[]) =>
+  offices.length
+    ? offices
+        .map((entry) => OFFICE_LABELS[entry.office] ?? entry.office)
+        .join(", ")
+    : "-";
+
 function generatePassword() {
   return `P${Math.random().toString(36).slice(2, 10)}!`;
 }
@@ -292,19 +304,13 @@ export default function AdminUsersPage() {
                       <span style={{ paddingLeft: `${row.depth * 1.5}rem` }}>{row.user.name}</span>
                     </td>
                     <td className="py-2 pr-3">{row.user.email}</td>
-                    <td className="py-2 pr-3">
-                      {row.user.offices && row.user.offices.length > 0
-                        ? row.user.offices.map((officeEntry) => officeEntry.office).join(
-                            ", "
-                          )
-                        : "-"}
-                    </td>
+                    <td className="py-2 pr-3">{formatOfficeList(row.user.offices)}</td>
                     <td className="py-2 pr-3">{row.user.role}</td>
                     <td className="py-2 pr-3">{row.gsName}</td>
                     <td className="py-2 pr-3">{row.gnName}</td>
                     <td className="py-2 pr-3">
                       {row.user.owner
-                        ? row.user.owner.name
+                        ? `${row.user.owner.name} (${row.user.owner.email})`
                         : row.user.senior
                         ? `GS: ${row.user.senior.name}`
                         : "-"}
