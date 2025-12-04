@@ -61,13 +61,15 @@ export default function AdminUsersPage() {
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [drawerSubmitting, setDrawerSubmitting] = useState(false);
   const [officeModalOpen, setOfficeModalOpen] = useState(false);
-  const [officeCode, setOfficeCode] = useState<Office | "">("");
-  const [officeName, setOfficeName] = useState("");
-  const [officeSeniorId, setOfficeSeniorId] = useState("");
-  const [officeBusinessManagerId, setOfficeBusinessManagerId] = useState("");
-  const [officeOwnerId, setOfficeOwnerId] = useState("");
   const [officeSubmitting, setOfficeSubmitting] = useState(false);
   const [officeError, setOfficeError] = useState("");
+  const [officeForm, setOfficeForm] = useState({
+    code: "",
+    name: "",
+    seniorManagerId: "",
+    businessManagerId: "",
+    ownerId: "",
+  });
 
   useEffect(() => {
     if (status === "authenticated" && isConsultor(session?.user.role)) {
@@ -97,7 +99,7 @@ export default function AdminUsersPage() {
   const loadOffices = useCallback(async () => {
     setOfficesLoading(true);
     try {
-      const response = await fetch("/api/admin/offices", { cache: "no-store" });
+      const response = await fetch("/api/offices", { cache: "no-store" });
       if (!response.ok) {
         throw new Error("Não foi possível carregar os escritórios.");
       }
@@ -138,11 +140,13 @@ export default function AdminUsersPage() {
   const canManageOffices = (session?.user.role === Role.MASTER || session?.user.role === Role.GERENTE_SENIOR) ?? false;
 
   const resetOfficeForm = useCallback(() => {
-    setOfficeCode("");
-    setOfficeName("");
-    setOfficeSeniorId("");
-    setOfficeBusinessManagerId("");
-    setOfficeOwnerId("");
+    setOfficeForm({
+      code: "",
+      name: "",
+      seniorManagerId: "",
+      businessManagerId: "",
+      ownerId: "",
+    });
     setOfficeError("");
   }, []);
 
@@ -155,25 +159,25 @@ export default function AdminUsersPage() {
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       setOfficeError("");
-      if (!officeCode) {
-        setOfficeError("Selecione o código do escritório.");
+      if (!officeForm.code.trim()) {
+        setOfficeError("Informe o código do escritório.");
         return;
       }
-      if (!officeName.trim()) {
+      if (!officeForm.name.trim()) {
         setOfficeError("Informe o nome do escritório.");
         return;
       }
       setOfficeSubmitting(true);
       try {
-        const response = await fetch("/api/admin/offices", {
+        const response = await fetch("/api/offices", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            code: officeCode,
-            name: officeName.trim(),
-            seniorId: officeSeniorId || undefined,
-            businessManagerId: officeBusinessManagerId || undefined,
-            ownerId: officeOwnerId || undefined,
+            code: officeForm.code.trim(),
+            name: officeForm.name.trim(),
+            seniorManagerId: officeForm.seniorManagerId || undefined,
+            businessManagerId: officeForm.businessManagerId || undefined,
+            ownerId: officeForm.ownerId || undefined,
           }),
         });
         if (!response.ok) {
@@ -181,7 +185,7 @@ export default function AdminUsersPage() {
           throw new Error(body?.message ?? "Não foi possível criar o escritório.");
         }
         await loadOffices();
-        await loadUsers();
+        resetOfficeForm();
         closeOfficeModal();
       } catch (submitError) {
         console.error("Erro ao criar escritório", submitError);
@@ -190,16 +194,7 @@ export default function AdminUsersPage() {
         setOfficeSubmitting(false);
       }
     },
-    [
-      officeCode,
-      officeName,
-      officeSeniorId,
-      officeBusinessManagerId,
-      officeOwnerId,
-      loadOffices,
-      loadUsers,
-      closeOfficeModal,
-    ]
+    [officeForm, loadOffices, resetOfficeForm, closeOfficeModal]
   );
 
   const filteredUsers = useMemo(() => {
@@ -472,24 +467,22 @@ export default function AdminUsersPage() {
               {officeError ? <p className="text-sm text-red-600">{officeError}</p> : null}
               <div className="space-y-1">
                 <label className="text-xs text-slate-600">Código do escritório</label>
-                <select
-                  value={officeCode}
-                  onChange={(event) => setOfficeCode(event.target.value as Office)}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                >
-                  <option value="">Selecione</option>
-                  {Object.values(Office).map((officeValue) => (
-                    <option key={officeValue} value={officeValue}>
-                      {OFFICE_LABELS[officeValue]}
-                    </option>
-                  ))}
-                </select>
+                <input
+                  value={officeForm.code}
+                  onChange={(event) =>
+                    setOfficeForm((prev) => ({ ...prev, code: event.target.value }))
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  placeholder="Ex: SAFE_TI, JLC_TECH, PV Ribeirão Preto"
+                />
               </div>
               <div className="space-y-1">
                 <label className="text-xs text-slate-600">Nome</label>
                 <input
-                  value={officeName}
-                  onChange={(event) => setOfficeName(event.target.value)}
+                  value={officeForm.name}
+                  onChange={(event) =>
+                    setOfficeForm((prev) => ({ ...prev, name: event.target.value }))
+                  }
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                   required
                 />
@@ -497,8 +490,10 @@ export default function AdminUsersPage() {
               <div className="space-y-1">
                 <label className="text-xs text-slate-600">Gerente Sênior</label>
                 <select
-                  value={officeSeniorId}
-                  onChange={(event) => setOfficeSeniorId(event.target.value)}
+                  value={officeForm.seniorManagerId}
+                  onChange={(event) =>
+                    setOfficeForm((prev) => ({ ...prev, seniorManagerId: event.target.value }))
+                  }
                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
                 >
                   <option value="">Nenhum</option>
@@ -512,8 +507,10 @@ export default function AdminUsersPage() {
               <div className="space-y-1">
                 <label className="text-xs text-slate-600">Gerente de Negócios</label>
                 <select
-                  value={officeBusinessManagerId}
-                  onChange={(event) => setOfficeBusinessManagerId(event.target.value)}
+                  value={officeForm.businessManagerId}
+                  onChange={(event) =>
+                    setOfficeForm((prev) => ({ ...prev, businessManagerId: event.target.value }))
+                  }
                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
                 >
                   <option value="">Nenhum</option>
@@ -527,8 +524,10 @@ export default function AdminUsersPage() {
               <div className="space-y-1">
                 <label className="text-xs text-slate-600">Proprietário</label>
                 <select
-                  value={officeOwnerId}
-                  onChange={(event) => setOfficeOwnerId(event.target.value)}
+                  value={officeForm.ownerId}
+                  onChange={(event) =>
+                    setOfficeForm((prev) => ({ ...prev, ownerId: event.target.value }))
+                  }
                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
                 >
                   <option value="">Nenhum</option>
