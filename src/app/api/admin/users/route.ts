@@ -7,11 +7,26 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Escritorio, Role } from "@prisma/client";
 
+async function normalizeLegacyRoles() {
+  await prisma.$runCommandRaw({
+    update: "User",
+    updates: [
+      {
+        q: { role: "OWNER" },
+        u: { $set: { role: Role.PROPRIETARIO } },
+        multi: true,
+      },
+    ],
+  });
+}
+
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
+
+  await normalizeLegacyRoles();
 
   const userSelect = {
     id: true,
