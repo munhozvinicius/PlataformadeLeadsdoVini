@@ -5,6 +5,8 @@ declare module "next-auth" {
     id: string;
     role: Role;
     office?: Office | null;
+    officeIds?: Office[];
+    ownerId?: string | null;
   }
 
   interface Session {
@@ -14,6 +16,8 @@ declare module "next-auth" {
       email?: string | null;
       role?: Role;
       office?: Office | null;
+      officeIds?: Office[];
+      ownerId?: string | null;
     };
   }
 }
@@ -23,5 +27,7 @@ declare module "next-auth/jwt" {
     id: string;
     role: Role;
     office?: Office | null;
+    officeIds?: Office[];
+    ownerId?: string | null;
   }
 }

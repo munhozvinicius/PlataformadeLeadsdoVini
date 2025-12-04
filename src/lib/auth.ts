@@ -26,7 +26,8 @@ export const authOptions: NextAuthOptions = {
             email: true,
             role: true,
             password: true,
-            office: true,
+            ownerId: true,
+            offices: { select: { office: true } },
           },
         });
         if (!user) return null;
@@ -39,7 +40,8 @@ export const authOptions: NextAuthOptions = {
           name: user.name,
           email: user.email,
           role: user.role,
-          office: user.office,
+          ownerId: user.ownerId ?? null,
+          officeIds: user.offices.map((entry) => entry.office),
         };
       },
     }),
@@ -47,30 +49,36 @@ export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
   callbacks: {
     async jwt({ token, user }) {
-      if (user) {
-        const typedUser = user as {
-          id: string;
-          role?: Role;
-          office?: Office | null;
-        };
-        token.id = typedUser.id;
-        if (typedUser.role) {
-          token.role = typedUser.role;
+        if (user) {
+          const typedUser = user as {
+            id: string;
+            role?: Role;
+            ownerId?: string | null;
+            officeIds?: Office[];
+          };
+          token.id = typedUser.id;
+          if (typedUser.role) {
+            token.role = typedUser.role;
+          }
+          if (typedUser.ownerId) {
+            token.ownerId = typedUser.ownerId;
+          }
+          if (typedUser.officeIds) {
+            token.officeIds = typedUser.officeIds;
+          }
         }
-        if (typedUser.office) {
-          token.office = typedUser.office;
-        }
-      }
-      return token;
-    },
+        return token;
+      },
     async session({ session, token }) {
         if (session.user) {
           const id = token.id as string | undefined;
           const role = token.role as Role | undefined;
-          const office = token.office as Office | undefined;
+          const ownerId = token.ownerId as string | undefined;
+          const officeIds = token.officeIds as Office[] | undefined;
           if (id) session.user.id = id;
           if (role) session.user.role = role;
-          if (office) session.user.office = office;
+          if (ownerId) session.user.ownerId = ownerId;
+          if (officeIds) session.user.officeIds = officeIds;
         }
       return session;
     },

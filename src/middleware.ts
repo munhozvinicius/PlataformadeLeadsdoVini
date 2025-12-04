@@ -26,9 +26,15 @@ export async function middleware(req: NextRequest) {
   const isAdminArea = pathname.startsWith("/admin");
   const isBoard = pathname.startsWith("/board");
 
-  if (isAdminArea && !canAccessAdmin(role)) {
-    const url = new URL(role === Role.CONSULTOR ? "/board" : "/login", req.url);
-    return NextResponse.redirect(url);
+  if (isAdminArea) {
+    if (role === Role.CONSULTOR) {
+      const url = new URL("/board", req.url);
+      return NextResponse.redirect(url);
+    }
+    if (!canAccessAdmin(role)) {
+      const url = new URL("/login", req.url);
+      return NextResponse.redirect(url);
+    }
   }
 
   if (isBoard && !canAccessBoard(role)) {

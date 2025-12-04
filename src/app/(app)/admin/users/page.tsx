@@ -123,14 +123,14 @@ export default function AdminUsersPage() {
 
     const officeGroups = new Map<string, AdminUser[]>();
     filteredUsers.forEach((user) => {
-      const key = user.office ?? "Sem escritório";
+      const key = user.offices[0]?.office ?? "Sem escritório";
       const list = officeGroups.get(key) ?? [];
       list.push(user);
       officeGroups.set(key, list);
     });
 
     const findManager = (officeValue: string | undefined, managerRole: Role) =>
-      filteredUsers.find((user) => user.office === officeValue && user.role === managerRole);
+      filteredUsers.find((user) => user.offices[0]?.office === officeValue && user.role === managerRole);
 
     const rows: { user: AdminUser; depth: number; gsName: string; gnName: string; ownerName: string }[] = [];
     const offices = Array.from(officeGroups.keys()).sort((a, b) => a.localeCompare(b));
@@ -276,7 +276,7 @@ export default function AdminUsersPage() {
                 <tr className="text-left text-slate-500 border-b">
                   <th className="py-2 pr-3">Nome</th>
                   <th className="py-2 pr-3">Email</th>
-                  <th className="py-2 pr-3">Escritório</th>
+                  <th className="py-2 pr-3">Escritórios</th>
                   <th className="py-2 pr-3">Perfil</th>
                   <th className="py-2 pr-3">Gerente Sênior</th>
                   <th className="py-2 pr-3">Gerente de Negócios</th>
@@ -292,7 +292,13 @@ export default function AdminUsersPage() {
                       <span style={{ paddingLeft: `${row.depth * 1.5}rem` }}>{row.user.name}</span>
                     </td>
                     <td className="py-2 pr-3">{row.user.email}</td>
-                    <td className="py-2 pr-3">{row.user.office}</td>
+                    <td className="py-2 pr-3">
+                      {row.user.offices && row.user.offices.length > 0
+                        ? row.user.offices.map((officeEntry) => officeEntry.office).join(
+                            ", "
+                          )
+                        : "-"}
+                    </td>
                     <td className="py-2 pr-3">{row.user.role}</td>
                     <td className="py-2 pr-3">{row.gsName}</td>
                     <td className="py-2 pr-3">{row.gnName}</td>
