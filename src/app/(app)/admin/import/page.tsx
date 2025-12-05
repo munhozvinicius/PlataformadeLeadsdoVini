@@ -170,8 +170,14 @@ export default function CampaignManagementPage() {
   }
 
   async function deleteCampaign(id: string) {
-    await fetch(`/api/campaigns/${id}`, { method: "DELETE" });
-    await Promise.all([loadCampaigns(), loadBatches()]);
+    const res = await fetch(`/api/campaigns/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setMessage(data?.error ?? "Erro ao excluir campanha.");
+      return;
+    }
+    setCampaigns((prev) => prev.filter((c) => c.id !== id));
+    setBatches((prev) => prev.filter((b) => b.campaignId !== id));
   }
 
   return (

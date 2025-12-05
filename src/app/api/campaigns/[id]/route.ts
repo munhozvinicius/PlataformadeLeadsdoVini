@@ -61,6 +61,37 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (!session?.user || session.user.role !== Role.MASTER) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
-  await prisma.campanha.delete({ where: { id: params.id } });
-  return NextResponse.json({ ok: true });
+  const campaignId = params.id;
+
+  try {
+    const campaign = await prisma.campanha.findUnique({ where: { id: campaignId } });
+    if (!campaign) {
+      return NextResponse.json({ error: "Campanha não encontrada." }, { status: 404 });
+    }
+
+    const leads = await prisma.lead.findMany({
+      where: { campanhaId: campaignId },
+      select: { id: true },
+    });
+    const leadIds = leads.map((l) => l.id);
+
+    if (leadIds.length > 0) {
+      await prisma.leadHistory.deleteMany({ where: { leadId: { in: leadIds } } });
+    }
+
+    await prisma.distributionLog.deleteMany({ where: { campaignId: campaignId } });
+    await prisma.leadActivity.deleteMany({ where: { campaignId: campaignId } });
+    await prisma.lead.deleteMany({ where: { campanhaId: campaignId } });
+    await prisma.importBatch.deleteMany({ where: { campaignId: campaignId } });
+
+    await prisma.campanha.delete({ where: { id: campaignId } });
+
+    return NextResponse.json({ success: true }, { status: 200 });
+  } catch (error) {
+    console.error("[DELETE_CAMPAIGN_ERROR]", error);
+    return NextResponse.json(
+      { error: "Erro ao excluir campanha. Verifique logs do servidor." },
+      { status: 500 }
+    );
+  }
 }
