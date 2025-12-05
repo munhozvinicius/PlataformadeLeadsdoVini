@@ -15,6 +15,12 @@ type OfficeRecordDto = {
   city: string | null;
   notes: string | null;
   active: boolean;
+  seniorManagerId?: string | null;
+  businessManagerId?: string | null;
+  ownerId?: string | null;
+  seniorManager?: { id: string; name: string | null; email: string | null } | null;
+  businessManager?: { id: string; name: string | null; email: string | null } | null;
+  owner?: { id: string; name: string | null; email: string | null } | null;
   createdAt: string;
   totalUsers: number;
   totalProprietarios: number;
@@ -29,6 +35,9 @@ type OfficeFormState = {
   city: string;
   notes: string;
   active: boolean;
+  seniorManagerId: string;
+  businessManagerId: string;
+  ownerId: string;
 };
 
 type OfficeUsersPayload = {
@@ -41,6 +50,8 @@ type OfficeUsersPayload = {
   }[];
 };
 
+type UserOption = { id: string; name: string; email: string };
+
 const emptyForm: OfficeFormState = {
   name: "",
   code: "",
@@ -49,6 +60,9 @@ const emptyForm: OfficeFormState = {
   city: "",
   notes: "",
   active: true,
+  seniorManagerId: "",
+  businessManagerId: "",
+  ownerId: "",
 };
 
 function formatDate(value: string) {
@@ -86,6 +100,9 @@ export default function OfficesPage() {
   const [detailOffice, setDetailOffice] = useState<OfficeRecordDto | null>(null);
   const [detailUsers, setDetailUsers] = useState<OfficeUsersPayload | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [seniorManagers, setSeniorManagers] = useState<UserOption[]>([]);
+  const [businessManagers, setBusinessManagers] = useState<UserOption[]>([]);
+  const [owners, setOwners] = useState<UserOption[]>([]);
 
   useEffect(() => {
     if (status === "authenticated" && session?.user?.role !== Role.MASTER) {
@@ -117,6 +134,45 @@ export default function OfficesPage() {
     }
   }, [status, session, fetchOffices]);
 
+  const fetchHierarchyUsers = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/users", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        id: string;
+        name: string;
+        email: string;
+        role: Role;
+      }[];
+      setSeniorManagers(
+        data
+          .filter((u) => u.role === Role.GERENTE_SENIOR)
+          .map((u) => ({ id: u.id, name: u.name, email: u.email }))
+          .sort((a, b) => a.name.localeCompare(b.name))
+      );
+      setBusinessManagers(
+        data
+          .filter((u) => u.role === Role.GERENTE_NEGOCIOS)
+          .map((u) => ({ id: u.id, name: u.name, email: u.email }))
+          .sort((a, b) => a.name.localeCompare(b.name))
+      );
+      setOwners(
+        data
+          .filter((u) => u.role === Role.PROPRIETARIO)
+          .map((u) => ({ id: u.id, name: u.name, email: u.email }))
+          .sort((a, b) => a.name.localeCompare(b.name))
+      );
+    } catch (err) {
+      console.error("Erro ao carregar hierarquia de usuários", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (status === "authenticated" && session?.user?.role === Role.MASTER) {
+      fetchHierarchyUsers();
+    }
+  }, [status, session, fetchHierarchyUsers]);
+
   const openCreateModal = () => {
     setModalMode("create");
     setForm({ ...emptyForm });
@@ -135,6 +191,9 @@ export default function OfficesPage() {
       city: office.city ?? "",
       notes: office.notes ?? "",
       active: office.active,
+      seniorManagerId: office.seniorManagerId ?? "",
+      businessManagerId: office.businessManagerId ?? "",
+      ownerId: office.ownerId ?? "",
     });
     setModalOpen(true);
   };
@@ -160,6 +219,9 @@ export default function OfficesPage() {
         city: form.city.trim(),
         notes: form.notes.trim(),
         active: form.active,
+        seniorManagerId: form.seniorManagerId || null,
+        businessManagerId: form.businessManagerId || null,
+        ownerId: form.ownerId || null,
       };
       const endpoint =
         modalMode === "create" ? "/api/offices" : `/api/offices/${encodeURIComponent(editingId ?? "")}`;
@@ -180,6 +242,30 @@ export default function OfficesPage() {
       setError((err as Error)?.message ?? "Erro ao salvar escritório.");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDeleteOffice = async () => {
+    if (!editingId) return;
+    const target = offices.find((office) => office.id === editingId);
+    const confirmed = window.confirm(
+      `Tem certeza que deseja excluir o escritório "${target?.name ?? "este escritório"}"?`
+    );
+    if (!confirmed) return;
+    try {
+      const res = await fetch(`/api/offices/${encodeURIComponent(editingId)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        console.error(await res.text());
+        alert("Erro ao excluir o escritório. Verifique se ele não tem usuários vinculados.");
+        return;
+      }
+      await fetchOffices();
+      closeModal();
+    } catch (err) {
+      console.error(err);
+      alert("Erro inesperado ao excluir o escritório.");
     }
   };
 
@@ -392,6 +478,55 @@ export default function OfficesPage() {
                 </label>
               </div>
             </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3 mt-6">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-slate-500">Gerente Sênior</label>
+                <select
+                  value={form.seniorManagerId}
+                  onChange={(e) => setForm((prev) => ({ ...prev, seniorManagerId: e.target.value }))}
+                  className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100"
+                >
+                  <option value="">Nenhum</option>
+                  {seniorManagers.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-slate-500">Gerente de Negócios</label>
+                <select
+                  value={form.businessManagerId}
+                  onChange={(e) => setForm((prev) => ({ ...prev, businessManagerId: e.target.value }))}
+                  className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100"
+                >
+                  <option value="">Nenhum</option>
+                  {businessManagers.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-slate-500">Proprietário</label>
+                <select
+                  value={form.ownerId}
+                  onChange={(e) => setForm((prev) => ({ ...prev, ownerId: e.target.value }))}
+                  className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100"
+                >
+                  <option value="">Nenhum</option>
+                  {owners.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
             <div className="mt-4 space-y-2">
               <label className="text-xs text-slate-600">Observações</label>
               <textarea
@@ -403,6 +538,15 @@ export default function OfficesPage() {
             </div>
             {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
             <div className="mt-6 flex items-center justify-end gap-3">
+              {modalMode === "edit" && editingId ? (
+                <button
+                  type="button"
+                  onClick={handleDeleteOffice}
+                  className="mr-auto rounded-full border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                >
+                  Excluir escritório
+                </button>
+              ) : null}
               <button
                 onClick={closeModal}
                 className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
@@ -464,6 +608,24 @@ export default function OfficesPage() {
                       <span className="font-semibold text-slate-900">{detailOffice.city ?? "-"}</span>
                     </div>
                     <div className="flex items-center justify-between">
+                      <span>Gerente Sênior</span>
+                      <span className="font-semibold text-slate-900">
+                        {detailOffice.seniorManager?.name ?? detailOffice.seniorManagerId ?? "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Gerente de Negócios</span>
+                      <span className="font-semibold text-slate-900">
+                        {detailOffice.businessManager?.name ?? detailOffice.businessManagerId ?? "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Proprietário</span>
+                      <span className="font-semibold text-slate-900">
+                        {detailOffice.owner?.name ?? detailOffice.ownerId ?? "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
                       <span>Criado em</span>
                       <span className="font-semibold text-slate-900">{formatDate(detailOffice.createdAt)}</span>
                     </div>
@@ -489,6 +651,16 @@ export default function OfficesPage() {
                     ) : null}
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeDetails();
+                    openEditModal(detailOffice);
+                  }}
+                  className="mt-4 inline-flex items-center gap-2 rounded-full border border-purple-200 px-4 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-50"
+                >
+                  Editar hierarquia (GS / GN / Proprietário)
+                </button>
               </div>
 
               <div className="rounded-xl border bg-white p-4 shadow-sm">

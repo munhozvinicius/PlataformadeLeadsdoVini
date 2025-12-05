@@ -21,6 +21,12 @@ const OFFICE_SELECT = {
   city: true,
   notes: true,
   active: true,
+  seniorManagerId: true,
+  businessManagerId: true,
+  ownerId: true,
+  seniorManager: { select: { id: true, name: true, email: true } },
+  businessManager: { select: { id: true, name: true, email: true } },
+  owner: { select: { id: true, name: true, email: true } },
   createdAt: true,
 };
 
@@ -100,6 +106,19 @@ export async function PATCH(req: Request, { params }: Params) {
       return NextResponse.json({ error: "Valor de ativo inválido." }, { status: 400 });
     }
     data.active = body.active;
+  }
+
+  if (body.seniorManagerId !== undefined) {
+    const id = normalizeOptionalString(body.seniorManagerId);
+    data.seniorManager = id ? { connect: { id } } : { disconnect: true };
+  }
+  if (body.businessManagerId !== undefined) {
+    const id = normalizeOptionalString(body.businessManagerId);
+    data.businessManager = id ? { connect: { id } } : { disconnect: true };
+  }
+  if (body.ownerId !== undefined) {
+    const id = normalizeOptionalString(body.ownerId);
+    data.owner = id ? { connect: { id } } : { disconnect: true };
   }
 
   if (Object.keys(data).length === 0) {

@@ -16,6 +16,12 @@ export type OfficeRecordSummary = {
   city: string | null;
   notes: string | null;
   active: boolean;
+  seniorManagerId?: string | null;
+  businessManagerId?: string | null;
+  ownerId?: string | null;
+  seniorManager?: { id: string; name: string | null; email: string | null } | null;
+  businessManager?: { id: string; name: string | null; email: string | null } | null;
+  owner?: { id: string; name: string | null; email: string | null } | null;
   createdAt: Date;
 };
 

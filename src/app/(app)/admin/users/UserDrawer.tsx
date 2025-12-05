@@ -68,6 +68,7 @@ const roleLabels: Record<Role, string> = {
   MASTER: "Master",
   GERENTE_SENIOR: "Gerente Sênior",
   GERENTE_NEGOCIOS: "Gerente de Negócios",
+  GERENTE_CONTAS: "Gerente de Contas",
   PROPRIETARIO: "Proprietário",
   CONSULTOR: "Consultor",
 };

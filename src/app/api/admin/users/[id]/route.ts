@@ -177,6 +177,11 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
     updates.office = normalizedOfficeIds[0];
   }
 
+  if (finalRole === Role.GERENTE_CONTAS && normalizedOfficeIds.length) {
+    officesToAssign = [normalizedOfficeIds[0]];
+    updates.office = normalizedOfficeIds[0];
+  }
+
   if (finalRole === Role.PROPRIETARIO && normalizedOfficeIds.length) {
     officesToAssign = [normalizedOfficeIds[0]];
     updates.office = normalizedOfficeIds[0];

@@ -11,6 +11,7 @@ enum Role {
   MASTER
   GERENTE_SENIOR
   GERENTE_NEGOCIOS
+  GERENTE_CONTAS
   PROPRIETARIO
   CONSULTOR
 }
@@ -19,6 +20,7 @@ enum Profile {
   MASTER
   GERENTE_SENIOR
   GERENTE_NEGOCIOS
+  GERENTE_CONTAS
   PROPRIETARIO
   CONSULTOR
 }
@@ -61,6 +63,9 @@ model User {
   senior       User?         @relation("SeniorToGN", fields: [seniorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   managers     User[]        @relation("SeniorToGN")
   offices      UserOffice[]
+  seniorManagedOffices   OfficeRecord[] @relation("OfficeSeniorManager")
+  businessManagedOffices OfficeRecord[] @relation("OfficeBusinessManager")
+  ownedOffices           OfficeRecord[] @relation("OfficeOwner")
   active       Boolean       @default(true)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -180,6 +185,12 @@ model OfficeRecord {
   city      String?
   notes     String?
   active    Boolean  @default(true)
+  seniorManagerId   String? @db.ObjectId
+  seniorManager     User?   @relation("OfficeSeniorManager", fields: [seniorManagerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  businessManagerId String? @db.ObjectId
+  businessManager   User?   @relation("OfficeBusinessManager", fields: [businessManagerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ownerId           String? @db.ObjectId
+  owner             User?   @relation("OfficeOwner", fields: [ownerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   office    Office?  @map("office")
   users     User[]   @relation("OfficeUsers")

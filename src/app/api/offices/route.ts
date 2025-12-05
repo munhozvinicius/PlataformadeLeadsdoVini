@@ -24,6 +24,12 @@ export async function GET() {
       city: true,
       notes: true,
       active: true,
+      seniorManagerId: true,
+      businessManagerId: true,
+      ownerId: true,
+      seniorManager: { select: { id: true, name: true, email: true } },
+      businessManager: { select: { id: true, name: true, email: true } },
+      owner: { select: { id: true, name: true, email: true } },
       createdAt: true,
     },
     orderBy: { name: "asc" },
@@ -45,6 +51,9 @@ export async function POST(req: Request) {
   const city = normalizeOptionalString(body.city);
   const notes = normalizeOptionalString(body.notes);
   const active = typeof body.active === "boolean" ? body.active : true;
+  const seniorManagerId = normalizeOptionalString(body.seniorManagerId);
+  const businessManagerId = normalizeOptionalString(body.businessManagerId);
+  const ownerId = normalizeOptionalString(body.ownerId);
 
   if (!name) {
     return NextResponse.json({ error: "Nome do escritório é obrigatório." }, { status: 400 });
@@ -61,7 +70,18 @@ export async function POST(req: Request) {
   }
 
   const office = await prisma.officeRecord.create({
-    data: { name, code, region, uf, city, notes, active },
+    data: {
+      name,
+      code,
+      region,
+      uf,
+      city,
+      notes,
+      active,
+      ...(seniorManagerId ? { seniorManager: { connect: { id: seniorManagerId } } } : {}),
+      ...(businessManagerId ? { businessManager: { connect: { id: businessManagerId } } } : {}),
+      ...(ownerId ? { owner: { connect: { id: ownerId } } } : {}),
+    },
     select: {
       id: true,
       name: true,
@@ -71,6 +91,12 @@ export async function POST(req: Request) {
       city: true,
       notes: true,
       active: true,
+      seniorManagerId: true,
+      businessManagerId: true,
+      ownerId: true,
+      seniorManager: { select: { id: true, name: true, email: true } },
+      businessManager: { select: { id: true, name: true, email: true } },
+      owner: { select: { id: true, name: true, email: true } },
       createdAt: true,
     },
   });

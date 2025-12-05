@@ -50,6 +50,7 @@ const profileLabels: Record<Role, string> = {
   MASTER: "Master",
   GERENTE_SENIOR: "Gerente Sênior",
   GERENTE_NEGOCIOS: "Gerente de Negócios",
+  GERENTE_CONTAS: "Gerente de Contas",
   PROPRIETARIO: "Proprietário",
   CONSULTOR: "Consultor",
 };
@@ -58,9 +59,18 @@ const profileColors: Record<Role, string> = {
   MASTER: "bg-purple-50 text-purple-700 ring-purple-200",
   GERENTE_SENIOR: "bg-blue-50 text-blue-700 ring-blue-200",
   GERENTE_NEGOCIOS: "bg-sky-50 text-sky-700 ring-sky-200",
+  GERENTE_CONTAS: "bg-indigo-50 text-indigo-700 ring-indigo-200",
   PROPRIETARIO: "bg-amber-50 text-amber-700 ring-amber-200",
   CONSULTOR: "bg-emerald-50 text-emerald-700 ring-emerald-200",
 };
+
+const PROFILE_OPTIONS: { value: Role; label: string }[] = [
+  { value: Role.GERENTE_SENIOR, label: "Gerente Sênior" },
+  { value: Role.GERENTE_NEGOCIOS, label: "Gerente de Negócios" },
+  { value: Role.GERENTE_CONTAS, label: "Gerente de Contas" },
+  { value: Role.PROPRIETARIO, label: "Proprietário" },
+  { value: Role.CONSULTOR, label: "Consultor" },
+];
 
 function mapOfficeCodeToEnum(code?: string): Office | null {
   if (!code) return null;
@@ -154,6 +164,26 @@ export default function AdminUsersPage() {
     [offices]
   );
 
+  const canCreateProfileOptions = useMemo(() => {
+    const currentProfile = session?.user.role;
+    if (currentProfile === Role.MASTER) return PROFILE_OPTIONS;
+    if (currentProfile === Role.GERENTE_SENIOR) {
+      const allowed: Role[] = [Role.GERENTE_NEGOCIOS, Role.GERENTE_CONTAS, Role.PROPRIETARIO, Role.CONSULTOR];
+      return PROFILE_OPTIONS.filter((opt) => allowed.includes(opt.value));
+    }
+    if (currentProfile === Role.GERENTE_NEGOCIOS || currentProfile === Role.PROPRIETARIO) {
+      return PROFILE_OPTIONS.filter((opt) => opt.value === Role.CONSULTOR);
+    }
+    return [];
+  }, [session?.user.role]);
+
+  useEffect(() => {
+    if (canCreateProfileOptions.length === 0) return;
+    if (!canCreateProfileOptions.find((opt) => opt.value === createForm.role)) {
+      setCreateForm((prev) => ({ ...prev, role: canCreateProfileOptions[0].value }));
+    }
+  }, [canCreateProfileOptions, createForm.role]);
+
   const filteredUsers = useMemo(() => {
     if (profileFilter === "ALL") return users;
     return users.filter((user) => user.role === profileFilter);
@@ -203,6 +233,10 @@ export default function AdminUsersPage() {
 
     if (createForm.role === Role.CONSULTOR && (!createForm.officeRecordId || !createForm.ownerId)) {
       setCreateError("Consultor precisa de escritório e proprietário.");
+      return;
+    }
+    if (createForm.role === Role.GERENTE_CONTAS && !createForm.officeRecordId) {
+      setCreateError("Gerente de Contas precisa de um escritório.");
       return;
     }
 
@@ -314,8 +348,12 @@ export default function AdminUsersPage() {
                 }
                 className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
               >
-                <option value={Role.PROPRIETARIO}>Proprietário</option>
-                <option value={Role.CONSULTOR}>Consultor</option>
+                <option value="">Selecione</option>
+                {canCreateProfileOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="space-y-1">
@@ -377,7 +415,11 @@ export default function AdminUsersPage() {
             </button>
             <button
               type="submit"
-              disabled={creating || (createForm.role === Role.CONSULTOR && (!createForm.officeRecordId || !createForm.ownerId))}
+              disabled={
+                creating ||
+                (createForm.role === Role.CONSULTOR && (!createForm.officeRecordId || !createForm.ownerId)) ||
+                (createForm.role === Role.GERENTE_CONTAS && !createForm.officeRecordId)
+              }
               className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
             >
               {creating ? "Salvando..." : "Criar usuário"}
@@ -402,6 +444,7 @@ export default function AdminUsersPage() {
               <option value={Role.MASTER}>Master</option>
               <option value={Role.PROPRIETARIO}>Proprietário</option>
               <option value={Role.CONSULTOR}>Consultor</option>
+              <option value={Role.GERENTE_CONTAS}>Gerente de Contas</option>
             </select>
             <button
               onClick={loadUsers}
