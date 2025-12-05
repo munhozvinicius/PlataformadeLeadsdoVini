@@ -157,6 +157,7 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
 
   const updates: Prisma.UserUpdateInput = {};
   const finalRole = (role ?? targetUser.role) as Role;
+  const targetOfficeRecordId = officeRecordId ?? targetUser.officeRecordId ?? null;
 
   if (name) updates.name = name;
   if (email) updates.email = email;
@@ -195,6 +196,9 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
     if (!owner || owner.role !== Role.PROPRIETARIO) {
       return NextResponse.json({ message: "Proprietário inválido" }, { status: 400 });
     }
+    if (!targetOfficeRecordId) {
+      return NextResponse.json({ message: "Consultor precisa de um escritório" }, { status: 400 });
+    }
     ownerConnect = { connect: { id: owner.id } };
     const ownerOffices = extractOfficeCodes(owner.offices);
     officesToAssign = ownerOffices;
@@ -225,6 +229,10 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
           ? officeRecordId
             ? { officeRecord: { connect: { id: officeRecordId } } }
             : { officeRecord: { disconnect: true } }
+          : finalRole !== Role.CONSULTOR
+          ? {}
+          : targetOfficeRecordId
+          ? { officeRecord: { connect: { id: targetOfficeRecordId } } }
           : {}),
       },
       select: USER_SELECT,

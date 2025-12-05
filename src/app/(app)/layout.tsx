@@ -8,6 +8,7 @@ import { LogoutButton } from "@/components/LogoutButton";
 const masterLinks = [
   { href: "/admin/dashboard", label: "Dashboard" },
   { href: "/admin/import", label: "Importar Leads" },
+  { href: "/admin/offices", label: "Escritórios" },
   { href: "/admin/users", label: "Usuários" },
   { href: "/board", label: "Board" },
 ];

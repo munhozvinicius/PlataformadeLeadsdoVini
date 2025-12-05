@@ -1,14 +1,11 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Office, Role } from "@prisma/client";
-import UserDrawer, {
-  DrawerMode,
-  OwnerOption,
-  UserDrawerPayload,
-} from "./UserDrawer";
+import UserDrawer, { DrawerMode, OwnerOption, UserDrawerPayload } from "./UserDrawer";
 import { canManageUsers, isConsultor } from "@/lib/authRoles";
 
 type AdminUser = {
@@ -18,53 +15,76 @@ type AdminUser = {
   role: Role;
   office: Office;
   officeRecord?: { id: string; name: string; code: string } | null;
-  owner?: {
-    id: string;
-    name: string;
-    email: string;
-    senior?: { id: string; name?: string | null; email?: string | null } | null;
-    officeRecord?: { id: string; name: string; code: string } | null;
-  } | null;
-  senior?: { id: string; name?: string | null } | null;
+  owner?: { id: string; name: string; email: string } | null;
   offices: { office: Office }[];
   active: boolean;
-  derivedGS?: { id: string; name?: string | null; email?: string | null } | null;
-  derivedGN?: { id: string; name?: string | null; email?: string | null } | null;
 };
 
 type OfficeRecordDto = {
   id: string;
   code: string;
   name: string;
+  active: boolean;
   createdAt: string;
 };
 
-function generatePassword() {
-  return `P${Math.random().toString(36).slice(2, 10)}!`;
+type CreateFormState = {
+  name: string;
+  email: string;
+  password: string;
+  role: Role;
+  officeRecordId: string;
+  ownerId: string;
+};
+
+const initialCreateForm: CreateFormState = {
+  name: "",
+  email: "",
+  password: "",
+  role: Role.PROPRIETARIO,
+  officeRecordId: "",
+  ownerId: "",
+};
+
+const profileLabels: Record<Role, string> = {
+  MASTER: "Master",
+  GERENTE_SENIOR: "Gerente Sênior",
+  GERENTE_NEGOCIOS: "Gerente de Negócios",
+  PROPRIETARIO: "Proprietário",
+  CONSULTOR: "Consultor",
+};
+
+const profileColors: Record<Role, string> = {
+  MASTER: "bg-purple-50 text-purple-700 ring-purple-200",
+  GERENTE_SENIOR: "bg-blue-50 text-blue-700 ring-blue-200",
+  GERENTE_NEGOCIOS: "bg-sky-50 text-sky-700 ring-sky-200",
+  PROPRIETARIO: "bg-amber-50 text-amber-700 ring-amber-200",
+  CONSULTOR: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+};
+
+function mapOfficeCodeToEnum(code?: string): Office | null {
+  if (!code) return null;
+  const normalized = code.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+  const values = Object.values(Office) as string[];
+  return values.includes(normalized) ? (normalized as Office) : null;
 }
 
 export default function AdminUsersPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const [users, setUsers] = useState<AdminUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-const [offices, setOffices] = useState<OfficeRecordDto[]>([]);
+  const [offices, setOffices] = useState<OfficeRecordDto[]>([]);
+  const [usersLoading, setUsersLoading] = useState(true);
   const [officesLoading, setOfficesLoading] = useState(true);
+  const [usersError, setUsersError] = useState("");
+  const [createForm, setCreateForm] = useState<CreateFormState>(initialCreateForm);
+  const [createError, setCreateError] = useState("");
+  const [creating, setCreating] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerMode, setDrawerMode] = useState<DrawerMode>("create");
+  const [drawerMode, setDrawerMode] = useState<DrawerMode>("edit");
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [drawerSubmitting, setDrawerSubmitting] = useState(false);
-  const [officeModalOpen, setOfficeModalOpen] = useState(false);
-  const [officeSubmitting, setOfficeSubmitting] = useState(false);
-  const [officeError, setOfficeError] = useState("");
-  const [officeForm, setOfficeForm] = useState({
-    code: "",
-    name: "",
-    seniorManagerId: "",
-    businessManagerId: "",
-    ownerId: "",
-  });
+  const [profileFilter, setProfileFilter] = useState<Role | "ALL">("ALL");
 
   useEffect(() => {
     if (status === "authenticated" && isConsultor(session?.user.role)) {
@@ -73,35 +93,36 @@ const [offices, setOffices] = useState<OfficeRecordDto[]>([]);
   }, [status, session?.user.role, router]);
 
   const loadUsers = useCallback(async () => {
-    setLoading(true);
-    setError("");
+    setUsersLoading(true);
+    setUsersError("");
     try {
-      const response = await fetch("/api/admin/users", { cache: "no-store" });
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
+      const res = await fetch("/api/admin/users", { cache: "no-store" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
         throw new Error(body?.message ?? "Não foi possível carregar os usuários.");
       }
-      const data: AdminUser[] = await response.json();
+      const data: AdminUser[] = await res.json();
       setUsers(data);
     } catch (err) {
-      console.error("Erro ao carregar usuários", err);
-      setError((err as Error)?.message ?? "Não foi possível carregar os usuários.");
+      console.error(err);
+      setUsers([]);
+      setUsersError((err as Error)?.message ?? "Erro ao carregar usuários.");
     } finally {
-      setLoading(false);
+      setUsersLoading(false);
     }
   }, []);
 
   const loadOffices = useCallback(async () => {
     setOfficesLoading(true);
     try {
-      const response = await fetch("/api/offices", { cache: "no-store" });
-      if (!response.ok) {
+      const res = await fetch("/api/offices", { cache: "no-store" });
+      if (!res.ok) {
         throw new Error("Não foi possível carregar os escritórios.");
       }
-      const data: OfficeRecordDto[] = await response.json();
+      const data: OfficeRecordDto[] = await res.json();
       setOffices(data);
     } catch (err) {
-      console.error("Erro ao carregar escritórios", err);
+      console.error(err);
       setOffices([]);
     } finally {
       setOfficesLoading(false);
@@ -128,142 +149,15 @@ const [offices, setOffices] = useState<OfficeRecordDto[]>([]);
     [users]
   );
 
-  const gsOptions = useMemo(() => users.filter((user) => user.role === Role.GERENTE_SENIOR), [users]);
-  const gnOptions = useMemo(() => users.filter((user) => user.role === Role.GERENTE_NEGOCIOS), [users]);
-  const proprietorOptions = useMemo(() => ownerOptions, [ownerOptions]);
-
-  const canManageOffices = (session?.user.role === Role.MASTER || session?.user.role === Role.GERENTE_SENIOR) ?? false;
-
-  const resetOfficeForm = useCallback(() => {
-    setOfficeForm({
-      code: "",
-      name: "",
-      seniorManagerId: "",
-      businessManagerId: "",
-      ownerId: "",
-    });
-    setOfficeError("");
-  }, []);
-
-  const closeOfficeModal = useCallback(() => {
-    resetOfficeForm();
-    setOfficeModalOpen(false);
-  }, [resetOfficeForm]);
-
-  const handleOfficeSubmit = useCallback(
-    async (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      setOfficeError("");
-      if (!officeForm.code.trim()) {
-        setOfficeError("Informe o código do escritório.");
-        return;
-      }
-      if (!officeForm.name.trim()) {
-        setOfficeError("Informe o nome do escritório.");
-        return;
-      }
-      setOfficeSubmitting(true);
-      try {
-        const response = await fetch("/api/offices", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            code: officeForm.code.trim(),
-            name: officeForm.name.trim(),
-            seniorManagerId: officeForm.seniorManagerId || undefined,
-            businessManagerId: officeForm.businessManagerId || undefined,
-            ownerId: officeForm.ownerId || undefined,
-          }),
-        });
-        if (!response.ok) {
-          const body = await response.json().catch(() => ({}));
-          throw new Error(body?.message ?? "Não foi possível criar o escritório.");
-        }
-        await loadOffices();
-        resetOfficeForm();
-        closeOfficeModal();
-      } catch (submitError) {
-        console.error("Erro ao criar escritório", submitError);
-        setOfficeError((submitError as Error)?.message ?? "Não foi possível criar o escritório.");
-      } finally {
-        setOfficeSubmitting(false);
-      }
-    },
-    [officeForm, loadOffices, resetOfficeForm, closeOfficeModal]
+  const activeOffices = useMemo(
+    () => [...offices].filter((office) => office.active).sort((a, b) => a.name.localeCompare(b.name)),
+    [offices]
   );
 
   const filteredUsers = useMemo(() => {
-    if (session?.user.role === Role.MASTER || session?.user.role === Role.GERENTE_SENIOR) return users;
-    if (session?.user.role === Role.PROPRIETARIO) {
-      return users.filter((user) => user.id === session.user.id || user.owner?.id === session.user.id);
-    }
-    return [];
-  }, [users, session]);
-
-  const hierarchyRows = useMemo(() => {
-    const depthMap: Record<Role, number> = {
-      [Role.MASTER]: 0,
-      [Role.GERENTE_SENIOR]: 0,
-      [Role.GERENTE_NEGOCIOS]: 1,
-      [Role.PROPRIETARIO]: 2,
-      [Role.CONSULTOR]: 3,
-    };
-
-    const officeGroups = new Map<string, AdminUser[]>();
-    filteredUsers.forEach((user) => {
-      const key = user.offices[0]?.office ?? "Sem escritório";
-      const list = officeGroups.get(key) ?? [];
-      list.push(user);
-      officeGroups.set(key, list);
-    });
-
-    const findManager = (officeValue: string | undefined, managerRole: Role) =>
-      filteredUsers.find((user) => user.offices[0]?.office === officeValue && user.role === managerRole);
-
-    const rows: { user: AdminUser; depth: number; gsName: string; gnName: string; ownerName: string }[] = [];
-    const offices = Array.from(officeGroups.keys()).sort((a, b) => a.localeCompare(b));
-    offices.forEach((office) => {
-      const officeUsers = officeGroups.get(office) ?? [];
-      const sorted = [...officeUsers].sort((a, b) => {
-        const depthA = depthMap[a.role] ?? 0;
-        const depthB = depthMap[b.role] ?? 0;
-        if (depthA !== depthB) return depthA - depthB;
-        return a.name.localeCompare(b.name);
-      });
-
-
-      const officeGSName = findManager(office, Role.GERENTE_SENIOR)?.name ?? "-";
-      const officeGNName = findManager(office, Role.GERENTE_NEGOCIOS)?.name ?? "-";
-
-      sorted.forEach((user) => {
-        const gsName =
-          user.derivedGS?.name ?? (user.role === Role.GERENTE_SENIOR ? user.name : officeGSName);
-        const gnName = user.derivedGN?.name ?? (user.role === Role.GERENTE_NEGOCIOS ? user.name : officeGNName);
-        const ownerName =
-          user.role === Role.PROPRIETARIO
-            ? user.name
-            : user.owner?.name ?? "-";
-
-        rows.push({
-          user,
-          depth: depthMap[user.role] ?? 0,
-          gsName,
-          gnName,
-          ownerName,
-        });
-      });
-    });
-    return rows;
-  }, [filteredUsers]);
-
-  const canViewUsers = canManageUsers(session?.user.role);
-  const currentSessionUser = users.find((user) => user.id === session?.user.id);
-
-  const openCreateDrawer = () => {
-    setDrawerMode("create");
-    setSelectedUser(null);
-    setDrawerOpen(true);
-  };
+    if (profileFilter === "ALL") return users;
+    return users.filter((user) => user.role === profileFilter);
+  }, [users, profileFilter]);
 
   const openEditDrawer = (user: AdminUser) => {
     setDrawerMode("edit");
@@ -274,22 +168,21 @@ const [offices, setOffices] = useState<OfficeRecordDto[]>([]);
   const closeDrawer = () => {
     setDrawerOpen(false);
     setSelectedUser(null);
-    setDrawerMode("create");
+    setDrawerMode("edit");
   };
 
-  const handleUserSubmit = useCallback(
+  const handleDrawerSubmit = useCallback(
     async (payload: UserDrawerPayload) => {
       setDrawerSubmitting(true);
       try {
-        const endpoint =
-          drawerMode === "create" ? "/api/admin/users" : `/api/admin/users/${selectedUser?.id}`;
-        const response = await fetch(endpoint, {
+        const endpoint = drawerMode === "create" ? "/api/admin/users" : `/api/admin/users/${selectedUser?.id}`;
+        const res = await fetch(endpoint, {
           method: drawerMode === "create" ? "POST" : "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        if (!response.ok) {
-          const body = await response.json().catch(() => ({}));
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
           throw new Error(body?.message ?? "Não foi possível salvar o usuário.");
         }
         await loadUsers();
@@ -300,127 +193,283 @@ const [offices, setOffices] = useState<OfficeRecordDto[]>([]);
     [drawerMode, loadUsers, selectedUser?.id]
   );
 
-  const handleResetPassword = useCallback(async () => {
-    if (!selectedUser) {
-      throw new Error("Selecione um usuário antes de resetar a senha.");
+  const handleCreateSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setCreateError("");
+    if (!createForm.name.trim() || !createForm.email.trim() || !createForm.password.trim()) {
+      setCreateError("Preencha nome, email e senha.");
+      return;
     }
-    const newPassword = generatePassword();
 
-    const response = await fetch(`/api/admin/users/${selectedUser.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: newPassword }),
-    });
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      throw new Error(body?.message ?? "Não foi possível resetar a senha.");
+    if (createForm.role === Role.CONSULTOR && (!createForm.officeRecordId || !createForm.ownerId)) {
+      setCreateError("Consultor precisa de escritório e proprietário.");
+      return;
     }
-    await loadUsers();
-    return newPassword;
-  }, [loadUsers, selectedUser]);
 
-  if (status === "loading" || !canViewUsers) {
-    return null;
-  }
+    const officeCode = activeOffices.find((office) => office.id === createForm.officeRecordId)?.code;
+    const officeEnum = mapOfficeCodeToEnum(officeCode);
+
+    const payload: Partial<UserDrawerPayload> = {
+      name: createForm.name.trim(),
+      email: createForm.email.trim(),
+      password: createForm.password,
+      role: createForm.role,
+      officeRecordId: createForm.officeRecordId || null,
+      ownerId: createForm.role === Role.CONSULTOR ? createForm.ownerId || null : null,
+      officeIds: officeEnum ? [officeEnum] : [],
+    };
+
+    setCreating(true);
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.message ?? "Não foi possível criar o usuário.");
+      }
+      setCreateForm(initialCreateForm);
+      await loadUsers();
+    } catch (err) {
+      console.error(err);
+      setCreateError((err as Error)?.message ?? "Erro ao criar usuário.");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const currentSessionUser = users.find((user) => user.id === session?.user.id);
+  const canViewUsers = canManageUsers(session?.user.role);
+
+  if (status === "loading" || !canViewUsers) return null;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Master</p>
-        <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="max-w-6xl mx-auto space-y-6">
+      <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Master</p>
+          <h1 className="text-3xl font-semibold text-slate-900">Usuários</h1>
+          <p className="text-sm text-slate-500">
+            Crie proprietários e consultores e vincule-os a escritórios e hierarquias.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={loadUsers}
+            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-100"
+          >
+            Atualizar
+          </button>
+        </div>
+      </header>
+
+      <div className="rounded-xl border bg-white p-6 shadow-sm">
+        <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <h2 className="text-lg font-semibold text-slate-900">Novo usuário</h2>
+        </div>
+        <form onSubmit={handleCreateSubmit} className="space-y-4">
+          {createError ? <p className="text-sm text-red-600">{createError}</p> : null}
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-xs text-slate-600">Nome</label>
+              <input
+                value={createForm.name}
+                onChange={(e) => setCreateForm((prev) => ({ ...prev, name: e.target.value }))}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-600">Email</label>
+              <input
+                type="email"
+                value={createForm.email}
+                onChange={(e) => setCreateForm((prev) => ({ ...prev, email: e.target.value }))}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-600">Senha</label>
+              <input
+                type="password"
+                value={createForm.password}
+                onChange={(e) => setCreateForm((prev) => ({ ...prev, password: e.target.value }))}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-600">Perfil</label>
+              <select
+                value={createForm.role}
+                onChange={(e) =>
+                  setCreateForm((prev) => ({
+                    ...prev,
+                    role: e.target.value as Role,
+                    ownerId: e.target.value === Role.CONSULTOR ? prev.ownerId : "",
+                  }))
+                }
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+              >
+                <option value={Role.PROPRIETARIO}>Proprietário</option>
+                <option value={Role.CONSULTOR}>Consultor</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-600">
+                Escritório{" "}
+                <span className="text-slate-400 text-[11px]">
+                  (opcional para proprietário)
+                </span>
+              </label>
+              <select
+                value={createForm.officeRecordId}
+                onChange={(e) => setCreateForm((prev) => ({ ...prev, officeRecordId: e.target.value }))}
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                disabled={officesLoading}
+              >
+                <option value="">
+                  {createForm.role === Role.CONSULTOR
+                    ? "Selecione um escritório (obrigatório)"
+                    : "Selecione um escritório (opcional)"}
+                </option>
+                {activeOffices.map((office) => (
+                  <option key={office.id} value={office.id}>
+                    {office.name}
+                  </option>
+                ))}
+              </select>
+              <Link href="/admin/offices" className="text-xs font-semibold text-slate-700 hover:text-slate-900">
+                Gerenciar escritórios
+              </Link>
+            </div>
+            {createForm.role === Role.CONSULTOR ? (
+              <div className="space-y-1">
+                <label className="text-xs text-slate-600">Proprietário (GN)</label>
+                <select
+                  value={createForm.ownerId}
+                  onChange={(e) => setCreateForm((prev) => ({ ...prev, ownerId: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="">Selecione o proprietário (GN)</option>
+                  {ownerOptions.map((owner) => (
+                    <option key={owner.id} value={owner.id}>
+                      {owner.name} ({owner.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setCreateForm(initialCreateForm);
+                setCreateError("");
+              }}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Limpar
+            </button>
+            <button
+              type="submit"
+              disabled={creating || (createForm.role === Role.CONSULTOR && (!createForm.officeRecordId || !createForm.ownerId))}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+            >
+              {creating ? "Salvando..." : "Criar usuário"}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div className="rounded-xl border bg-white p-6 shadow-sm">
+        <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">Usuários</h1>
-            <p className="text-sm text-slate-500">
-              Crie e gerencie proprietários, consultores e gerentes de negócio.
-            </p>
+            <h2 className="text-lg font-semibold text-slate-900">Usuários cadastrados</h2>
+            {usersError ? <p className="text-sm text-red-600">{usersError}</p> : null}
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={openCreateDrawer}
-              disabled={officesLoading || offices.length === 0}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            <select
+              value={profileFilter}
+              onChange={(e) => setProfileFilter(e.target.value as Role | "ALL")}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
             >
-              Novo usuário
-            </button>
-            {canManageOffices && (
-              <button
-                type="button"
-                onClick={() => setOfficeModalOpen(true)}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-100"
-              >
-                Criar escritório
-              </button>
-            )}
+              <option value="ALL">Todos os perfis</option>
+              <option value={Role.MASTER}>Master</option>
+              <option value={Role.PROPRIETARIO}>Proprietário</option>
+              <option value={Role.CONSULTOR}>Consultor</option>
+            </select>
             <button
               onClick={loadUsers}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-100"
             >
               Atualizar
             </button>
           </div>
         </div>
-      </div>
-
-      <div className="rounded-xl border bg-white p-4 shadow-sm">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold text-slate-900">Lista</h2>
-        </div>
-        {error ? <div className="text-sm text-red-600 mb-2">{error}</div> : null}
-        {loading ? (
-          <div className="text-sm text-slate-500">Carregando...</div>
+        {usersLoading ? (
+          <p className="text-sm text-slate-500">Carregando usuários...</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
-                <tr className="text-left text-slate-500 border-b">
-                  <th className="py-2 pr-3">Nome</th>
-                  <th className="py-2 pr-3">Email</th>
-                  <th className="py-2 pr-3">Escritórios</th>
-                  <th className="py-2 pr-3">Perfil</th>
-                  <th className="py-2 pr-3">Gerente Sênior</th>
-                  <th className="py-2 pr-3">Gerente de Negócios</th>
-                  <th className="py-2 pr-3">Owner</th>
-                  <th className="py-2 pr-3">Status</th>
-                  <th className="py-2 pr-3">Ações</th>
+                <tr className="bg-slate-50 text-left text-slate-600">
+                  <th className="px-3 py-2 font-semibold">Nome</th>
+                  <th className="px-3 py-2 font-semibold">Email</th>
+                  <th className="px-3 py-2 font-semibold">Perfil</th>
+                  <th className="px-3 py-2 font-semibold">Escritório</th>
+                  <th className="px-3 py-2 font-semibold">Owner</th>
+                  <th className="px-3 py-2 font-semibold">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {hierarchyRows.map((row) => (
-                  <tr key={row.user.id} className="border-b last:border-b-0">
-                    <td className="py-2 pr-3">
-                      <span style={{ paddingLeft: `${row.depth * 1.5}rem` }}>{row.user.name}</span>
+                {filteredUsers.map((user) => (
+                  <tr key={user.id} className="border-b last:border-b-0">
+                    <td className="px-3 py-2 font-medium text-slate-900">{user.name}</td>
+                    <td className="px-3 py-2 text-slate-600">{user.email}</td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ${profileColors[user.role]}`}
+                      >
+                        {profileLabels[user.role]}
+                      </span>
                     </td>
-                    <td className="py-2 pr-3">{row.user.email}</td>
-                    <td className="py-2 pr-3">
-                      {row.user.officeRecord?.name ?? row.user.officeRecord?.code ?? "-"}
-                    </td>
-                    <td className="py-2 pr-3">{row.user.role}</td>
-                    <td className="py-2 pr-3">{row.gsName}</td>
-                    <td className="py-2 pr-3">{row.gnName}</td>
-                    <td className="py-2 pr-3">
-                      {row.user.owner
-                        ? `${row.user.owner.name} (${row.user.owner.email})`
-                        : row.user.senior
-                        ? `GS: ${row.user.senior.name}`
-                        : "-"}
-                    </td>
-                    <td className="py-2 pr-3">
-                      {row.user.active ? (
-                        <span className="text-emerald-600">Ativo</span>
+                    <td className="px-3 py-2 text-slate-700">
+                      {user.officeRecord ? (
+                        <div className="space-y-0.5">
+                          <p className="font-semibold text-slate-900">{user.officeRecord.name}</p>
+                          <p className="text-xs uppercase tracking-wide text-slate-500">{user.officeRecord.code}</p>
+                        </div>
                       ) : (
-                        <span className="text-red-600">Inativo</span>
+                        <span className="text-slate-500">{user.office ?? "-"}</span>
                       )}
                     </td>
-                    <td className="py-2 pr-3">
-                      <button
-                        className="text-slate-600 hover:text-slate-900"
-                        onClick={() => openEditDrawer(row.user)}
-                      >
-                        Editar
-                      </button>
+                    <td className="px-3 py-2 text-slate-700">
+                      {user.owner ? `${user.owner.name} (${user.owner.email})` : "-"}
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => openEditDrawer(user)}
+                          className="rounded-lg border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          Editar
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
+                {!filteredUsers.length ? (
+                  <tr>
+                    <td className="px-3 py-3 text-sm text-slate-500" colSpan={6}>
+                      Nenhum usuário encontrado.
+                    </td>
+                  </tr>
+                ) : null}
               </tbody>
             </table>
           </div>
@@ -431,130 +480,15 @@ const [offices, setOffices] = useState<OfficeRecordDto[]>([]);
         open={drawerOpen}
         mode={drawerMode}
         user={selectedUser ?? undefined}
-        offices={offices}
+        offices={activeOffices}
         owners={ownerOptions}
         isSubmitting={drawerSubmitting}
         onClose={closeDrawer}
-        onSubmit={handleUserSubmit}
-        onResetPassword={drawerMode === "edit" ? handleResetPassword : undefined}
+        onSubmit={handleDrawerSubmit}
         currentUserRole={session?.user.role}
         currentUserId={session?.user.id}
         currentUserOfficeRecordId={currentSessionUser?.officeRecord?.id ?? null}
       />
-      {officeModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40"
-          onMouseDown={closeOfficeModal}
-        >
-          <div
-            className="w-full max-w-md rounded-xl bg-white p-6 shadow-lg"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-900">Novo escritório</h3>
-              <button
-                type="button"
-                className="text-slate-500 hover:text-slate-900"
-                onClick={closeOfficeModal}
-              >
-                Fechar
-              </button>
-            </div>
-            <form className="space-y-4" onSubmit={handleOfficeSubmit}>
-              {officeError ? <p className="text-sm text-red-600">{officeError}</p> : null}
-              <div className="space-y-1">
-                <label className="text-xs text-slate-600">Código do escritório</label>
-                <input
-                  value={officeForm.code}
-                  onChange={(event) =>
-                    setOfficeForm((prev) => ({ ...prev, code: event.target.value }))
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  placeholder="Ex: SAFE_TI, JLC_TECH, PV Ribeirão Preto"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs text-slate-600">Nome</label>
-                <input
-                  value={officeForm.name}
-                  onChange={(event) =>
-                    setOfficeForm((prev) => ({ ...prev, name: event.target.value }))
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  required
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs text-slate-600">Gerente Sênior</label>
-                <select
-                  value={officeForm.seniorManagerId}
-                  onChange={(event) =>
-                    setOfficeForm((prev) => ({ ...prev, seniorManagerId: event.target.value }))
-                  }
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                >
-                  <option value="">Nenhum</option>
-                  {gsOptions.map((gs) => (
-                    <option key={gs.id} value={gs.id}>
-                      {gs.name} ({gs.email})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs text-slate-600">Gerente de Negócios</label>
-                <select
-                  value={officeForm.businessManagerId}
-                  onChange={(event) =>
-                    setOfficeForm((prev) => ({ ...prev, businessManagerId: event.target.value }))
-                  }
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                >
-                  <option value="">Nenhum</option>
-                  {gnOptions.map((gn) => (
-                    <option key={gn.id} value={gn.id}>
-                      {gn.name} ({gn.email})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs text-slate-600">Proprietário</label>
-                <select
-                  value={officeForm.ownerId}
-                  onChange={(event) =>
-                    setOfficeForm((prev) => ({ ...prev, ownerId: event.target.value }))
-                  }
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                >
-                  <option value="">Nenhum</option>
-                  {proprietorOptions.map((ownerOption) => (
-                    <option key={ownerOption.id} value={ownerOption.id}>
-                      {ownerOption.name} ({ownerOption.email})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={closeOfficeModal}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={officeSubmitting}
-                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-                >
-                  {officeSubmitting ? "Salvando..." : "Criar escritório"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

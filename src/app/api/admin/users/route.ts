@@ -160,6 +160,7 @@ export async function POST(req: Request) {
   }
 
   const normalizedOffices = normalizeOfficeCodes(officeIds);
+  const targetOfficeRecordId = officeRecordId as string | undefined;
   let ownerConnect;
   if (role === Role.CONSULTOR) {
     const targetOwnerId = ownerId ?? (isProprietario(sessionRole) ? session.user.id : null);
@@ -171,6 +172,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Proprietário inválido" }, { status: 400 });
     }
     ownerConnect = { connect: { id: owner.id } };
+    if (!targetOfficeRecordId) {
+      return NextResponse.json({ message: "Consultor precisa de um escritório" }, { status: 400 });
+    }
   }
 
   const seniorConnect =
@@ -193,10 +197,9 @@ export async function POST(req: Request) {
       }
       targetOffices.push(...normalizedOffices);
     } else if (role === Role.PROPRIETARIO) {
-      if (!normalizedOffices.length) {
-        return NextResponse.json({ message: "PROPRIETARIO precisa de um escritório" }, { status: 400 });
+      if (normalizedOffices.length) {
+        targetOffices.push(normalizedOffices[0]);
       }
-      targetOffices.push(normalizedOffices[0]);
     } else if (role === Role.CONSULTOR) {
       if (!ownerConnect) {
         return NextResponse.json({ message: "Proprietário inválido" }, { status: 400 });
@@ -216,7 +219,7 @@ export async function POST(req: Request) {
       role,
       profile: role as Profile,
       office: targetOffices[0] ?? Office.SAFE_TI,
-      ...(officeRecordId ? { officeRecord: { connect: { id: officeRecordId } } } : {}),
+      ...(targetOfficeRecordId ? { officeRecord: { connect: { id: targetOfficeRecordId } } } : {}),
       ...(ownerConnect ? { owner: ownerConnect } : {}),
       ...(seniorConnect ? { senior: seniorConnect } : {}),
       active: typeof active === "boolean" ? active : true,
