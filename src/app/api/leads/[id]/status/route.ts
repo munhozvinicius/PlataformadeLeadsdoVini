@@ -9,12 +9,14 @@ type Params = { params: { id: string } };
 
 const allowedStatuses = new Set(Object.values(LeadStatus));
 const palitagemNegativa = [
-  "Cliente não atende",
   "Telefone inválido",
-  "Cliente recusou o contato",
-  "Sem interesse no produto",
-  "Em contrato com concorrente",
+  "Não pertence à empresa",
   "Empresa fechada",
+  "Sem interesse",
+  "Concorrência",
+  "Orçamento baixo",
+  "Ficou de ligar e sumiu",
+  "Cliente não atende",
   "Não é o decisor / Sem contato do decisor",
   "Prospecção incorreta (CNAE/Vertical errada)",
   "Lead duplicado",
@@ -118,6 +120,20 @@ export async function POST(req: Request, { params }: Params) {
       stageBefore: lead.status,
       stageAfter: status,
       note: activityNote,
+    },
+  });
+
+  await prisma.leadEvent.create({
+    data: {
+      leadId: lead.id,
+      userId: session.user.id,
+      type: "STATUS",
+      payload: {
+        from: lead.status,
+        to: status,
+        motivo,
+        observacao,
+      },
     },
   });
 

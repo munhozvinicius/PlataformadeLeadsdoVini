@@ -59,6 +59,8 @@ export async function GET(req: NextRequest) {
     include: {
       campanha: true,
       consultor: { select: { id: true, name: true, email: true } },
+      telefones: true,
+      productCart: true,
     },
     orderBy: [
       { status: "asc" },
