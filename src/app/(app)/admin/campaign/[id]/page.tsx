@@ -355,35 +355,30 @@ export default function CampaignDetailPage() {
       setMessage("Selecione ao menos um consultor.");
       return;
     }
-    if (distributionMode === "PER_CONSULTANT" && (!distributionQuantity || distributionQuantity < 1)) {
+    if (!distributionQuantity || distributionQuantity < 1) {
       setMessage("Quantidade por consultor inválida.");
-      return;
-    }
-    if (distributionMode === "TOTAL" && (!totalQuantity || totalQuantity < 1)) {
-      setMessage("Quantidade total inválida.");
       return;
     }
 
     setMessage("");
     setDistributing(true);
-    const statusesToSend =
-      onlyNewLeads || selectedStatuses.length === 0 ? [LeadStatus.NOVO] : selectedStatuses.map((s) => s);
     const res = await fetch(`/api/campaigns/${id}/distribute`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         consultantIds: selectedDistributionConsultants,
-        mode: distributionMode,
-        quantityPerConsultant: distributionMode === "PER_CONSULTANT" ? distributionQuantity : undefined,
-        quantityTotal: distributionMode === "TOTAL" ? totalQuantity : undefined,
-        respectOffices,
+        quantityPerConsultant:
+          distributionMode === "PER_CONSULTANT"
+            ? distributionQuantity
+            : Math.max(1, Math.ceil(totalQuantity / Math.max(1, selectedDistributionConsultants.length))),
+        officeId: officeFilter || undefined,
         filters: {
-          statuses: statusesToSend,
+          onlyNew: onlyNewLeads,
           onlyUnassigned,
-          onlyWithPhones,
-          onlyValidPhones,
-          minRevenue: minRevenue ? Number(minRevenue) : null,
-          maxRevenue: maxRevenue ? Number(maxRevenue) : null,
+          onlyWithPhone: onlyWithPhones,
+          ignoreInvalidPhones: onlyValidPhones,
+          faturamentoMin: minRevenue ? Number(minRevenue) : undefined,
+          faturamentoMax: maxRevenue ? Number(maxRevenue) : undefined,
         },
       }),
     });

@@ -5,26 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUserWithOffices, canDistributeLeads } from "@/lib/permissions";
 import { LeadStatus, Role } from "@prisma/client";
 import { logLeadAction, computeLastActivityDate } from "@/lib/leadHistory";
-
-type DistributionMode = "PER_CONSULTANT" | "TOTAL";
-
-type DistributionFilters = {
-  statuses?: LeadStatus[];
-  onlyUnassigned?: boolean;
-  onlyWithPhones?: boolean;
-  onlyValidPhones?: boolean;
-  minRevenue?: number | null;
-  maxRevenue?: number | null;
-};
-
-type RequestBody = {
-  consultantIds?: string[];
-  mode?: DistributionMode;
-  quantityPerConsultant?: number;
-  quantityTotal?: number;
-  filters?: DistributionFilters;
-  respectOffices?: boolean;
-};
+import { z } from "zod";
 
 function hasPhone(lead: {
   telefone?: string | null;
@@ -50,45 +31,43 @@ function parseRevenue(value?: string | null) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+const distributeSchema = z.object({
+  consultantIds: z.array(z.string()).min(1),
+  quantityPerConsultant: z.number().min(1),
+  officeId: z.string().optional(),
+  filters: z
+    .object({
+      onlyNew: z.boolean().optional(),
+      onlyUnassigned: z.boolean().optional(),
+      onlyWithPhone: z.boolean().optional(),
+      ignoreInvalidPhones: z.boolean().optional(),
+      faturamentoMin: z.number().optional(),
+      faturamentoMax: z.number().optional(),
+    })
+    .optional(),
+});
+
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const user = await getSessionUserWithOffices();
   if (!user) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const body = (await req.json().catch(() => ({}))) as RequestBody;
-  const consultants = Array.isArray(body.consultantIds)
-    ? body.consultantIds.filter((id) => typeof id === "string" && id.trim().length > 0)
-    : [];
-  const mode = body.mode;
-  const filters: DistributionFilters = body.filters ?? {};
-
-  if (!consultants.length) {
-    return NextResponse.json({ message: "Informe ao menos um consultor." }, { status: 400 });
+  const parsed = distributeSchema.safeParse(await req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid payload", issues: parsed.error.issues }, { status: 400 });
   }
 
-  if (mode !== "PER_CONSULTANT" && mode !== "TOTAL") {
-    return NextResponse.json({ message: "Modo de distribuição inválido." }, { status: 400 });
-  }
-
-  const quantity =
-    mode === "PER_CONSULTANT"
-      ? Number(body.quantityPerConsultant ?? 0)
-      : Number(body.quantityTotal ?? 0);
-
-  if (!Number.isFinite(quantity) || quantity <= 0) {
-    return NextResponse.json({ message: "Quantidade inválida." }, { status: 400 });
-  }
-
-  const allowedStatuses = new Set<LeadStatus>(Object.values(LeadStatus));
-  const statuses = (filters.statuses?.length ? filters.statuses : [LeadStatus.NOVO]).filter((status) =>
-    allowedStatuses.has(status)
-  );
-  const onlyUnassigned = filters.onlyUnassigned !== false;
-  const respectOffices = Boolean(body.respectOffices);
+  const { consultantIds, quantityPerConsultant, officeId, filters } = parsed.data;
+  const onlyNew = filters?.onlyNew ?? true;
+  const onlyUnassigned = filters?.onlyUnassigned ?? true;
+  const onlyWithPhone = filters?.onlyWithPhone ?? false;
+  const ignoreInvalidPhones = filters?.ignoreInvalidPhones ?? false;
+  const faturamentoMin = filters?.faturamentoMin;
+  const faturamentoMax = filters?.faturamentoMax;
 
   const consultantRecords = await prisma.user.findMany({
-    where: { id: { in: consultants }, role: Role.CONSULTOR },
+    where: { id: { in: consultantIds }, role: Role.CONSULTOR },
     select: {
       id: true,
       name: true,
@@ -98,7 +77,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     },
   });
 
-  if (consultantRecords.length !== consultants.length) {
+  if (consultantRecords.length !== consultantIds.length) {
     return NextResponse.json({ message: "Alguns consultores são inválidos." }, { status: 400 });
   }
 
@@ -106,7 +85,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     .map((c) => c.officeRecordId)
     .filter((id): id is string => Boolean(id));
 
-  if (!(await canDistributeLeads(user, params.id, null))) {
+  if (!(await canDistributeLeads(user, params.id, officeId ?? null))) {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
 
@@ -128,20 +107,18 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   }
 
   const officeConstraint =
-    respectOffices && consultantOfficeIds.length
-      ? consultantOfficeIds.filter(
-          (officeId) => officeId && (!allowedOffices.size || allowedOffices.has(officeId))
-        )
+    officeId && officeId.length > 0
+      ? [officeId]
+      : consultantOfficeIds.length
+      ? consultantOfficeIds
       : Array.from(allowedOffices);
 
-  const requiredCount = mode === "PER_CONSULTANT" ? quantity * consultants.length : quantity;
+  const requiredCount = quantityPerConsultant * consultantIds.length;
   const takeAmount = Math.max(requiredCount * 2, requiredCount + 10);
 
-  const statusFilter = statuses.length ? statuses : [LeadStatus.NOVO];
-
-  const eligibleWhere = {
+  const eligibleWhere: Record<string, unknown> = {
     campanhaId: params.id,
-    status: { in: statusFilter },
+    ...(onlyNew ? { status: LeadStatus.NOVO } : {}),
     ...(onlyUnassigned ? { consultorId: null } : {}),
     ...(officeConstraint.length ? { officeId: { in: officeConstraint } } : {}),
   };
@@ -165,14 +142,24 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   });
 
   let leads = rawLeads;
-  if (filters.onlyWithPhones || filters.onlyValidPhones) {
+  if (onlyWithPhone || ignoreInvalidPhones) {
     leads = leads.filter(hasPhone);
   }
-  if (filters.minRevenue != null || filters.maxRevenue != null) {
+  if (ignoreInvalidPhones) {
+    const phoneRegex = /^\+?\d{8,15}$/;
+    leads = leads.filter((lead) => {
+      const phones = [lead.telefone, lead.telefone1, lead.telefone2, lead.telefone3]
+        .filter(Boolean)
+        .map((p) => (p ?? "").replace(/\D/g, ""));
+      if (phones.length === 0) return false;
+      return phones.some((p) => phoneRegex.test(p));
+    });
+  }
+  if (faturamentoMin != null || faturamentoMax != null) {
     leads = leads.filter((lead) => {
       const revenue = parseRevenue(lead.vlFatPresumido);
-      if (filters.minRevenue != null && (revenue == null || revenue < filters.minRevenue)) return false;
-      if (filters.maxRevenue != null && (revenue == null || revenue > filters.maxRevenue)) return false;
+      if (faturamentoMin != null && (revenue == null || revenue < faturamentoMin)) return false;
+      if (faturamentoMax != null && (revenue == null || revenue > faturamentoMax)) return false;
       return true;
     });
   }
@@ -182,30 +169,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   }
 
   const assignments = new Map<string, string[]>(); // consultantId -> leadIds
-  consultants.forEach((id) => assignments.set(id, []));
+  consultantIds.forEach((id) => assignments.set(id, []));
 
-  if (mode === "PER_CONSULTANT") {
-    let cursor = 0;
-    for (const consultantId of consultants) {
-      const current = assignments.get(consultantId);
-      if (!current) continue;
-      while (current.length < quantity && cursor < leads.length) {
-        current.push(leads[cursor].id);
-        cursor += 1;
-      }
-    }
-  } else {
-    let cursor = 0;
-    let distributed = 0;
-    while (cursor < leads.length && distributed < quantity) {
-      for (const consultantId of consultants) {
-        if (cursor >= leads.length || distributed >= quantity) break;
-        const current = assignments.get(consultantId);
-        if (!current) continue;
-        current.push(leads[cursor].id);
-        cursor += 1;
-        distributed += 1;
-      }
+  let cursor = 0;
+  for (const consultantId of consultantIds) {
+    const current = assignments.get(consultantId);
+    if (!current) continue;
+    while (current.length < quantityPerConsultant && cursor < leads.length) {
+      current.push(leads[cursor].id);
+      cursor += 1;
     }
   }
 
@@ -256,6 +228,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const totalDistributed = distributedLeads.length;
 
   return NextResponse.json({
+    ok: true,
     totalEligible: leads.length,
     totalDistributed,
     perConsultant,
