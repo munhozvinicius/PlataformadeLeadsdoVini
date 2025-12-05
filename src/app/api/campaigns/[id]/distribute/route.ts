@@ -1,10 +1,10 @@
 export const dynamic = "force-dynamic";
 
-import { NextResponse, type NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUserWithOffices, canDistributeLeads } from "@/lib/permissions";
-import { LeadStatus, Role } from "@prisma/client";
-import { logLeadAction, computeLastActivityDate } from "@/lib/leadHistory";
+import { LeadStatus } from "@prisma/client";
+import { computeLastActivityDate, logLeadAction } from "@/lib/leadHistory";
 import { z } from "zod";
 
 function hasPhone(lead: {
@@ -21,35 +21,17 @@ function hasPhone(lead: {
   );
 }
 
-function parseRevenue(value?: string | null) {
-  if (!value) return null;
-  const normalized = value
-    .replace(/[^\d.,]/g, "")
-    .replace(/\./g, "")
-    .replace(",", ".");
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 const distributeSchema = z.object({
-  consultantIds: z.array(z.string()).min(1, "Selecione ao menos um consultor"),
-  quantityPerConsultant: z.preprocess(
-    (v) => (typeof v === "string" ? Number(v) : v),
-    z.number().int().min(1, "Quantidade deve ser >= 1")
-  ),
-  officeId: z.string().optional(),
+  consultantIds: z.array(z.string().trim()).min(1, "Selecione ao menos um consultor"),
+  quantityPerConsultant: z
+    .preprocess((v) => (typeof v === "string" ? Number(v) : v), z.number().int().min(1).optional()),
+  mode: z.enum(["manual", "auto"]),
   filters: z
     .object({
       onlyNew: z.boolean().optional(),
       onlyUnassigned: z.boolean().optional(),
       onlyWithPhone: z.boolean().optional(),
       ignoreInvalidPhones: z.boolean().optional(),
-      faturamentoMin: z
-        .preprocess((v) => (v === "" || v == null ? undefined : Number(v)), z.number().optional())
-        .optional(),
-      faturamentoMax: z
-        .preprocess((v) => (v === "" || v == null ? undefined : Number(v)), z.number().optional())
-        .optional(),
     })
     .optional(),
 });
@@ -58,203 +40,174 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   try {
     const user = await getSessionUserWithOffices();
     if (!user) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const body = await req.json().catch(() => ({}));
-    console.log("DEBUG /distribute – raw body:", body);
     const parsed = distributeSchema.safeParse(body);
     if (!parsed.success) {
-      console.error("DEBUG /distribute – validation error:", parsed.error.flatten());
-      return NextResponse.json(
-        { error: "Payload inválido para distribuição", issues: parsed.error.flatten() },
-        { status: 422 }
-      );
+      console.error("[distribute] validation error:", parsed.error.flatten());
+      return NextResponse.json({ error: "Payload inválido para distribuição", issues: parsed.error.flatten() }, { status: 422 });
     }
 
-    const { consultantIds, quantityPerConsultant, officeId, filters } = parsed.data;
+    const { consultantIds, quantityPerConsultant, mode, filters } = parsed.data;
     const onlyNew = filters?.onlyNew ?? true;
     const onlyUnassigned = filters?.onlyUnassigned ?? true;
     const onlyWithPhone = filters?.onlyWithPhone ?? false;
     const ignoreInvalidPhones = filters?.ignoreInvalidPhones ?? false;
-    const faturamentoMin = filters?.faturamentoMin;
-    const faturamentoMax = filters?.faturamentoMax;
 
-  const consultantRecords = await prisma.user.findMany({
-    where: { id: { in: consultantIds }, role: Role.CONSULTOR },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      officeRecordId: true,
-      role: true,
-    },
-  });
-
-  if (consultantRecords.length !== consultantIds.length) {
-    return NextResponse.json({ message: "Alguns consultores são inválidos." }, { status: 400 });
-  }
-
-  const consultantOfficeIds = consultantRecords
-    .map((c) => c.officeRecordId)
-    .filter((id): id is string => Boolean(id));
-
-  if (!(await canDistributeLeads(user, params.id, officeId ?? null))) {
-    return NextResponse.json({ message: "Forbidden" }, { status: 403 });
-  }
-
-  const allowedOffices = new Set<string>();
-  if (user.role === Role.GERENTE_NEGOCIOS) {
-    const notManaged = consultantOfficeIds.filter((officeId) => officeId && !user.managedOfficeIds.includes(officeId));
-    if (notManaged.length > 0) {
-      return NextResponse.json({ message: "Consultor fora do seu escopo de escritórios." }, { status: 403 });
+    if (!(await canDistributeLeads(user, params.id, null))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    user.managedOfficeIds.forEach((id) => allowedOffices.add(id));
-  }
-  if (user.role === Role.PROPRIETARIO) {
-    if (user.officeRecordId && consultantOfficeIds.some((officeId) => officeId && officeId !== user.officeRecordId)) {
-      return NextResponse.json({ message: "Consultor fora do seu escritório." }, { status: 403 });
+
+    if (mode === "manual" && (!quantityPerConsultant || quantityPerConsultant <= 0)) {
+      return NextResponse.json({ error: "Quantidade por consultor inválida." }, { status: 400 });
     }
-    if (user.officeRecordId) {
-      allowedOffices.add(user.officeRecordId);
+
+    const campaign = await prisma.campanha.findUnique({ where: { id: params.id } });
+    if (!campaign) {
+      return NextResponse.json({ error: "Campanha não encontrada." }, { status: 400 });
     }
-  }
+    if (campaign.status && campaign.status !== "ATIVA") {
+      return NextResponse.json({ error: "Campanha não está ativa." }, { status: 400 });
+    }
 
-  const officeConstraint =
-    officeId && officeId.length > 0
-      ? [officeId]
-      : consultantOfficeIds.length
-      ? consultantOfficeIds
-      : Array.from(allowedOffices);
+    const total = await prisma.lead.count({ where: { campanhaId: params.id } });
 
-  const requiredCount = quantityPerConsultant * consultantIds.length;
-  const takeAmount = Math.max(requiredCount * 2, requiredCount + 10);
+    const baseWhere: Record<string, unknown> = { campanhaId: params.id };
+    if (onlyNew) baseWhere.status = LeadStatus.NOVO;
+    if (onlyUnassigned) baseWhere.consultorId = null;
 
-  const eligibleWhere: Record<string, unknown> = {
-    campanhaId: params.id,
-    ...(onlyNew ? { status: LeadStatus.NOVO } : {}),
-    ...(onlyUnassigned ? { consultorId: null } : {}),
-    ...(officeConstraint.length ? { officeId: { in: officeConstraint } } : {}),
-  };
-
-  const rawLeads = await prisma.lead.findMany({
-    where: eligibleWhere,
-    orderBy: { createdAt: "asc" },
-    take: takeAmount,
-    select: {
-      id: true,
-      consultorId: true,
-      officeId: true,
-      telefone: true,
-      telefone1: true,
-      telefone2: true,
-      telefone3: true,
-      documento: true,
-      cnpj: true,
-      vlFatPresumido: true,
-      status: true,
-      assignedToId: true,
-    },
-  });
-
-  let leads = rawLeads;
-  if (onlyWithPhone || ignoreInvalidPhones) {
-    leads = leads.filter(hasPhone);
-  }
-  if (ignoreInvalidPhones) {
-    const phoneRegex = /^\+?\d{8,15}$/;
-    leads = leads.filter((lead) => {
-      const phones = [lead.telefone, lead.telefone1, lead.telefone2, lead.telefone3]
-        .filter(Boolean)
-        .map((p) => (p ?? "").replace(/\D/g, ""));
-      if (phones.length === 0) return false;
-      return phones.some((p) => phoneRegex.test(p));
+    const availableLeads = await prisma.lead.findMany({
+      where: baseWhere,
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        consultorId: true,
+        telefone: true,
+        telefone1: true,
+        telefone2: true,
+        telefone3: true,
+      },
     });
-  }
-  if (faturamentoMin != null || faturamentoMax != null) {
-    leads = leads.filter((lead) => {
-      const revenue = parseRevenue(lead.vlFatPresumido);
-      if (faturamentoMin != null && (revenue == null || revenue < faturamentoMin)) return false;
-      if (faturamentoMax != null && (revenue == null || revenue > faturamentoMax)) return false;
-      return true;
-    });
-  }
 
-  if (!leads.length) {
-    return NextResponse.json(
-      { error: "Não há leads disponíveis para esta campanha/escritório com os filtros aplicados." },
-      { status: 409 }
-    );
-  }
-
-  const assignments = new Map<string, string[]>(); // consultantId -> leadIds
-  consultantIds.forEach((id) => assignments.set(id, []));
-
-  let cursor = 0;
-  for (const consultantId of consultantIds) {
-    const current = assignments.get(consultantId);
-    if (!current) continue;
-    while (current.length < quantityPerConsultant && cursor < leads.length) {
-      current.push(leads[cursor].id);
-      cursor += 1;
+    const available = availableLeads.length;
+    if (available === 0) {
+      return NextResponse.json(
+        { error: "Não há leads disponíveis para esta campanha.", total, available, filteredAvailable: 0 },
+        { status: 409 }
+      );
     }
-  }
 
-  const now = computeLastActivityDate();
-  const distributedLeads = Array.from(assignments.entries())
-    .map(([consultantId, leadIds]) => leadIds.map((leadId) => ({ leadId, consultantId })))
-    .flat()
-    .filter((entry) => entry.leadId);
-
-  if (!distributedLeads.length) {
-    return NextResponse.json({ message: "Não foi possível alocar leads com os filtros atuais." }, { status: 400 });
-  }
-
-  await prisma.$transaction(
-    distributedLeads.map((entry) => {
-      const previousConsultor = leads.find((l) => l.id === entry.leadId)?.consultorId;
-      return prisma.lead.update({
-        where: { id: entry.leadId },
-        data: {
-          consultorId: entry.consultantId,
-          assignedToId: entry.consultantId,
-          previousConsultants: previousConsultor ? { push: previousConsultor } : undefined,
-          lastActivityDate: now,
-        },
+    let filteredLeads = availableLeads;
+    if (onlyWithPhone || ignoreInvalidPhones) {
+      filteredLeads = filteredLeads.filter(hasPhone);
+    }
+    if (ignoreInvalidPhones) {
+      const phoneRegex = /^\+?\d{8,15}$/;
+      filteredLeads = filteredLeads.filter((lead) => {
+        const phones = [lead.telefone, lead.telefone1, lead.telefone2, lead.telefone3]
+          .filter(Boolean)
+          .map((p) => (p ?? "").replace(/\D/g, ""));
+        if (phones.length === 0) return false;
+        return phones.some((p) => phoneRegex.test(p));
       });
-    })
-  );
+    }
 
-  await Promise.all(
-    distributedLeads.map((entry) =>
-      logLeadAction({
-        leadId: entry.leadId,
-        action: "DISTRIBUICAO_AUTOMATICA",
-        fromUserId: leads.find((l) => l.id === entry.leadId)?.consultorId ?? undefined,
-        toUserId: entry.consultantId,
-        byUserId: user.id,
-        notes: "Distribuição de leads",
-      })
-    )
-  );
+    const filteredAvailable = filteredLeads.length;
+    if (filteredAvailable === 0) {
+      return NextResponse.json(
+        { error: "Nenhum lead disponível com os filtros aplicados.", available, total, filteredAvailable },
+        { status: 409 }
+      );
+    }
 
-  const perConsultant = consultantRecords.map((consultant) => ({
-    consultantId: consultant.id,
-    name: consultant.name ?? consultant.email ?? consultant.id,
-    email: consultant.email ?? "",
-    distributed: assignments.get(consultant.id)?.length ?? 0,
-  }));
-  const totalDistributed = distributedLeads.length;
+    // status/onlyNew and onlyUnassigned already respected by query default; flags kept for compatibility
+    const leadsToUse = filteredLeads;
 
-  return NextResponse.json({
-    ok: true,
-    totalEligible: leads.length,
-    totalDistributed,
-    perConsultant,
-    message: "Distribuição aplicada com sucesso.",
-  });
+    const assignments = new Map<string, string[]>();
+    consultantIds.forEach((id) => assignments.set(id, []));
+
+    if (mode === "manual") {
+      const needed = consultantIds.length * (quantityPerConsultant ?? 0);
+      const toDistribute = Math.min(needed, leadsToUse.length);
+      let cursor = 0;
+      for (const consultantId of consultantIds) {
+        const slice = leadsToUse.slice(cursor, cursor + (quantityPerConsultant ?? 0));
+        cursor += slice.length;
+        assignments.set(consultantId, slice.map((s) => s.id));
+      }
+      if (toDistribute < needed) {
+        // continue best-effort, no early return
+      }
+    } else {
+      const base = Math.floor(leadsToUse.length / consultantIds.length);
+      let rest = leadsToUse.length % consultantIds.length;
+      let cursor = 0;
+      for (const consultantId of consultantIds) {
+        const qty = base + (rest > 0 ? 1 : 0);
+        if (rest > 0) rest -= 1;
+        if (qty <= 0) continue;
+        const slice = leadsToUse.slice(cursor, cursor + qty);
+        cursor += slice.length;
+        assignments.set(consultantId, slice.map((s) => s.id));
+      }
+    }
+
+    const updates = Array.from(assignments.entries())
+      .map(([consultantId, leadIds]) => ({ consultantId, leadIds: leadIds.filter(Boolean) }))
+      .filter((entry) => entry.leadIds.length > 0);
+
+    if (updates.length === 0) {
+      return NextResponse.json(
+        { error: "Não foi possível alocar leads com os parâmetros informados." },
+        { status: 409 }
+      );
+    }
+
+    const now = computeLastActivityDate();
+    await prisma.$transaction(
+      updates.map((entry) =>
+        prisma.lead.updateMany({
+          where: { id: { in: entry.leadIds } },
+          data: { consultorId: entry.consultantId, assignedToId: entry.consultantId, lastActivityDate: now },
+        })
+      )
+    );
+
+    await Promise.all(
+      updates.flatMap((entry) =>
+        entry.leadIds.map((leadId) =>
+          logLeadAction({
+            leadId,
+            action: "DISTRIBUICAO_AUTOMATICA",
+            fromUserId: null,
+            toUserId: entry.consultantId,
+            byUserId: user.id,
+            notes: mode === "auto" ? "Distribuição automática" : "Distribuição manual",
+          })
+        )
+      )
+    );
+
+    const totalDistributed = updates.reduce((acc, entry) => acc + entry.leadIds.length, 0);
+    const perConsultant = Object.fromEntries(updates.map((entry) => [entry.consultantId, entry.leadIds.length]));
+
+    return NextResponse.json({
+      success: true,
+      distributed: { total: totalDistributed, byConsultant: perConsultant },
+      requested: mode === "manual" ? consultantIds.length * (quantityPerConsultant ?? 0) : totalDistributed,
+      remaining: Math.max(available - totalDistributed, 0),
+      total,
+      available,
+      filteredAvailable,
+      message:
+        mode === "manual" && totalDistributed < (consultantIds.length * (quantityPerConsultant ?? 0))
+          ? "Nem todos os leads solicitados estavam disponíveis. Distribuição parcial concluída."
+          : undefined,
+    });
   } catch (err) {
-    console.error("DEBUG /distribute – unexpected error:", err);
+    console.error("[distribute] unexpected error:", err);
     return NextResponse.json({ error: "Erro interno ao distribuir leads" }, { status: 500 });
   }
 }
