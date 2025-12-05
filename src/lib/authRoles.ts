@@ -4,7 +4,6 @@ export enum AppRole {
   MASTER = "MASTER",
   GERENTE_SENIOR = "GERENTE_SENIOR",
   GERENTE_NEGOCIOS = "GERENTE_NEGOCIOS",
-  GERENTE_CONTAS = "GERENTE_CONTAS",
   PROPRIETARIO = "PROPRIETARIO",
   CONSULTOR = "CONSULTOR",
 }
@@ -13,7 +12,6 @@ export const roleHierarchy: AppRole[] = [
   AppRole.MASTER,
   AppRole.GERENTE_SENIOR,
   AppRole.GERENTE_NEGOCIOS,
-  AppRole.GERENTE_CONTAS,
   AppRole.PROPRIETARIO,
   AppRole.CONSULTOR,
 ];
@@ -32,10 +30,6 @@ export function isGerenteSenior(role?: RoleLike) {
 
 export function isGerenteNegocios(role?: RoleLike) {
   return toRoleString(role) === AppRole.GERENTE_NEGOCIOS;
-}
-
-export function isGerenteContas(role?: RoleLike) {
-  return toRoleString(role) === AppRole.GERENTE_CONTAS;
 }
 
 export function isProprietario(role?: RoleLike) {

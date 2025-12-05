@@ -32,7 +32,6 @@ const CREATOR_ROLES = [
   Role.MASTER,
   Role.GERENTE_SENIOR,
   Role.GERENTE_NEGOCIOS,
-  Role.GERENTE_CONTAS,
   Role.PROPRIETARIO,
 ];
 
@@ -197,11 +196,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ message: "GERENTE_NEGOCIOS precisa de ao menos um escritório" }, { status: 400 });
       }
       targetOffices.push(...normalizedOffices);
-    } else if (role === Role.GERENTE_CONTAS) {
-      if (!normalizedOffices.length) {
-        return NextResponse.json({ message: "GERENTE_CONTAS precisa de ao menos um escritório" }, { status: 400 });
-      }
-      targetOffices.push(normalizedOffices[0]);
     } else if (role === Role.PROPRIETARIO) {
       if (normalizedOffices.length) {
         targetOffices.push(normalizedOffices[0]);
