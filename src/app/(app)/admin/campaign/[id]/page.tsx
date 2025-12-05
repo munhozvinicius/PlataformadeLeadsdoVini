@@ -132,7 +132,8 @@ export default function CampaignDetailPage() {
   });
   const [consultants, setConsultants] = useState<ConsultantWithOffice[]>([]);
   const [offices, setOffices] = useState<{ id: string; name: string; code?: string | null }[]>([]);
-  const [selectedOfficeId, setSelectedOfficeId] = useState("");
+  const [officeDraft, setOfficeDraft] = useState("");
+  const [officeFilter, setOfficeFilter] = useState("");
   const [selectedConsultor, setSelectedConsultor] = useState("");
   const [selectedDistributionConsultants, setSelectedDistributionConsultants] = useState<string[]>([]);
   const [distributionQuantity, setDistributionQuantity] = useState(5);
@@ -155,6 +156,7 @@ export default function CampaignDetailPage() {
     | null
   >(null);
   const [distributing, setDistributing] = useState(false);
+  const [consultantsLoading, setConsultantsLoading] = useState(false);
   const [batches, setBatches] = useState<CampaignBatch[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState("");
   const [batchToDelete, setBatchToDelete] = useState<CampaignBatch | null>(null);
@@ -179,9 +181,9 @@ export default function CampaignDetailPage() {
   }, [detail]);
 
   const filteredConsultants = useMemo(() => {
-    if (!selectedOfficeId) return consultants;
-    return consultants.filter((consultant) => consultant.officeId === selectedOfficeId);
-  }, [consultants, selectedOfficeId]);
+    if (!officeFilter) return consultants;
+    return consultants.filter((consultant) => consultant.officeId === officeFilter);
+  }, [consultants, officeFilter]);
 
   useEffect(() => {
     setSelectedDistributionConsultants((prev) =>
@@ -198,17 +200,17 @@ export default function CampaignDetailPage() {
   }, [id]);
 
   const loadDistribution = useCallback(async () => {
-    if (!selectedOfficeId) return;
-    const params = new URLSearchParams({ officeId: selectedOfficeId });
+    if (!officeFilter) return;
+    const params = new URLSearchParams({ officeId: officeFilter });
     const res = await fetch(`/api/campaigns/${id}/distribution?${params.toString()}`, { cache: "no-store" });
     if (res.ok) {
       const json = await res.json();
       setDistribution(json.distribution ?? []);
     }
-  }, [id, selectedOfficeId]);
+  }, [id, officeFilter]);
 
   const loadLeads = useCallback(async () => {
-    if (!selectedOfficeId) return;
+    if (!officeFilter) return;
     const params = new URLSearchParams();
     serverFilterKeys.forEach((key) => {
       const value = filters[key];
@@ -216,45 +218,51 @@ export default function CampaignDetailPage() {
         params.append(key, value);
       }
     });
-    params.append("officeId", selectedOfficeId);
+    params.append("officeId", officeFilter);
     const res = await fetch(`/api/campaigns/${id}/leads?${params.toString()}`, { cache: "no-store" });
     if (res.ok) {
       const json = await res.json();
       setLeads(json.items ?? []);
     }
-  }, [filters, id, selectedOfficeId]);
+  }, [filters, id, officeFilter]);
 
   const loadAudit = useCallback(async () => {
     const res = await fetch(`/api/campaign/${id}/audit`, { cache: "no-store" });
     if (res.ok) setAudit(await res.json());
   }, [id]);
 
-  const loadConsultants = useCallback(async () => {
-    const res = await fetch("/api/admin/users", { cache: "no-store" });
-    if (res.ok) {
-      type ApiUser = {
-        id: string;
-        name?: string | null;
-        email?: string | null;
-        role: string;
-        office?: { id?: string | null; name?: string | null; code?: string | null } | null;
-        escritorio?: string | null;
-        owner?: { escritorio?: string | null } | null;
-      };
-      const users = (await res.json()) as ApiUser[];
-      const onlyConsultants = users.filter((u) => u.role === "CONSULTOR");
-      setConsultants(
-        onlyConsultants.map((u) => ({
-          id: u.id,
-          name: u.name,
-          email: u.email,
-          officeId: u.office?.id ?? null,
-          officeName: u.office?.name ?? u.escritorio ?? u.owner?.escritorio ?? "",
-          officeCode: u.office?.code ?? u.escritorio ?? u.owner?.escritorio ?? null,
-        }))
-      );
-    }
-  }, []);
+  const loadConsultants = useCallback(
+    async (appliedOffice?: string) => {
+      setConsultantsLoading(true);
+      const params = new URLSearchParams();
+      if (appliedOffice) params.append("officeId", appliedOffice);
+      const res = await fetch(`/api/campaigns/${id}/consultants?${params.toString()}`, { cache: "no-store" });
+      setConsultantsLoading(false);
+      if (res.ok) {
+        type ApiUser = {
+          id: string;
+          name?: string | null;
+          email?: string | null;
+          officeId?: string | null;
+          officeName?: string | null;
+        };
+        const users = (await res.json()) as ApiUser[];
+        setConsultants(
+          users.map((u) => ({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            officeId: u.officeId ?? null,
+            officeName: u.officeName ?? "",
+            officeCode: null,
+          }))
+        );
+      } else {
+        setConsultants([]);
+      }
+    },
+    [id]
+  );
 
   const loadOffices = useCallback(async () => {
     const res = await fetch("/api/admin/offices", { cache: "no-store" });
@@ -279,29 +287,31 @@ export default function CampaignDetailPage() {
   useEffect(() => {
     if (status === "authenticated" && id) {
       loadDetail();
-      loadConsultants();
+      loadConsultants(officeFilter);
       loadBatches();
       loadOffices();
       loadAudit();
     }
-  }, [status, id, loadDetail, loadConsultants, loadBatches, loadOffices, loadAudit]);
+  }, [status, id, loadDetail, loadConsultants, loadBatches, loadOffices, loadAudit, officeFilter]);
 
   useEffect(() => {
-    if (status === "authenticated" && id && selectedOfficeId) {
+    if (status === "authenticated" && id && officeFilter) {
       loadDistribution();
       loadLeads();
+      loadConsultants(officeFilter);
     }
-  }, [status, id, selectedOfficeId, loadDistribution, loadLeads]);
+  }, [status, id, officeFilter, loadDistribution, loadLeads, loadConsultants]);
 
   useEffect(() => {
-    if (!selectedOfficeId && offices.length > 0) {
-      setSelectedOfficeId(offices[0].id);
+    if (!officeDraft && offices.length > 0) {
+      setOfficeDraft(offices[0].id);
+      setOfficeFilter((prev) => prev || offices[0].id);
     }
-  }, [offices, selectedOfficeId]);
+  }, [offices, officeDraft]);
 
   const filteredLeads = useMemo(() => {
     return leads.filter((lead) => {
-      if (selectedOfficeId && (!lead.officeId || lead.officeId !== selectedOfficeId)) {
+      if (officeFilter && (!lead.officeId || lead.officeId !== officeFilter)) {
         return false;
       }
       if (filters.documento) {
@@ -325,7 +335,7 @@ export default function CampaignDetailPage() {
       if (filters.telefone === "without" && hasAnyPhone(lead)) return false;
       return true;
     });
-  }, [leads, filters, selectedOfficeId]);
+  }, [leads, filters, officeFilter]);
 
   const officeTotals = useMemo(
     () =>
@@ -523,12 +533,12 @@ export default function CampaignDetailPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs text-slate-500">Contexto</p>
-            <p className="text-sm font-semibold text-slate-800">Selecione o escritório para filtrar dados</p>
+            <p className="text-sm font-semibold text-slate-800">Selecione o escritório e clique em Aplicar</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <select
-              value={selectedOfficeId}
-              onChange={(e) => setSelectedOfficeId(e.target.value)}
+              value={officeDraft}
+              onChange={(e) => setOfficeDraft(e.target.value)}
               className="rounded-lg border px-3 py-2 text-sm"
             >
               <option value="">Todos os escritórios</option>
@@ -538,8 +548,14 @@ export default function CampaignDetailPage() {
                 </option>
               ))}
             </select>
+            <button
+              onClick={() => setOfficeFilter(officeDraft)}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-100"
+            >
+              Aplicar
+            </button>
             <span className="text-xs text-slate-500">
-              {selectedOfficeId ? "Filtrando por escritório" : "Mostrando visão geral"}
+              {officeFilter ? "Filtrando por escritório" : "Mostrando visão geral"}
             </span>
           </div>
         </div>
@@ -582,6 +598,7 @@ export default function CampaignDetailPage() {
       {activeTab === "distribution" ? (
         <DistributionTab
           consultants={filteredConsultants}
+          consultantsLoading={consultantsLoading}
           selectedDistributionConsultants={selectedDistributionConsultants}
           setSelectedDistributionConsultants={setSelectedDistributionConsultants}
           distributionQuantity={distributionQuantity}
@@ -611,6 +628,7 @@ export default function CampaignDetailPage() {
           assigned={detail?.resumo.atribuidos ?? 0}
           distributing={distributing}
           distributionResult={distributionResult}
+          officeFilter={officeFilter}
         />
       ) : null}
 
@@ -1005,6 +1023,7 @@ function ImportTab({
 
 function DistributionTab({
   consultants,
+  consultantsLoading,
   selectedDistributionConsultants,
   setSelectedDistributionConsultants,
   distributionQuantity,
@@ -1034,8 +1053,10 @@ function DistributionTab({
   assigned,
   distributing,
   distributionResult,
+  officeFilter,
 }: {
   consultants: ConsultantWithOffice[];
+  consultantsLoading: boolean;
   selectedDistributionConsultants: string[];
   setSelectedDistributionConsultants: (ids: string[]) => void;
   distributionQuantity: number;
@@ -1069,6 +1090,7 @@ function DistributionTab({
     totalDistributed: number;
     perConsultant: { consultantId: string; name: string; email: string; distributed: number }[];
   } | null;
+  officeFilter: string;
 }) {
   return (
     <div className="rounded-2xl border bg-white/80 p-4 shadow-sm space-y-4">
@@ -1082,19 +1104,31 @@ function DistributionTab({
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
         <div className="space-y-1 md:col-span-2">
           <label className="text-xs text-slate-600">Consultores</label>
-          <select
-            multiple
-            value={selectedDistributionConsultants}
-            onChange={(e) => setSelectedDistributionConsultants(Array.from(e.target.selectedOptions, (o) => o.value))}
-            className="h-28 w-full rounded-lg border px-3 py-2 text-sm"
-          >
-            {consultants.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name ?? c.email} {c.officeName ? `• ${c.officeName}` : ""}
-              </option>
-            ))}
-          </select>
-          <p className="text-xs text-slate-500">Selecione um ou mais consultores habilitados para esta campanha.</p>
+          {consultantsLoading ? (
+            <p className="text-xs text-slate-500">Carregando consultores…</p>
+          ) : consultants.length === 0 ? (
+            <p className="text-xs text-slate-500">
+              {officeFilter
+                ? "Nenhum consultor elegível para este escritório."
+                : "Selecione um escritório e clique em Aplicar para carregar consultores."}
+            </p>
+          ) : (
+            <>
+              <select
+                multiple
+                value={selectedDistributionConsultants}
+                onChange={(e) => setSelectedDistributionConsultants(Array.from(e.target.selectedOptions, (o) => o.value))}
+                className="h-28 w-full rounded-lg border px-3 py-2 text-sm"
+              >
+                {consultants.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name ?? c.email} {c.officeName ? `(${c.officeName})` : ""}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-500">Selecione um ou mais consultores habilitados para esta campanha.</p>
+            </>
+          )}
         </div>
         <div className="space-y-2">
           <label className="text-xs text-slate-600">Modo de distribuição</label>
