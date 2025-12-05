@@ -1,9 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type FormEvent,
+  type SetStateAction,
+} from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { LeadStatus } from "@prisma/client";
+import { zipSync } from "fflate";
 
 type CampaignDetail = {
   campaign: { id: string; nome: string; descricao?: string | null; status?: string | null };
@@ -46,6 +55,8 @@ type CampaignBatch = {
   totalLeads: number;
   importedLeads: number;
   createdAt: string;
+  duplicatedLeads?: number;
+  notAttributedLeads?: number;
 };
 
 type LeadItem = {
@@ -81,6 +92,8 @@ type ConsultantWithOffice = {
   officeCode?: string | null;
 };
 
+type TabKey = "campaign" | "import" | "distribution" | "recapture";
+
 const serverFilterKeys: Array<keyof LeadFilters> = [
   "status",
   "consultorId",
@@ -90,18 +103,18 @@ const serverFilterKeys: Array<keyof LeadFilters> = [
   "vertical",
 ];
 
+const RECAPTURE_STATUSES: LeadStatus[] = [LeadStatus.NOVO, LeadStatus.EM_CONTATO, LeadStatus.EM_NEGOCIACAO];
+
 export default function CampaignDetailPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
   const { data: session, status } = useSession();
-  const [, setLogs] = useState<{
-    activities: { id: string; action: string; user: string; lead: string; timestamp: string }[];
-    distributions: { id: string; admin: string; consultant: string; leadsSent: number; rulesApplied: string; timestamp: string }[];
-  } | null>(null);
+
+  const [activeTab, setActiveTab] = useState<TabKey>("campaign");
+  const [detail, setDetail] = useState<CampaignDetail | null>(null);
   const [audit, setAudit] = useState<{ total: number; invalidPhones: number; duplicated: number; invalids: number } | null>(
     null
   );
-  const [detail, setDetail] = useState<CampaignDetail | null>(null);
   const [distribution, setDistribution] = useState<DistributionRow[]>([]);
   const [leads, setLeads] = useState<LeadItem[]>([]);
   const [filters, setFilters] = useState<LeadFilters>({
@@ -118,21 +131,29 @@ export default function CampaignDetailPage() {
     telefone: "all",
   });
   const [consultants, setConsultants] = useState<ConsultantWithOffice[]>([]);
-  const [distributionQuantity, setDistributionQuantity] = useState(5);
-  const [selectedConsultor, setSelectedConsultor] = useState("");
-  const [selectedDistributionConsultants, setSelectedDistributionConsultants] = useState<string[]>([]);
   const [offices, setOffices] = useState<{ id: string; name: string; code?: string | null }[]>([]);
   const [selectedOfficeId, setSelectedOfficeId] = useState("");
+  const [selectedConsultor, setSelectedConsultor] = useState("");
+  const [selectedDistributionConsultants, setSelectedDistributionConsultants] = useState<string[]>([]);
+  const [distributionQuantity, setDistributionQuantity] = useState(5);
+  const [onlyNewLeads, setOnlyNewLeads] = useState(true);
   const [batches, setBatches] = useState<CampaignBatch[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState("");
+  const [batchToDelete, setBatchToDelete] = useState<CampaignBatch | null>(null);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importMessage, setImportMessage] = useState("");
   const [message, setMessage] = useState("");
-  const isMaster = session?.user.role === "MASTER";
+
+  const isConsultant = session?.user.role === "CONSULTOR";
+  const isLoadingSession = status === "loading";
+  const canReset = session?.user.role === "MASTER" || session?.user.role === "GERENTE_SENIOR";
 
   useEffect(() => {
-    if (status === "authenticated" && session?.user.role !== "MASTER") {
+    if (status === "authenticated" && isConsultant) {
       router.replace("/board");
     }
-  }, [status, session, router]);
+  }, [status, isConsultant, router]);
 
   const conversao = useMemo(() => {
     if (!detail) return 0;
@@ -140,20 +161,9 @@ export default function CampaignDetailPage() {
   }, [detail]);
 
   const filteredConsultants = useMemo(() => {
-    if (!selectedOfficeId) return [];
+    if (!selectedOfficeId) return consultants;
     return consultants.filter((consultant) => consultant.officeId === selectedOfficeId);
   }, [consultants, selectedOfficeId]);
-
-  const selectedOffice = useMemo(() => offices.find((office) => office.id === selectedOfficeId), [
-    offices,
-    selectedOfficeId,
-  ]);
-
-  useEffect(() => {
-    if (!selectedOfficeId && offices.length > 0) {
-      setSelectedOfficeId(offices[0].id);
-    }
-  }, [offices, selectedOfficeId]);
 
   useEffect(() => {
     setSelectedDistributionConsultants((prev) =>
@@ -195,11 +205,6 @@ export default function CampaignDetailPage() {
       setLeads(json.items ?? []);
     }
   }, [filters, id, selectedOfficeId]);
-
-  const loadLogs = useCallback(async () => {
-    const res = await fetch(`/api/campaign/${id}/logs`, { cache: "no-store" });
-    if (res.ok) setLogs(await res.json());
-  }, [id]);
 
   const loadAudit = useCallback(async () => {
     const res = await fetch(`/api/campaign/${id}/audit`, { cache: "no-store" });
@@ -259,27 +264,22 @@ export default function CampaignDetailPage() {
       loadConsultants();
       loadBatches();
       loadOffices();
+      loadAudit();
     }
-  }, [status, id, loadDetail, loadConsultants, loadBatches, loadOffices]);
+  }, [status, id, loadDetail, loadConsultants, loadBatches, loadOffices, loadAudit]);
 
   useEffect(() => {
     if (status === "authenticated" && id && selectedOfficeId) {
       loadDistribution();
-    }
-  }, [status, id, selectedOfficeId, loadDistribution]);
-
-  useEffect(() => {
-    if (status === "authenticated" && id && selectedOfficeId) {
       loadLeads();
     }
-  }, [status, id, selectedOfficeId, filters, loadLeads]);
+  }, [status, id, selectedOfficeId, loadDistribution, loadLeads]);
 
   useEffect(() => {
-    if (status === "authenticated" && id) {
-      loadLogs();
-      loadAudit();
+    if (!selectedOfficeId && offices.length > 0) {
+      setSelectedOfficeId(offices[0].id);
     }
-  }, [status, id, loadLogs, loadAudit]);
+  }, [offices, selectedOfficeId]);
 
   const filteredLeads = useMemo(() => {
     return leads.filter((lead) => {
@@ -322,16 +322,11 @@ export default function CampaignDetailPage() {
     [distribution]
   );
 
-  async function distribute() {
-    if (!isMaster) {
-      setMessage("Apenas master pode distribuir.");
-      return;
-    }
+  async function handleDistribute() {
     if (!selectedOfficeId) {
       setMessage("Selecione um escritório antes de distribuir.");
       return;
     }
-    setMessage("");
     if (selectedDistributionConsultants.length === 0) {
       setMessage("Selecione ao menos um consultor.");
       return;
@@ -340,57 +335,32 @@ export default function CampaignDetailPage() {
       setMessage("Quantidade por consultor inválida.");
       return;
     }
-    const res = await fetch(`/api/campaigns/${id}/distribution`, {
+
+    setMessage("");
+    const res = await fetch(`/api/campaigns/${id}/distribute`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        officeId: selectedOfficeId,
-        consultantIds: selectedDistributionConsultants,
+        consultants: selectedDistributionConsultants,
+        mode: "PER_CONSULTANT",
         quantityPerConsultant: distributionQuantity,
+        filters: onlyNewLeads ? { onlyStatus: [LeadStatus.NOVO] } : undefined,
+        officeId: selectedOfficeId,
       }),
     });
+
     if (!res.ok) {
       const err = await res.json().catch(() => null);
       setMessage(err?.message ?? "Erro ao distribuir.");
       return;
     }
-    setMessage("Distribuição realizada.");
-    await Promise.all([loadDetail(), loadDistribution(), loadLeads(), loadLogs()]);
-  }
-
-  async function autoDistribute() {
-    if (!isMaster) {
-      setMessage("Apenas master pode distribuir.");
-      return;
-    }
-    if (!selectedOfficeId) {
-      setMessage("Selecione um escritório antes de distribuir.");
-      return;
-    }
-    setMessage("");
-    const res = await fetch(`/api/campaigns/${id}/distribution`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        officeId: selectedOfficeId,
-        consultantIds: selectedDistributionConsultants,
-        auto: true,
-      }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => null);
-      setMessage(err?.message ?? "Erro ao distribuir automaticamente.");
-      return;
-    }
-    setMessage("Distribuição igualitária aplicada.");
-    await Promise.all([loadDetail(), loadDistribution(), loadLeads(), loadLogs()]);
+    const json = await res.json();
+    const totalDistributed = Number(json.totalDistributed ?? 0);
+    setMessage(`Distribuição realizada: ${Number.isFinite(totalDistributed) ? totalDistributed : 0} leads.`);
+    await Promise.all([loadDetail(), loadDistribution(), loadLeads()]);
   }
 
   async function deleteBatch() {
-    if (!isMaster) {
-      setMessage("Apenas master pode excluir lotes.");
-      return;
-    }
     if (!selectedBatchId) {
       setMessage("Selecione um lote para excluir.");
       return;
@@ -405,11 +375,42 @@ export default function CampaignDetailPage() {
     await Promise.all([loadDetail(), loadDistribution(), loadLeads(), loadBatches()]);
   }
 
-  async function resetCampaign() {
-    if (!isMaster) {
-      setMessage("Apenas master pode resetar a campanha.");
+  async function handleImport(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setImportMessage("");
+    if (!importFile) {
+      setImportMessage("Selecione o arquivo da planilha.");
       return;
     }
+    const buffer = await importFile.arrayBuffer();
+    const zipped = zipSync({ [importFile.name]: new Uint8Array(buffer) });
+    const zippedArray = new Uint8Array(zipped);
+
+    const formData = new FormData();
+    formData.append("file", new Blob([zippedArray], { type: "application/zip" }), `${importFile.name}.zip`);
+    formData.append("compressed", "true");
+    formData.append("campanhaId", id);
+    formData.append("assignmentType", "none");
+
+    setImportLoading(true);
+    const res = await fetch("/api/campanhas/import", {
+      method: "POST",
+      body: formData,
+    });
+    setImportLoading(false);
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      setImportMessage(err?.message ?? "Erro ao importar planilha.");
+      return;
+    }
+    const json = await res.json();
+    setImportMessage(
+      `Importação concluída: ${json.importedLeads} criados, ${json.duplicatedLeads} duplicados, em estoque: ${json.notAttributedLeads}.`
+    );
+    await Promise.all([loadDetail(), loadBatches(), loadLeads()]);
+  }
+
+  async function resetCampaign() {
     if (!window.confirm("Deseja resetar esta campanha? As atribuições serão removidas, mas os leads permanecerão.")) {
       return;
     }
@@ -420,161 +421,239 @@ export default function CampaignDetailPage() {
       return;
     }
     setMessage("Campanha resetada.");
-    await Promise.all([loadDetail(), loadDistribution(), loadLeads(), loadLogs()]);
+    await Promise.all([loadDetail(), loadDistribution(), loadLeads()]);
+  }
+
+  if (isLoadingSession || status === "unauthenticated" || isConsultant) {
+    return null;
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Campanha</p>
-          <h1 className="text-2xl font-semibold text-slate-900">{detail?.campaign.nome ?? "Campanha"}</h1>
-          <p className="text-sm text-slate-500">{detail?.campaign.descricao}</p>
-        </div>
-        <div className="flex gap-2">
+    <div className="max-w-6xl mx-auto space-y-6">
+      <header className="rounded-2xl border border-slate-200 bg-white/80 backdrop-blur p-4 shadow-sm space-y-2">
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Campanha</p>
+            <h1 className="text-2xl font-semibold text-slate-900">{detail?.campaign.nome ?? "Campanha"}</h1>
+            <p className="text-sm text-slate-500">{detail?.campaign.descricao}</p>
+          </div>
+        <div className="flex flex-wrap gap-2">
           <button
-            onClick={loadLogs}
+            onClick={() => window.open(`/api/campaign/${id}/logs`, "_blank")}
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-100"
           >
             Logs
-          </button>
-          <button
-            onClick={() => {
-              window.location.href = `/api/admin/export`;
-            }}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-100"
-          >
-            Exportar campanha
           </button>
           <button
             onClick={() => router.back()}
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-100"
           >
             Voltar
+            </button>
+            <button
+              onClick={() => (window.location.href = "/api/admin/export")}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-100"
+            >
+              Exportar campanha
+            </button>
+          <button
+            onClick={loadDetail}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-100"
+          >
+            Atualizar
           </button>
+          {canReset ? (
+            <button
+              onClick={resetCampaign}
+              className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 hover:bg-amber-100"
+            >
+              Resetar
+            </button>
+          ) : null}
         </div>
       </div>
-
-      {message ? <div className="text-sm text-slate-700">{message}</div> : null}
-
-      <div className="rounded-2xl border bg-white/70 backdrop-blur p-4 shadow-sm grid grid-cols-2 md:grid-cols-3 gap-3">
-        <ResumoCard title="Total" value={detail?.resumo.total ?? 0} />
-        <ResumoCard title="Atribuídos" value={detail?.resumo.atribuidos ?? 0} />
-        <ResumoCard title="Estoque" value={detail?.resumo.estoque ?? 0} />
-        <ResumoCard title="Ganhos" value={detail?.resumo.ganhos ?? 0} />
-        <ResumoCard title="Perdidos" value={detail?.resumo.perdidos ?? 0} />
-        <ResumoCard title="Conversão" value={`${Math.round(conversao * 100)}%`} />
-        {audit ? (
-          <>
-            <ResumoCard title="Telefones inválidos" value={audit.invalidPhones} />
-            <ResumoCard title="Duplicados" value={audit.duplicated} />
-          </>
-        ) : null}
-      </div>
-
-      <div className="rounded-2xl border bg-white/70 backdrop-blur p-4 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900">Distribuição de Leads</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
+          <ResumoCard title="Total" value={detail?.resumo.total ?? 0} />
+          <ResumoCard title="Atribuídos" value={detail?.resumo.atribuidos ?? 0} />
+          <ResumoCard title="Estoque" value={detail?.resumo.estoque ?? 0} />
+          <ResumoCard title="Ganhos" value={detail?.resumo.ganhos ?? 0} />
+          <ResumoCard title="Perdidos" value={detail?.resumo.perdidos ?? 0} />
+          <ResumoCard title="Conversão" value={`${Math.round(conversao * 100)}%`} />
+          {audit ? (
+            <>
+              <ResumoCard title="Telefones inválidos" value={audit.invalidPhones} />
+              <ResumoCard title="Duplicados" value={audit.duplicated} />
+            </>
+          ) : null}
         </div>
-        <div className="space-y-3">
-          <div className="space-y-1">
-            <label className="text-xs text-slate-600">
-              Distribuir considerando escritório (SAFE TI / JLC Tech)
-            </label>
+      </header>
+
+      <div className="rounded-2xl border border-slate-200 bg-white/80 backdrop-blur p-4 shadow-sm space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs text-slate-500">Contexto</p>
+            <p className="text-sm font-semibold text-slate-800">Selecione o escritório para filtrar dados</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <select
               value={selectedOfficeId}
               onChange={(e) => setSelectedOfficeId(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2 text-sm"
+              className="rounded-lg border px-3 py-2 text-sm"
             >
-              <option value="">Selecione um escritório</option>
+              <option value="">Todos os escritórios</option>
               {offices.map((office) => (
                 <option key={office.id} value={office.id}>
                   {office.name}
                 </option>
               ))}
             </select>
+            <span className="text-xs text-slate-500">
+              {selectedOfficeId ? "Filtrando por escritório" : "Mostrando visão geral"}
+            </span>
+          </div>
+        </div>
+        {message ? <div className="text-sm text-slate-700">{message}</div> : null}
+      </div>
+
+      <Tabs active={activeTab} onChange={setActiveTab} />
+
+      {activeTab === "campaign" ? (
+        <CampaignTab
+          audit={audit}
+          distribution={distribution}
+          officeTotals={officeTotals}
+          filteredLeads={filteredLeads}
+          filters={filters}
+          setFilters={setFilters}
+          loadLeads={loadLeads}
+          consultants={consultants}
+          selectedConsultor={selectedConsultor}
+          setSelectedConsultor={setSelectedConsultor}
+          selectedBatchId={selectedBatchId}
+          setSelectedBatchId={setSelectedBatchId}
+          batches={batches}
+          deleteBatch={deleteBatch}
+        />
+      ) : null}
+
+      {activeTab === "import" ? (
+        <ImportTab
+          handleImport={handleImport}
+          importFile={importFile}
+          setImportFile={setImportFile}
+          importLoading={importLoading}
+          importMessage={importMessage}
+          batches={batches}
+          setBatchToDelete={setBatchToDelete}
+        />
+      ) : null}
+
+      {activeTab === "distribution" ? (
+        <DistributionTab
+          consultants={filteredConsultants}
+          selectedDistributionConsultants={selectedDistributionConsultants}
+          setSelectedDistributionConsultants={setSelectedDistributionConsultants}
+          distributionQuantity={distributionQuantity}
+          setDistributionQuantity={setDistributionQuantity}
+          onlyNewLeads={onlyNewLeads}
+          setOnlyNewLeads={setOnlyNewLeads}
+          handleDistribute={handleDistribute}
+          remainingStock={detail?.resumo.estoque ?? 0}
+          assigned={detail?.resumo.atribuidos ?? 0}
+        />
+      ) : null}
+
+      {activeTab === "recapture" ? (
+        <RecaptureTab
+          leads={filteredLeads}
+          consultants={filteredConsultants}
+          selectedConsultor={selectedConsultor}
+          setSelectedConsultor={setSelectedConsultor}
+        />
+      ) : null}
+
+      {batchToDelete ? (
+        <ConfirmDeleteBatch batch={batchToDelete} onCancel={() => setBatchToDelete(null)} onConfirm={deleteBatch} />
+      ) : null}
+    </div>
+  );
+}
+
+function Tabs({ active, onChange }: { active: TabKey; onChange: (tab: TabKey) => void }) {
+  const tabs: { key: TabKey; label: string }[] = [
+    { key: "campaign", label: "Campanha" },
+    { key: "import", label: "Importar Base" },
+    { key: "distribution", label: "Distribuição" },
+    { key: "recapture", label: "Repescagem" },
+  ];
+  return (
+    <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white/70 p-2 shadow-sm">
+      {tabs.map((tab) => (
+        <button
+          key={tab.key}
+          onClick={() => onChange(tab.key)}
+          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+            active === tab.key ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function CampaignTab({
+  audit,
+  distribution,
+  officeTotals,
+  filteredLeads,
+  filters,
+  setFilters,
+  loadLeads,
+  consultants,
+  selectedConsultor,
+  setSelectedConsultor,
+  selectedBatchId,
+  setSelectedBatchId,
+  batches,
+  deleteBatch,
+}: {
+  audit: { total: number; invalidPhones: number; duplicated: number; invalids: number } | null;
+  distribution: DistributionRow[];
+  officeTotals: { assigned: number; worked: number; remaining: number };
+  filteredLeads: LeadItem[];
+  filters: LeadFilters;
+  setFilters: Dispatch<SetStateAction<LeadFilters>>;
+  loadLeads: () => Promise<void>;
+  consultants: ConsultantWithOffice[];
+  selectedConsultor: string;
+  setSelectedConsultor: (id: string) => void;
+  selectedBatchId: string;
+  setSelectedBatchId: Dispatch<SetStateAction<string>>;
+  batches: CampaignBatch[];
+  deleteBatch: () => Promise<void>;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border bg-white/80 p-4 shadow-sm space-y-3">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Visão geral da campanha</h2>
             <p className="text-xs text-slate-500">
-              {selectedOfficeId
-                ? `Escritório em foco: ${selectedOffice?.name ?? "não informado"}`
-                : "Selecione o escritório para liberar os consultores e filtrar os dados."}
+              Métricas principais, perdas e desempenho por consultor nesta campanha.
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs text-slate-600">Consultor (para reatribuir)</label>
-              <select
-                value={selectedConsultor}
-                onChange={(e) => setSelectedConsultor(e.target.value)}
-                className="w-full rounded-lg border px-3 py-2 text-sm"
-                disabled={!selectedOfficeId}
-              >
-                <option value="">Selecione</option>
-                {filteredConsultants.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name ?? c.email}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-slate-600">Consultores para distribuir</label>
-              <select
-                multiple
-                value={selectedDistributionConsultants}
-                onChange={(e) =>
-                  setSelectedDistributionConsultants(Array.from(e.target.selectedOptions, (option) => option.value))
-                }
-                className="h-32 w-full rounded-lg border px-3 py-2 text-sm"
-                disabled={!selectedOfficeId}
-              >
-                {filteredConsultants.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name ?? c.email}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-slate-500">
-                {filteredConsultants.length === 0
-                  ? "Nenhum consultor cadastrado para este escritório."
-                  : "Use Ctrl/Cmd para selecionar mais de um consultor."}
-              </p>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-slate-600">Quantidade por consultor</label>
-              <input
-                type="number"
-                min={1}
-                value={distributionQuantity}
-                onChange={(e) => setDistributionQuantity(Math.max(1, Number(e.target.value)))}
-                className="w-full rounded-lg border px-3 py-2 text-sm"
-                disabled={!selectedOfficeId}
-              />
-            </div>
-            <div className="space-y-3">
-              <label className="text-xs text-slate-600">Ações</label>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={distribute}
-                  disabled={!isMaster || !selectedOfficeId || selectedDistributionConsultants.length === 0}
-                  className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:bg-slate-400"
-                >
-                  Distribuir leads
-                </button>
-                <button
-                  onClick={autoDistribute}
-                  disabled={!isMaster || !selectedOfficeId}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:border-slate-200"
-                >
-                  Distribuição igualitária automática
-                </button>
-              </div>
-            </div>
-          </div>
+          {audit ? (
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+              Total bruto: {audit.total}
+            </span>
+          ) : null}
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="text-left text-slate-500 border-b">
+              <tr className="border-b text-left text-slate-500">
                 <th className="py-2 pr-3">Consultor</th>
                 <th className="py-2 pr-3">Escritório</th>
                 <th className="py-2 pr-3">Atribuídos</th>
@@ -614,9 +693,9 @@ export default function CampaignDetailPage() {
             </tbody>
             {distribution.length > 0 ? (
               <tfoot>
-                <tr className="text-left text-slate-500 border-t">
+                <tr className="border-t text-left text-slate-500">
                   <td className="py-2 pr-3 font-semibold" colSpan={2}>
-                    Totais do {selectedOffice?.name ?? "escritório"}
+                    Totais do escritório selecionado
                   </td>
                   <td className="py-2 pr-3 font-semibold">{officeTotals.assigned}</td>
                   <td className="py-2 pr-3 font-semibold">{officeTotals.worked}</td>
@@ -629,11 +708,13 @@ export default function CampaignDetailPage() {
         </div>
       </div>
 
-      <div className="rounded-2xl border bg-white/70 backdrop-blur p-4 shadow-sm space-y-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="rounded-2xl border bg-white/80 p-4 shadow-sm space-y-3">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Estoque da campanha</h2>
-            <p className="text-xs text-slate-500">Filtros aplicados apenas no front-end.</p>
+            <p className="text-xs text-slate-500">
+              Filtros aplicados apenas no front-end. Continue reatribuindo ou invalidando se necessário.
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -642,134 +723,29 @@ export default function CampaignDetailPage() {
             >
               Atualizar
             </button>
-            {isMaster ? (
-              <button
-                onClick={resetCampaign}
-                className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-              >
-                Resetar campanha
-              </button>
-            ) : null}
-          </div>
-        </div>
-        {batches.length > 0 && (
-          <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm text-slate-700">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2">
               <select
-                value={selectedBatchId}
-                onChange={(e) => setSelectedBatchId(e.target.value)}
-                className="w-full max-w-sm rounded-lg border px-3 py-2 text-sm"
+                value={selectedConsultor}
+                onChange={(e) => setSelectedConsultor(e.target.value)}
+                className="rounded-lg border px-3 py-2 text-sm"
               >
-                {batches.map((batch) => (
-                  <option key={batch.id} value={batch.id}>
-                    {batch.nomeArquivoOriginal} - {new Date(batch.createdAt).toLocaleDateString("pt-BR")}
+                <option value="">Selecione um consultor para reatribuição</option>
+                {consultants.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name ?? c.email}
                   </option>
                 ))}
               </select>
-              <button
-                onClick={deleteBatch}
-                disabled={!isMaster}
-                className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-600 disabled:border-slate-200 disabled:text-slate-400"
-              >
-                Excluir lote desta campanha
-              </button>
             </div>
-            <p className="text-xs text-slate-500">A exclusão remove apenas os leads daquele lote importado.</p>
-          </div>
-        )}
-        <div className="space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
-            <select
-              value={filters.status}
-              onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value as LeadStatus | "" }))}
-              className="rounded-lg border px-3 py-2 text-sm"
-            >
-              <option value="">Todos os status</option>
-              {Object.values(LeadStatus).map((statusOption) => (
-                <option key={statusOption} value={statusOption}>
-                  {statusOption}
-                </option>
-              ))}
-            </select>
-            <select
-              value={filters.consultorId}
-              onChange={(e) => setFilters((prev) => ({ ...prev, consultorId: e.target.value }))}
-              className="rounded-lg border px-3 py-2 text-sm"
-            >
-              <option value="">Todos os consultores</option>
-              {consultants.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name ?? c.email}
-                </option>
-              ))}
-            </select>
-            <input
-              placeholder="Cidade"
-              value={filters.cidade}
-              onChange={(e) => setFilters((prev) => ({ ...prev, cidade: e.target.value }))}
-              className="rounded-lg border px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="UF"
-              value={filters.uf}
-              onChange={(e) => setFilters((prev) => ({ ...prev, uf: e.target.value }))}
-              className="rounded-lg border px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="Estratégia"
-              value={filters.estrategia}
-              onChange={(e) => setFilters((prev) => ({ ...prev, estrategia: e.target.value }))}
-              className="rounded-lg border px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="Vertical"
-              value={filters.vertical}
-              onChange={(e) => setFilters((prev) => ({ ...prev, vertical: e.target.value }))}
-              className="rounded-lg border px-3 py-2 text-sm"
-            />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
-            <input
-              placeholder="Documento"
-              value={filters.documento}
-              onChange={(e) => setFilters((prev) => ({ ...prev, documento: e.target.value }))}
-              className="rounded-lg border px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="Empresa"
-              value={filters.empresa}
-              onChange={(e) => setFilters((prev) => ({ ...prev, empresa: e.target.value }))}
-              className="rounded-lg border px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="Faturamento mínimo"
-              type="number"
-              value={filters.faturamentoMin}
-              onChange={(e) => setFilters((prev) => ({ ...prev, faturamentoMin: e.target.value }))}
-              className="rounded-lg border px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="Faturamento máximo"
-              type="number"
-              value={filters.faturamentoMax}
-              onChange={(e) => setFilters((prev) => ({ ...prev, faturamentoMax: e.target.value }))}
-              className="rounded-lg border px-3 py-2 text-sm"
-            />
-            <select
-              value={filters.telefone}
-              onChange={(e) => setFilters((prev) => ({ ...prev, telefone: e.target.value as LeadFilters["telefone"] }))}
-              className="rounded-lg border px-3 py-2 text-sm"
-            >
-              <option value="all">Telefones (todos)</option>
-              <option value="with">Com telefones</option>
-              <option value="without">Sem telefones</option>
-            </select>
           </div>
         </div>
+
+        <LeadFiltersForm filters={filters} setFilters={setFilters} consultants={consultants} />
+
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="text-left text-slate-500 border-b">
+              <tr className="border-b text-left text-slate-500">
                 <th className="py-2 pr-3">Documento</th>
                 <th className="py-2 pr-3">Empresa</th>
                 <th className="py-2 pr-3">Cidade/UF</th>
@@ -834,6 +810,460 @@ export default function CampaignDetailPage() {
               ) : null}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {batches.length > 0 ? (
+        <div className="rounded-xl border bg-white/80 p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-lg font-semibold text-slate-900">Lotes importados desta campanha</h3>
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedBatchId}
+                onChange={(e) => setSelectedBatchId(e.target.value)}
+                className="rounded-lg border px-3 py-2 text-sm"
+              >
+                {batches.map((batch) => (
+                  <option key={batch.id} value={batch.id}>
+                    {batch.nomeArquivoOriginal} - {new Date(batch.createdAt).toLocaleDateString("pt-BR")}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={deleteBatch}
+                className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-600 disabled:border-slate-200 disabled:text-slate-400"
+              >
+                Excluir lote
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ImportTab({
+  handleImport,
+  importFile,
+  setImportFile,
+  importLoading,
+  importMessage,
+  batches,
+  setBatchToDelete,
+}: {
+  handleImport: (e: FormEvent<HTMLFormElement>) => Promise<void>;
+  importFile: File | null;
+  setImportFile: (file: File | null) => void;
+  importLoading: boolean;
+  importMessage: string;
+  batches: CampaignBatch[];
+  setBatchToDelete: (batch: CampaignBatch | null) => void;
+}) {
+  return (
+    <div className="rounded-2xl border bg-white/80 p-4 shadow-sm space-y-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Importar Base (campanha atual)</h2>
+          <p className="text-sm text-slate-600">
+            Upload direto para esta campanha. Selecione o Excel e importe; o arquivo será compactado automaticamente.
+          </p>
+        </div>
+        <a href="/api/import/template" className="text-sm text-blue-700 underline">
+          Baixar modelo de planilha (Excel)
+        </a>
+      </div>
+
+      <form className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end" onSubmit={handleImport}>
+        <div className="space-y-1 md:col-span-2">
+          <label className="text-xs text-slate-600">Arquivo Excel</label>
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+            className="w-full text-sm"
+          />
+        </div>
+        <div className="md:col-span-1 flex gap-2">
+          <button
+            type="submit"
+            disabled={importLoading || !importFile}
+            className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+          >
+            {importLoading ? "Importando..." : "Importar base"}
+          </button>
+        </div>
+      </form>
+      {importMessage ? <div className="text-sm text-slate-700">{importMessage}</div> : null}
+
+      <div className="rounded-xl border bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-lg font-semibold text-slate-900">Importações desta campanha</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="text-left text-slate-500 border-b">
+                <th className="py-2 pr-3">Arquivo</th>
+                <th className="py-2 pr-3">Total lido</th>
+                <th className="py-2 pr-3">Importados</th>
+                <th className="py-2 pr-3">Duplicados</th>
+                <th className="py-2 pr-3">Não atribuídos</th>
+                <th className="py-2 pr-3">Criado em</th>
+                <th className="py-2 pr-3">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {batches.map((batch) => (
+                <tr key={batch.id} className="border-b last:border-b-0">
+                  <td className="py-2 pr-3">{batch.nomeArquivoOriginal}</td>
+                  <td className="py-2 pr-3">{batch.totalLeads}</td>
+                  <td className="py-2 pr-3">{batch.importedLeads ?? batch.totalLeads}</td>
+                  <td className="py-2 pr-3">{batch.duplicatedLeads ?? 0}</td>
+                  <td className="py-2 pr-3">{batch.notAttributedLeads ?? 0}</td>
+                  <td className="py-2 pr-3">
+                    {batch.createdAt ? new Date(batch.createdAt).toLocaleString("pt-BR") : "-"}
+                  </td>
+                  <td className="py-2 pr-3">
+                    <button
+                      onClick={() => setBatchToDelete(batch)}
+                      className="text-xs text-red-600 underline"
+                    >
+                      Excluir batch
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {batches.length === 0 ? (
+                <tr>
+                  <td className="py-2 pr-3 text-sm text-slate-500" colSpan={7}>
+                    Nenhuma importação para esta campanha.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-3 text-xs text-slate-500">
+          Fluxo recomendado: criar campanha → clicar em &ldquo;Ver detalhes&rdquo; → usar a aba Importar Base.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DistributionTab({
+  consultants,
+  selectedDistributionConsultants,
+  setSelectedDistributionConsultants,
+  distributionQuantity,
+  setDistributionQuantity,
+  onlyNewLeads,
+  setOnlyNewLeads,
+  handleDistribute,
+  remainingStock,
+  assigned,
+}: {
+  consultants: ConsultantWithOffice[];
+  selectedDistributionConsultants: string[];
+  setSelectedDistributionConsultants: (ids: string[]) => void;
+  distributionQuantity: number;
+  setDistributionQuantity: (value: number) => void;
+  onlyNewLeads: boolean;
+  setOnlyNewLeads: (value: boolean) => void;
+  handleDistribute: () => Promise<void>;
+  remainingStock: number;
+  assigned: number;
+}) {
+  return (
+    <div className="rounded-2xl border bg-white/80 p-4 shadow-sm space-y-4">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-lg font-semibold text-slate-900">Distribuição</h2>
+        <p className="text-sm text-slate-600">
+          Distribuição simples por consultor. A lógica avançada (modos adicionais, filtros e preview) fica para a Etapa 3.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        <div className="space-y-1 md:col-span-2">
+          <label className="text-xs text-slate-600">Consultores</label>
+          <select
+            multiple
+            value={selectedDistributionConsultants}
+            onChange={(e) => setSelectedDistributionConsultants(Array.from(e.target.selectedOptions, (o) => o.value))}
+            className="h-28 w-full rounded-lg border px-3 py-2 text-sm"
+          >
+            {consultants.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name ?? c.email} {c.officeName ? `• ${c.officeName}` : ""}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-slate-500">Selecione um ou mais consultores habilitados para esta campanha.</p>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-slate-600">Quantidade por consultor</label>
+          <input
+            type="number"
+            min={1}
+            value={distributionQuantity}
+            onChange={(e) => setDistributionQuantity(Math.max(1, Number(e.target.value)))}
+            className="w-full rounded-lg border px-3 py-2 text-sm"
+          />
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              id="only-new"
+              type="checkbox"
+              checked={onlyNewLeads}
+              onChange={(e) => setOnlyNewLeads(e.target.checked)}
+            />
+            <label htmlFor="only-new" className="text-xs text-slate-600">
+              Considerar apenas leads NOVOS
+            </label>
+          </div>
+          <p className="text-xs text-slate-500">
+            TODO (Etapa 3): adicionar modos TOTAL, filtros avançados e preview de distribuição.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <label className="text-xs text-slate-600">Resumo</label>
+          <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm text-slate-700 space-y-1">
+            <p>Estoque: {remainingStock}</p>
+            <p>Atribuídos: {assigned}</p>
+          </div>
+          <button
+            onClick={handleDistribute}
+            className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+          >
+            Distribuir leads
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RecaptureTab({
+  leads,
+  consultants,
+  selectedConsultor,
+  setSelectedConsultor,
+}: {
+  leads: LeadItem[];
+  consultants: ConsultantWithOffice[];
+  selectedConsultor: string;
+  setSelectedConsultor: (id: string) => void;
+}) {
+  const eligible = useMemo(() => leads.filter((lead) => RECAPTURE_STATUSES.includes(lead.status)), [leads]);
+
+  return (
+    <div className="rounded-2xl border bg-white/80 p-4 shadow-sm space-y-3">
+      <div className="space-y-1">
+        <h2 className="text-lg font-semibold text-slate-900">Repescagem</h2>
+        <p className="text-sm text-slate-600">
+          Direcione leads parados ou pouco trabalhados para outro consultor. Apenas MASTER, GERENTE_SENIOR, GERENTE_NEGOCIOS
+          e PROPRIETARIO enxergam esta aba.
+        </p>
+        <p className="text-xs text-slate-500">
+          TODO (Etapa 4): ligar filtros reais (última atividade, status, tempo parado) e chamar /api/campaigns/[id]/recapture.
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1">
+          <label className="text-xs text-slate-600">Consultor destino</label>
+          <select
+            value={selectedConsultor}
+            onChange={(e) => setSelectedConsultor(e.target.value)}
+            className="w-full rounded-lg border px-3 py-2 text-sm md:w-72"
+          >
+            <option value="">Selecione</option>
+            {consultants.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name ?? c.email}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button
+          disabled
+          className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-500"
+        >
+          Repescar selecionados (breve)
+        </button>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="border-b text-left text-slate-500">
+              <th className="py-2 pr-3">Empresa</th>
+              <th className="py-2 pr-3">Consultor atual</th>
+              <th className="py-2 pr-3">Status</th>
+              <th className="py-2 pr-3">Última atividade</th>
+              <th className="py-2 pr-3">Selecionar</th>
+            </tr>
+          </thead>
+          <tbody>
+            {eligible.slice(0, 20).map((lead) => (
+              <tr key={lead.id} className="border-b last:border-b-0">
+                <td className="py-2 pr-3">{lead.razaoSocial ?? lead.nomeFantasia ?? "-"}</td>
+                <td className="py-2 pr-3">{lead.consultor?.name ?? lead.consultor?.email ?? "-"}</td>
+                <td className="py-2 pr-3">{lead.status}</td>
+                <td className="py-2 pr-3">—</td>
+                <td className="py-2 pr-3">
+                  <input type="checkbox" disabled />
+                </td>
+              </tr>
+            ))}
+            {eligible.length === 0 ? (
+              <tr>
+                <td className="py-2 pr-3 text-sm text-slate-500" colSpan={5}>
+                  Nenhum lead elegível listado. TODO (Etapa 4): carregar leads parados com filtros reais.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function LeadFiltersForm({
+  filters,
+  setFilters,
+  consultants,
+}: {
+  filters: LeadFilters;
+  setFilters: Dispatch<SetStateAction<LeadFilters>>;
+  consultants: ConsultantWithOffice[];
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-6">
+        <select
+          value={filters.status}
+          onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value as LeadStatus | "" }))}
+          className="rounded-lg border px-3 py-2 text-sm"
+        >
+          <option value="">Todos os status</option>
+          {Object.values(LeadStatus).map((statusOption) => (
+            <option key={statusOption} value={statusOption}>
+              {statusOption}
+            </option>
+          ))}
+        </select>
+        <input
+          placeholder="Cidade"
+          value={filters.cidade}
+          onChange={(e) => setFilters((prev) => ({ ...prev, cidade: e.target.value }))}
+          className="rounded-lg border px-3 py-2 text-sm"
+        />
+        <input
+          placeholder="UF"
+          value={filters.uf}
+          onChange={(e) => setFilters((prev) => ({ ...prev, uf: e.target.value }))}
+          className="rounded-lg border px-3 py-2 text-sm"
+        />
+        <input
+          placeholder="Estratégia"
+          value={filters.estrategia}
+          onChange={(e) => setFilters((prev) => ({ ...prev, estrategia: e.target.value }))}
+          className="rounded-lg border px-3 py-2 text-sm"
+        />
+        <input
+          placeholder="Vertical"
+          value={filters.vertical}
+          onChange={(e) => setFilters((prev) => ({ ...prev, vertical: e.target.value }))}
+          className="rounded-lg border px-3 py-2 text-sm"
+        />
+        <select
+          value={filters.telefone}
+          onChange={(e) => setFilters((prev) => ({ ...prev, telefone: e.target.value as LeadFilters["telefone"] }))}
+          className="rounded-lg border px-3 py-2 text-sm"
+        >
+          <option value="all">Telefones (todos)</option>
+          <option value="with">Com telefones</option>
+          <option value="without">Sem telefones</option>
+        </select>
+      </div>
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-5">
+        <input
+          placeholder="Documento"
+          value={filters.documento}
+          onChange={(e) => setFilters((prev) => ({ ...prev, documento: e.target.value }))}
+          className="rounded-lg border px-3 py-2 text-sm"
+        />
+        <input
+          placeholder="Empresa"
+          value={filters.empresa}
+          onChange={(e) => setFilters((prev) => ({ ...prev, empresa: e.target.value }))}
+          className="rounded-lg border px-3 py-2 text-sm"
+        />
+        <input
+          placeholder="Faturamento mínimo"
+          type="number"
+          value={filters.faturamentoMin}
+          onChange={(e) => setFilters((prev) => ({ ...prev, faturamentoMin: e.target.value }))}
+          className="rounded-lg border px-3 py-2 text-sm"
+        />
+        <input
+          placeholder="Faturamento máximo"
+          type="number"
+          value={filters.faturamentoMax}
+          onChange={(e) => setFilters((prev) => ({ ...prev, faturamentoMax: e.target.value }))}
+          className="rounded-lg border px-3 py-2 text-sm"
+        />
+        <select
+          value={filters.consultorId}
+          onChange={(e) => setFilters((prev) => ({ ...prev, consultorId: e.target.value }))}
+          className="rounded-lg border px-3 py-2 text-sm"
+        >
+          <option value="">Todos os consultores</option>
+          {consultants.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name ?? c.email}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmDeleteBatch({
+  batch,
+  onCancel,
+  onConfirm,
+}: {
+  batch: CampaignBatch;
+  onCancel: () => void;
+  onConfirm: () => Promise<void>;
+}) {
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+      <div className="w-full max-w-lg space-y-3 rounded-xl bg-white p-6 shadow-2xl">
+        <h3 className="text-lg font-semibold text-slate-900">Excluir lote importado</h3>
+        <p className="text-sm text-slate-600">
+          Isso removerá todos os leads e atividades vinculados a este arquivo/importação. A ação é irreversível.
+        </p>
+        <p className="text-sm font-semibold text-slate-800">
+          {batch.nomeArquivoOriginal} — {batch.totalLeads} leads
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-100"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500"
+          >
+            Excluir batch
+          </button>
         </div>
       </div>
     </div>

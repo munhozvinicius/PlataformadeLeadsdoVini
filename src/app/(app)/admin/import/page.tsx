@@ -240,7 +240,10 @@ export default function CampaignManagementPage() {
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Bloco B</p>
             <h2 className="text-xl font-semibold text-slate-900">Importar Base de Leads</h2>
-            <p className="text-sm text-slate-600">O arquivo é compactado em ZIP automaticamente para evitar limitações.</p>
+            <p className="text-sm text-slate-600">
+              O arquivo é compactado em ZIP automaticamente para evitar limitações. Fluxo recomendado: criar campanha,
+              clicar em &ldquo;Ver detalhes&rdquo; e usar a aba &ldquo;Importar Base&rdquo; dentro da campanha.
+            </p>
           </div>
           <a href="/api/import/template" className="text-sm text-blue-700 underline">
             Baixar modelo de planilha (Excel)
