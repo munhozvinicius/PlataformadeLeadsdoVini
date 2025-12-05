@@ -15,7 +15,7 @@ import { LeadStatus } from "@prisma/client";
 import { zipSync } from "fflate";
 
 type CampaignDetail = {
-  campaign: { id: string; nome: string; descricao?: string | null; status?: string | null };
+  campaign: { id: string; nome: string; descricao?: string | null; status?: string | null; office?: string | null };
   resumo: { total: number; atribuidos: number; estoque: number; ganhos: number; perdidos: number };
   topMotivosPerda: { label: string | null; count: number }[];
 };
@@ -147,8 +147,9 @@ export default function CampaignDetailPage() {
   const [selectedBatchId, setSelectedBatchId] = useState("");
   const [batchToDelete, setBatchToDelete] = useState<CampaignBatch | null>(null);
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [importLoading, setImportLoading] = useState(false);
-  const [importMessage, setImportMessage] = useState("");
+  const [importState, setImportState] = useState<"idle" | "uploading" | "processing" | "done" | "error">("idle");
+  const [importProgress, setImportProgress] = useState<number | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const [message, setMessage] = useState("");
 
   const isConsultant = session?.user.role === "CONSULTOR";
@@ -379,23 +380,34 @@ export default function CampaignDetailPage() {
       setMessage("Selecione um lote para excluir.");
       return;
     }
-    const res = await fetch(`/api/admin/import-batches/${selectedBatchId}`, { method: "DELETE" });
-    if (!res.ok) {
-      const err = await res.json().catch(() => null);
-      setMessage(err?.message ?? "Não foi possível excluir o lote.");
-      return;
+    try {
+      const res = await fetch(`/api/admin/import-batches/${selectedBatchId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        setMessage(err?.error ?? err?.message ?? "Não foi possível excluir o lote.");
+      } else {
+        setMessage("Lote excluído.");
+      }
+    } catch (err) {
+      console.error("Falha de conexão ao excluir lote", err);
     }
-    setMessage("Lote excluído.");
     await Promise.all([loadDetail(), loadDistribution(), loadLeads(), loadBatches()]);
+  }
+
+  async function refetchCampaignImportsAndStats() {
+    await Promise.all([loadDetail(), loadBatches(), loadLeads()]);
   }
 
   async function handleImport(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setImportMessage("");
     if (!importFile) {
-      setImportMessage("Selecione o arquivo da planilha.");
+      setImportError("Selecione o arquivo da planilha.");
       return;
     }
+    setImportState("uploading");
+    setImportProgress(null);
+    setImportError(null);
+
     const buffer = await importFile.arrayBuffer();
     const zipped = zipSync({ [importFile.name]: new Uint8Array(buffer) });
     const zippedArray = new Uint8Array(zipped);
@@ -406,22 +418,36 @@ export default function CampaignDetailPage() {
     formData.append("campanhaId", id);
     formData.append("assignmentType", "none");
 
-    setImportLoading(true);
-    const res = await fetch("/api/campanhas/import", {
-      method: "POST",
-      body: formData,
-    });
-    setImportLoading(false);
-    if (!res.ok) {
-      const err = await res.json().catch(() => null);
-      setImportMessage(err?.message ?? "Erro ao importar planilha.");
-      return;
+    const previousBatchCount = batches.length;
+    try {
+      const res = await fetch("/api/campanhas/import", {
+        method: "POST",
+        body: formData,
+      });
+      if (res.ok) {
+        setImportState("processing");
+      } else {
+        setImportState("processing");
+      }
+    } catch (err) {
+      console.error("Falha de conexão durante import, conferindo backend", err);
+      setImportState("processing");
     }
-    const json = await res.json();
-    setImportMessage(
-      `Importação concluída: ${json.importedLeads} criados, ${json.duplicatedLeads} duplicados, em estoque: ${json.notAttributedLeads}.`
-    );
-    await Promise.all([loadDetail(), loadBatches(), loadLeads()]);
+
+    await refetchCampaignImportsAndStats();
+    const newBatchesCount = (await fetch("/api/admin/import-batches", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((all: CampaignBatch[]) => all.filter((b) => b.campaignId === id).length)
+      .catch(() => batches.length)) as number;
+
+    if (newBatchesCount > previousBatchCount) {
+      setImportState("done");
+      setImportProgress(100);
+      setImportFile(null);
+    } else {
+      setImportState("error");
+      setImportError("Não foi possível confirmar a importação. Verifique o arquivo e tente novamente.");
+    }
   }
 
   async function resetCampaign() {
@@ -450,6 +476,9 @@ export default function CampaignDetailPage() {
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Campanha</p>
             <h1 className="text-2xl font-semibold text-slate-900">{detail?.campaign.nome ?? "Campanha"}</h1>
             <p className="text-sm text-slate-500">{detail?.campaign.descricao}</p>
+            {detail?.campaign.office ? (
+              <p className="text-xs text-slate-500">Escritório: {detail.campaign.office}</p>
+            ) : null}
           </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -561,8 +590,9 @@ export default function CampaignDetailPage() {
           handleImport={handleImport}
           importFile={importFile}
           setImportFile={setImportFile}
-          importLoading={importLoading}
-          importMessage={importMessage}
+          importState={importState}
+          importProgress={importProgress}
+          importError={importError}
           batches={batches}
           setBatchToDelete={setBatchToDelete}
         />
@@ -869,16 +899,18 @@ function ImportTab({
   handleImport,
   importFile,
   setImportFile,
-  importLoading,
-  importMessage,
+  importState,
+  importProgress,
+  importError,
   batches,
   setBatchToDelete,
 }: {
   handleImport: (e: FormEvent<HTMLFormElement>) => Promise<void>;
   importFile: File | null;
   setImportFile: (file: File | null) => void;
-  importLoading: boolean;
-  importMessage: string;
+  importState: "idle" | "uploading" | "processing" | "done" | "error";
+  importProgress: number | null;
+  importError: string | null;
   batches: CampaignBatch[];
   setBatchToDelete: (batch: CampaignBatch | null) => void;
 }) {
@@ -909,14 +941,22 @@ function ImportTab({
         <div className="md:col-span-1 flex gap-2">
           <button
             type="submit"
-            disabled={importLoading || !importFile}
+            disabled={!importFile}
             className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
           >
-            {importLoading ? "Importando..." : "Importar base"}
+            Importar base
           </button>
         </div>
       </form>
-      {importMessage ? <div className="text-sm text-slate-700">{importMessage}</div> : null}
+      {importState !== "idle" ? (
+        <div className="text-sm text-slate-700">
+          {importState === "uploading" && "Enviando arquivo para o servidor..."}
+          {importState === "processing" && "Processando registros. Isso pode levar alguns segundos..."}
+          {importState === "done" && "Importação concluída!"}
+          {importState === "error" && (importError ?? "Erro ao importar. Verifique o arquivo e tente novamente.")}
+          {importProgress != null ? ` (${importProgress}%)` : null}
+        </div>
+      ) : null}
 
       <div className="rounded-xl border bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between mb-2">

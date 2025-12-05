@@ -91,6 +91,7 @@ model Campanha {
   regiaoCidade   String?
   observacoes    String?
   status         String?   @default("ATIVA")
+  office         Office?
   periodoInicio  DateTime?
   periodoFim     DateTime?
   createdAt      DateTime  @default(now())

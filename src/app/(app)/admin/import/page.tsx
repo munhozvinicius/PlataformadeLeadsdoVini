@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { zipSync } from "fflate";
+import { Office } from "@prisma/client";
 
 type Campaign = {
   id: string;
@@ -21,19 +21,7 @@ type Campaign = {
   atribuidos?: number;
   restantes?: number;
   status?: string | null;
-};
-
-type ImportBatch = {
-  id: string;
-  nomeArquivoOriginal: string;
-  campaignId: string;
-  campaignName: string;
-  totalLeads: number;
-  createdAt: string;
-  importedLeads?: number;
-  attributedLeads?: number;
-  notAttributedLeads?: number;
-  duplicatedLeads?: number;
+  office?: string | null;
 };
 
 export default function CampaignManagementPage() {
@@ -41,11 +29,7 @@ export default function CampaignManagementPage() {
   const { data: session, status } = useSession();
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [batches, setBatches] = useState<ImportBatch[]>([]);
-  const [campaignId, setCampaignId] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [, setMessage] = useState("");
   const [campaignForm, setCampaignForm] = useState({
     nome: "",
     descricao: "",
@@ -56,8 +40,8 @@ export default function CampaignManagementPage() {
     observacoes: "",
     dataInicio: "",
     dataFim: "",
+    office: "",
   });
-  const [batchToDelete, setBatchToDelete] = useState<ImportBatch | null>(null);
 
   useEffect(() => {
     if (status === "authenticated" && session?.user.role !== "MASTER") {
@@ -67,7 +51,6 @@ export default function CampaignManagementPage() {
 
   useEffect(() => {
     loadCampaigns();
-    loadBatches();
   }, []);
 
   async function loadCampaigns() {
@@ -75,11 +58,6 @@ export default function CampaignManagementPage() {
     if (res.ok) {
       setCampaigns(await res.json());
     }
-  }
-
-  async function loadBatches() {
-    const res = await fetch("/api/admin/import-batches", { cache: "no-store" });
-    if (res.ok) setBatches(await res.json());
   }
 
   async function createCampaign() {
@@ -106,58 +84,9 @@ export default function CampaignManagementPage() {
       observacoes: "",
       dataInicio: "",
       dataFim: "",
+      office: "",
     });
     await loadCampaigns();
-  }
-
-  async function handleImport(e: React.FormEvent) {
-    e.preventDefault();
-    setMessage("");
-    if (!file) {
-      setMessage("Selecione o arquivo da planilha.");
-      return;
-    }
-    if (!campaignId) {
-      setMessage("Escolha uma campanha antes de importar.");
-      return;
-    }
-
-    const buffer = await file.arrayBuffer();
-    const zipped = zipSync({ [file.name]: new Uint8Array(buffer) });
-    const zippedArray = new Uint8Array(zipped);
-
-    const formData = new FormData();
-    formData.append("file", new Blob([zippedArray], { type: "application/zip" }), `${file.name}.zip`);
-    formData.append("compressed", "true");
-    formData.append("campanhaId", campaignId);
-    formData.append("assignmentType", "none");
-
-    setLoading(true);
-    const res = await fetch("/api/campanhas/import", {
-      method: "POST",
-      body: formData,
-    });
-    setLoading(false);
-    if (!res.ok) {
-      const err = await res.json().catch(() => null);
-      setMessage(err?.message ?? "Erro ao importar planilha.");
-      return;
-    }
-    const json = await res.json();
-    setMessage(
-      `Importação concluída: ${json.importedLeads} criados, ${json.duplicatedLeads} duplicados, em estoque: ${json.notAttributedLeads}.`
-    );
-    await Promise.all([loadCampaigns(), loadBatches()]);
-  }
-
-  async function deleteBatch() {
-    if (!batchToDelete) return;
-    const res = await fetch(`/api/admin/import-batches/${batchToDelete.id}`, { method: "DELETE" });
-    if (!res.ok) {
-      setMessage("Não foi possível excluir este lote.");
-    }
-    setBatchToDelete(null);
-    await Promise.all([loadCampaigns(), loadBatches()]);
   }
 
   async function updateCampaignStatus(id: string, statusValue: string) {
@@ -177,7 +106,6 @@ export default function CampaignManagementPage() {
       return;
     }
     setCampaigns((prev) => prev.filter((c) => c.id !== id));
-    setBatches((prev) => prev.filter((b) => b.campaignId !== id));
   }
 
   return (
@@ -215,6 +143,18 @@ export default function CampaignManagementPage() {
             </div>
           ))}
           <div className="space-y-1">
+            <label className="text-xs text-slate-600">Escritório / Parceiro</label>
+            <select
+              value={campaignForm.office}
+              onChange={(e) => setCampaignForm((prev) => ({ ...prev, office: e.target.value }))}
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+            >
+              <option value="">Selecione</option>
+              <option value={Office.SAFE_TI}>SAFE_TI</option>
+              <option value={Office.JLC_TECH}>JLC_TECH</option>
+            </select>
+          </div>
+          <div className="space-y-1">
             <label className="text-xs text-slate-600">Data de início</label>
             <input
               type="date"
@@ -241,99 +181,7 @@ export default function CampaignManagementPage() {
         </button>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white/70 backdrop-blur p-6 shadow-sm space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Bloco B</p>
-            <h2 className="text-xl font-semibold text-slate-900">Importar Base de Leads</h2>
-            <p className="text-sm text-slate-600">
-              O arquivo é compactado em ZIP automaticamente para evitar limitações. Fluxo recomendado: criar campanha,
-              clicar em &ldquo;Ver detalhes&rdquo; e usar a aba &ldquo;Importar Base&rdquo; dentro da campanha.
-            </p>
-          </div>
-          <a href="/api/import/template" className="text-sm text-blue-700 underline">
-            Baixar modelo de planilha (Excel)
-          </a>
-        </div>
-        <form className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end" onSubmit={handleImport}>
-          <div className="space-y-1 md:col-span-1">
-            <label className="text-xs text-slate-600">Campanha</label>
-            <select
-              value={campaignId}
-              onChange={(e) => setCampaignId(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2 text-sm"
-            >
-              <option value="">Selecione</option>
-              {campaigns.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nome}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1 md:col-span-1">
-            <label className="text-xs text-slate-600">Arquivo Excel</label>
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="w-full text-sm"
-            />
-          </div>
-          <div className="md:col-span-1 flex gap-2">
-            <button
-              type="submit"
-              disabled={loading}
-              className="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-semibold hover:bg-slate-800 disabled:opacity-50 w-full"
-            >
-              {loading ? "Importando..." : "Importar base"}
-            </button>
-          </div>
-        </form>
-        {message ? <div className="text-sm text-slate-700">{message}</div> : null}
-
-        <div className="rounded-xl border bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-lg font-semibold text-slate-900">Importações</h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500 border-b">
-                  <th className="py-2 pr-3">Arquivo</th>
-                  <th className="py-2 pr-3">Campanha</th>
-                  <th className="py-2 pr-3">Total lido</th>
-                  <th className="py-2 pr-3">Importados</th>
-                  <th className="py-2 pr-3">Duplicados</th>
-                  <th className="py-2 pr-3">Não atribuídos</th>
-                  <th className="py-2 pr-3">Criado em</th>
-                  <th className="py-2 pr-3">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {batches.map((batch) => (
-                  <tr key={batch.id} className="border-b last:border-b-0">
-                    <td className="py-2 pr-3">{batch.nomeArquivoOriginal}</td>
-                    <td className="py-2 pr-3">{batch.campaignName}</td>
-                    <td className="py-2 pr-3">{batch.totalLeads}</td>
-                    <td className="py-2 pr-3">{batch.importedLeads ?? batch.totalLeads}</td>
-                    <td className="py-2 pr-3">{batch.duplicatedLeads ?? 0}</td>
-                    <td className="py-2 pr-3">{batch.notAttributedLeads ?? 0}</td>
-                    <td className="py-2 pr-3">
-                      {batch.createdAt ? new Date(batch.createdAt).toLocaleString("pt-BR") : "-"}
-                    </td>
-                    <td className="py-2 pr-3">
-                      <button onClick={() => setBatchToDelete(batch)} className="text-xs text-red-600 underline">
-                        Excluir batch
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+      {/* Bloco B removido daqui: importação passa a ser feita no detalhe da campanha */}
 
       <div className="rounded-2xl border border-slate-200 bg-white/70 backdrop-blur p-6 shadow-sm space-y-3">
         <div>
@@ -390,34 +238,7 @@ export default function CampaignManagementPage() {
         {campaigns.length === 0 ? <p className="text-sm text-slate-500">Nenhuma campanha cadastrada.</p> : null}
       </div>
 
-      {batchToDelete ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl space-y-3">
-            <h3 className="text-lg font-semibold text-slate-900">Excluir lote importado</h3>
-            <p className="text-sm text-slate-600">
-              Isso removerá todos os leads e atividades vinculados a este arquivo/importação. A ação é irreversível.
-            </p>
-            <p className="text-sm font-semibold text-slate-800">
-              {batchToDelete.nomeArquivoOriginal} — {batchToDelete.totalLeads} leads
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setBatchToDelete(null)}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-100"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={deleteBatch}
-                disabled={loading}
-                className="rounded-lg bg-red-600 text-white px-4 py-2 text-sm font-semibold hover:bg-red-500 disabled:opacity-60"
-              >
-                Excluir batch
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {/* Modal de exclusão de batch removido: exclusão agora é feita no detalhe da campanha */}
     </div>
   );
 }

@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { nome, descricao, objetivo, vertical, dataInicio, dataFim } = body;
+  const { nome, descricao, objetivo, vertical, dataInicio, dataFim, office } = body;
   if (!nome) return NextResponse.json({ message: "Nome é obrigatório" }, { status: 400 });
 
   const campaign = await prisma.campanha.create({
@@ -64,6 +64,7 @@ export async function POST(req: NextRequest) {
       vertical: vertical || null,
       periodoInicio: dataInicio ? new Date(dataInicio) : null,
       periodoFim: dataFim ? new Date(dataFim) : null,
+      office: office || null,
       createdById: session.user.id,
     },
   });
