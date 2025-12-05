@@ -146,6 +146,9 @@ model Lead {
   officeId           String?       @db.ObjectId
   officeRecord       OfficeRecord? @relation(fields: [officeId], references: [id])
   escritorio         Office        @default(SAFE_TI)
+  assignedToId        String?
+  previousConsultants String[]     @default([])
+  lastActivityDate    DateTime?
   historico          Json?
   raw                Json?
   lastStatusChangeAt DateTime?
@@ -287,6 +290,10 @@ model LeadHistory {
   userId    String   @db.ObjectId
   user      User     @relation("UserLeadHistory", fields: [userId], references: [id])
   notes     String?
+  fromUserId String?
+  toUserId   String?
+  byUserId   String?
+  date      DateTime @default(now())
   createdAt DateTime @default(now())
 }
 
