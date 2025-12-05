@@ -9,17 +9,30 @@ const OFFICE_NAMES: Record<Office, string> = {
   [Office.JLC_TECH]: "JLC Tech",
 };
 
-const PROFILE_BY_ROLE: Record<Role, Profile> = {
+const PROFILE_BY_ROLE: Partial<Record<Role, Profile>> = {
   [Role.MASTER]: Profile.MASTER,
   [Role.PROPRIETARIO]: Profile.PROPRIETARIO,
   [Role.CONSULTOR]: Profile.CONSULTOR,
+  [Role.GERENTE_NEGOCIOS]: Profile.GERENTE_NEGOCIOS,
+  [Role.GERENTE_SENIOR]: Profile.GERENTE_SENIOR,
 };
 
 const DEFAULT_OFFICE = Office.SAFE_TI;
 
+function normalizeRole(role?: Role | string | null): Role {
+  if (role === ("GERENTE_CONTAS" as unknown as Role)) {
+    return Role.GERENTE_NEGOCIOS;
+  }
+  if (role && Object.values(Role).includes(role as Role)) {
+    return role as Role;
+  }
+  return Role.CONSULTOR;
+}
+
 function profileFromRole(role?: Role): Profile {
-  if (role && PROFILE_BY_ROLE[role]) {
-    return PROFILE_BY_ROLE[role];
+  const normalized = normalizeRole(role);
+  if (PROFILE_BY_ROLE[normalized]) {
+    return PROFILE_BY_ROLE[normalized] as Profile;
   }
   return Profile.CONSULTOR;
 }
@@ -80,7 +93,13 @@ async function main() {
         : typeof rawId === "object" && rawId && "$oid" in rawId
         ? rawId.$oid
         : rawId?.toString?.() ?? String(rawId);
-    const derivedProfile = profileFromRole(user.role);
+    const normalizedRole = normalizeRole(user.role as Role | string | null);
+    if (user.role !== normalizedRole) {
+      updates.role = normalizedRole;
+      appliedChanges.push(`role=${normalizedRole}`);
+    }
+
+    const derivedProfile = profileFromRole(normalizedRole);
     updates.profile = derivedProfile;
     appliedChanges.push(`profile=${derivedProfile}`);
 

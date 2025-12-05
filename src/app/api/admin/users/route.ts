@@ -7,12 +7,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Office, Role, Profile, Prisma } from "@prisma/client";
 import { canManageUsers, isProprietario } from "@/lib/authRoles";
-import {
-  assignUserOffices,
-  buildUsersFilter,
-  getUserOfficeCodes,
-  normalizeOfficeCodes,
-} from "@/lib/userOffice";
+import { assignUserOffices, buildUsersFilter, getUserOfficeCodes, normalizeOfficeCodes } from "@/lib/userOffice";
 
 const USER_SELECT = {
   id: true,
@@ -141,7 +136,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const { name, email, password, role, officeIds, ownerId, seniorId, active, officeRecordId } = body;
+  const { name, email, password, role, officeIds, ownerId, seniorId, active, officeRecordId, managedOfficeIds } = body;
 
   if (!name || !email || !password || !role) {
     return NextResponse.json({ message: "Dados insuficientes" }, { status: 400 });
@@ -160,6 +155,9 @@ export async function POST(req: Request) {
   }
 
   const normalizedOffices = normalizeOfficeCodes(officeIds);
+  const managedOfficeRecordIds = Array.isArray(managedOfficeIds)
+    ? managedOfficeIds.filter((id: unknown): id is string => typeof id === "string" && id.trim().length > 0)
+    : [];
   const targetOfficeRecordId = officeRecordId as string | undefined;
   let ownerConnect;
   if (role === Role.CONSULTOR) {
@@ -192,10 +190,47 @@ export async function POST(req: Request) {
     if (role === Role.GERENTE_SENIOR) {
       targetOffices.push(...(Object.values(Office) as Office[]));
     } else if (role === Role.GERENTE_NEGOCIOS) {
-      if (!normalizedOffices.length) {
+      const officeRecordIds =
+        managedOfficeRecordIds.length > 0
+          ? managedOfficeRecordIds
+          : targetOfficeRecordId
+          ? [targetOfficeRecordId]
+          : [];
+      if (!officeRecordIds.length) {
         return NextResponse.json({ message: "GERENTE_NEGOCIOS precisa de ao menos um escritório" }, { status: 400 });
       }
+      // opcional: associa office enum legacy se existir mapeamento
       targetOffices.push(...normalizedOffices);
+      // conecta managed offices via OfficeRecord
+      const validOffices = await prisma.officeRecord.findMany({
+        where: { id: { in: officeRecordIds } },
+        select: { id: true },
+      });
+      if (!validOffices.length) {
+        return NextResponse.json({ message: "Escritório inválido para GERENTE_NEGOCIOS" }, { status: 400 });
+      }
+      const managerUser = await prisma.user.create({
+        data: {
+          name,
+          email,
+          password: hashed,
+          role,
+          profile: role as Profile,
+          office: targetOffices[0] ?? Office.SAFE_TI,
+          ...(targetOfficeRecordId ? { officeRecord: { connect: { id: targetOfficeRecordId } } } : {}),
+          ...(ownerConnect ? { owner: ownerConnect } : {}),
+          ...(seniorConnect ? { senior: seniorConnect } : {}),
+          active: typeof active === "boolean" ? active : true,
+          managedOffices: {
+            create: validOffices.map((o) => ({ officeRecordId: o.id })),
+          },
+        },
+        select: USER_SELECT,
+      });
+      if (targetOffices.length) {
+        await assignUserOffices(managerUser.id, targetOffices);
+      }
+      return NextResponse.json(managerUser, { status: 201 });
     } else if (role === Role.PROPRIETARIO) {
       if (normalizedOffices.length) {
         targetOffices.push(normalizedOffices[0]);

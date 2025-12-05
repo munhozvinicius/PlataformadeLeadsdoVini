@@ -36,6 +36,7 @@ export type UserDrawerPayload = {
   active?: boolean;
   seniorId?: string | null;
   officeIds?: Office[];
+  managedOfficeIds?: string[];
 };
 
 type UserData = {

@@ -24,26 +24,42 @@ export async function assignUserOffices(userId: string, offices: Office[]) {
   }
 }
 
+export async function getManagedOfficeIds(userId: string): Promise<string[]> {
+  const entries = await prisma.managerOffice.findMany({
+    where: { managerId: userId },
+    select: { officeRecordId: true },
+  });
+  return entries.map((entry) => entry.officeRecordId);
+}
+
+export async function assignManagedOffices(userId: string, officeRecordIds: string[]) {
+  await prisma.managerOffice.deleteMany({ where: { managerId: userId } });
+  if (officeRecordIds.length === 0) return;
+  await prisma.managerOffice.createMany({
+    data: officeRecordIds.map((officeRecordId) => ({ managerId: userId, officeRecordId })),
+  });
+}
+
 export async function buildUsersFilter(role: Role, userId: string): Promise<Prisma.UserWhereInput | undefined> {
   if (role === Role.MASTER || role === Role.GERENTE_SENIOR) {
     return undefined;
   }
   if (role === Role.GERENTE_NEGOCIOS) {
-    const officeCodes = await getUserOfficeCodes(userId);
-    if (!officeCodes.length) {
+    const managedOfficeIds = await getManagedOfficeIds(userId);
+    if (!managedOfficeIds.length) {
       return { id: userId };
     }
     const owners = await prisma.user.findMany({
       where: {
         role: Role.PROPRIETARIO,
-        offices: { some: { office: { in: officeCodes } } },
+        officeRecordId: { in: managedOfficeIds },
       },
       select: { id: true },
     });
     const ownerIds = owners.map((owner) => owner.id);
     return {
       OR: [
-        { offices: { some: { office: { in: officeCodes } } } },
+        { officeRecordId: { in: managedOfficeIds } },
         { ownerId: { in: ownerIds } },
       ],
     };

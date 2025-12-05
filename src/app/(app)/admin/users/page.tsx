@@ -236,6 +236,13 @@ export default function AdminUsersPage() {
     const officeCode = activeOffices.find((office) => office.id === createForm.officeRecordId)?.code;
     const officeEnum = mapOfficeCodeToEnum(officeCode);
 
+    const managedOfficeIds =
+      createForm.role === Role.GERENTE_NEGOCIOS
+        ? createForm.officeRecordId
+          ? [createForm.officeRecordId]
+          : []
+        : [];
+
     const payload: Partial<UserDrawerPayload> = {
       name: createForm.name.trim(),
       email: createForm.email.trim(),
@@ -244,6 +251,7 @@ export default function AdminUsersPage() {
       officeRecordId: createForm.officeRecordId || null,
       ownerId: createForm.role === Role.CONSULTOR ? createForm.ownerId || null : null,
       officeIds: officeEnum ? [officeEnum] : [],
+      managedOfficeIds,
     };
 
     setCreating(true);
