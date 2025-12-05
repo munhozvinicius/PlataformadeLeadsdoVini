@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { LeadStatus, Role } from "@prisma/client";
+import { Role } from "@prisma/client";
 
 type Params = { params: { id: string } };
 
@@ -15,27 +15,33 @@ export async function DELETE(_req: Request, { params }: Params) {
   }
 
   const batchId = params.id;
-  const leads = await prisma.lead.findMany({
-    where: { importBatchId: batchId },
-    select: { id: true, status: true },
-  });
-  const hasClosed = leads.some((l) => l.status === LeadStatus.FECHADO);
-  if (hasClosed) {
+
+  try {
+    const batch = await prisma.importBatch.findUnique({ where: { id: batchId } });
+    if (!batch) {
+      return NextResponse.json({ error: "Lote não encontrado." }, { status: 404 });
+    }
+
+    const leads = await prisma.lead.findMany({
+      where: { importBatchId: batchId },
+      select: { id: true },
+    });
+    const leadIds = leads.map((l) => l.id);
+
+    if (leadIds.length > 0) {
+      await prisma.leadHistory.deleteMany({ where: { leadId: { in: leadIds } } });
+      await prisma.leadActivity.deleteMany({ where: { leadId: { in: leadIds } } });
+      await prisma.lead.deleteMany({ where: { id: { in: leadIds } } });
+    }
+
+    await prisma.importBatch.delete({ where: { id: batchId } });
+
+    return NextResponse.json({ success: true }, { status: 200 });
+  } catch (error) {
+    console.error("[DELETE_IMPORT_BATCH_ERROR]", error);
     return NextResponse.json(
-      { message: "Lote contém leads fechados. Não é possível excluir totalmente." },
-      { status: 400 }
+      { error: "Erro ao excluir lote. Verifique dependências ou logs." },
+      { status: 500 }
     );
   }
-  const leadIds = leads.map((l) => l.id);
-
-  const deletedActivities =
-    leadIds.length > 0 ? await prisma.leadActivity.deleteMany({ where: { leadId: { in: leadIds } } }) : { count: 0 };
-  const deletedLeads = await prisma.lead.deleteMany({ where: { importBatchId: batchId, status: { not: LeadStatus.FECHADO } } });
-  const deletedBatch = await prisma.importBatch.deleteMany({ where: { id: batchId } });
-
-  return NextResponse.json({
-    deletedBatchCount: deletedBatch.count,
-    deletedLeadsCount: deletedLeads.count,
-    deletedActivitiesCount: deletedActivities.count,
-  });
 }
