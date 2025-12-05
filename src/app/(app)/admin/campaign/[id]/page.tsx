@@ -367,10 +367,7 @@ export default function CampaignDetailPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         consultantIds: selectedDistributionConsultants,
-        quantityPerConsultant:
-          distributionMode === "PER_CONSULTANT"
-            ? distributionQuantity
-            : Math.max(1, Math.ceil(totalQuantity / Math.max(1, selectedDistributionConsultants.length))),
+        quantityPerConsultant: distributionMode === "PER_CONSULTANT" ? distributionQuantity : totalQuantity,
         officeId: officeFilter || undefined,
         filters: {
           onlyNew: onlyNewLeads,
@@ -386,7 +383,7 @@ export default function CampaignDetailPage() {
 
     if (!res.ok) {
       const err = await res.json().catch(() => null);
-      setMessage(err?.message ?? "Erro ao distribuir.");
+      setMessage(err?.error ?? err?.message ?? "Erro ao distribuir.");
       return;
     }
     const json = await res.json();

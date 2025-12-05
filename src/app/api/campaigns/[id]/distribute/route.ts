@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUserWithOffices, canDistributeLeads } from "@/lib/permissions";
 import { LeadStatus, Role } from "@prisma/client";
@@ -32,8 +32,11 @@ function parseRevenue(value?: string | null) {
 }
 
 const distributeSchema = z.object({
-  consultantIds: z.array(z.string()).min(1),
-  quantityPerConsultant: z.number().min(1),
+  consultantIds: z.array(z.string()).min(1, "Selecione ao menos um consultor"),
+  quantityPerConsultant: z.preprocess(
+    (v) => (typeof v === "string" ? Number(v) : v),
+    z.number().int().min(1, "Quantidade deve ser >= 1")
+  ),
   officeId: z.string().optional(),
   filters: z
     .object({
@@ -41,30 +44,41 @@ const distributeSchema = z.object({
       onlyUnassigned: z.boolean().optional(),
       onlyWithPhone: z.boolean().optional(),
       ignoreInvalidPhones: z.boolean().optional(),
-      faturamentoMin: z.number().optional(),
-      faturamentoMax: z.number().optional(),
+      faturamentoMin: z
+        .preprocess((v) => (v === "" || v == null ? undefined : Number(v)), z.number().optional())
+        .optional(),
+      faturamentoMax: z
+        .preprocess((v) => (v === "" || v == null ? undefined : Number(v)), z.number().optional())
+        .optional(),
     })
     .optional(),
 });
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const user = await getSessionUserWithOffices();
-  if (!user) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
+export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const user = await getSessionUserWithOffices();
+    if (!user) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
 
-  const parsed = distributeSchema.safeParse(await req.json().catch(() => ({})));
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid payload", issues: parsed.error.issues }, { status: 400 });
-  }
+    const body = await req.json().catch(() => ({}));
+    console.log("DEBUG /distribute – raw body:", body);
+    const parsed = distributeSchema.safeParse(body);
+    if (!parsed.success) {
+      console.error("DEBUG /distribute – validation error:", parsed.error.flatten());
+      return NextResponse.json(
+        { error: "Payload inválido para distribuição", issues: parsed.error.flatten() },
+        { status: 422 }
+      );
+    }
 
-  const { consultantIds, quantityPerConsultant, officeId, filters } = parsed.data;
-  const onlyNew = filters?.onlyNew ?? true;
-  const onlyUnassigned = filters?.onlyUnassigned ?? true;
-  const onlyWithPhone = filters?.onlyWithPhone ?? false;
-  const ignoreInvalidPhones = filters?.ignoreInvalidPhones ?? false;
-  const faturamentoMin = filters?.faturamentoMin;
-  const faturamentoMax = filters?.faturamentoMax;
+    const { consultantIds, quantityPerConsultant, officeId, filters } = parsed.data;
+    const onlyNew = filters?.onlyNew ?? true;
+    const onlyUnassigned = filters?.onlyUnassigned ?? true;
+    const onlyWithPhone = filters?.onlyWithPhone ?? false;
+    const ignoreInvalidPhones = filters?.ignoreInvalidPhones ?? false;
+    const faturamentoMin = filters?.faturamentoMin;
+    const faturamentoMax = filters?.faturamentoMax;
 
   const consultantRecords = await prisma.user.findMany({
     where: { id: { in: consultantIds }, role: Role.CONSULTOR },
@@ -138,6 +152,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       documento: true,
       cnpj: true,
       vlFatPresumido: true,
+      status: true,
+      assignedToId: true,
     },
   });
 
@@ -165,7 +181,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   }
 
   if (!leads.length) {
-    return NextResponse.json({ message: "Nenhum lead elegível para distribuir." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Não há leads disponíveis para esta campanha/escritório com os filtros aplicados." },
+      { status: 409 }
+    );
   }
 
   const assignments = new Map<string, string[]>(); // consultantId -> leadIds
@@ -234,4 +253,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     perConsultant,
     message: "Distribuição aplicada com sucesso.",
   });
+  } catch (err) {
+    console.error("DEBUG /distribute – unexpected error:", err);
+    return NextResponse.json({ error: "Erro interno ao distribuir leads" }, { status: 500 });
+  }
 }
