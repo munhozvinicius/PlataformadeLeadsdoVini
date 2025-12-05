@@ -136,7 +136,25 @@ export default function CampaignDetailPage() {
   const [selectedConsultor, setSelectedConsultor] = useState("");
   const [selectedDistributionConsultants, setSelectedDistributionConsultants] = useState<string[]>([]);
   const [distributionQuantity, setDistributionQuantity] = useState(5);
+  const [distributionMode, setDistributionMode] = useState<"PER_CONSULTANT" | "TOTAL">("PER_CONSULTANT");
+  const [totalQuantity, setTotalQuantity] = useState(20);
+  const [onlyUnassigned, setOnlyUnassigned] = useState(true);
   const [onlyNewLeads, setOnlyNewLeads] = useState(true);
+  const [selectedStatuses, setSelectedStatuses] = useState<LeadStatus[]>([LeadStatus.NOVO]);
+  const [onlyWithPhones, setOnlyWithPhones] = useState(false);
+  const [onlyValidPhones, setOnlyValidPhones] = useState(false);
+  const [minRevenue, setMinRevenue] = useState("");
+  const [maxRevenue, setMaxRevenue] = useState("");
+  const [respectOffices, setRespectOffices] = useState(true);
+  const [distributionResult, setDistributionResult] = useState<
+    | {
+        totalEligible: number;
+        totalDistributed: number;
+        perConsultant: { consultantId: string; name: string; email: string; distributed: number }[];
+      }
+    | null
+  >(null);
+  const [distributing, setDistributing] = useState(false);
   const [batches, setBatches] = useState<CampaignBatch[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState("");
   const [batchToDelete, setBatchToDelete] = useState<CampaignBatch | null>(null);
@@ -323,31 +341,43 @@ export default function CampaignDetailPage() {
   );
 
   async function handleDistribute() {
-    if (!selectedOfficeId) {
-      setMessage("Selecione um escritório antes de distribuir.");
-      return;
-    }
     if (selectedDistributionConsultants.length === 0) {
       setMessage("Selecione ao menos um consultor.");
       return;
     }
-    if (!distributionQuantity || distributionQuantity < 1) {
+    if (distributionMode === "PER_CONSULTANT" && (!distributionQuantity || distributionQuantity < 1)) {
       setMessage("Quantidade por consultor inválida.");
+      return;
+    }
+    if (distributionMode === "TOTAL" && (!totalQuantity || totalQuantity < 1)) {
+      setMessage("Quantidade total inválida.");
       return;
     }
 
     setMessage("");
+    setDistributing(true);
+    const statusesToSend =
+      onlyNewLeads || selectedStatuses.length === 0 ? [LeadStatus.NOVO] : selectedStatuses.map((s) => s);
     const res = await fetch(`/api/campaigns/${id}/distribute`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        consultants: selectedDistributionConsultants,
-        mode: "PER_CONSULTANT",
-        quantityPerConsultant: distributionQuantity,
-        filters: onlyNewLeads ? { onlyStatus: [LeadStatus.NOVO] } : undefined,
-        officeId: selectedOfficeId,
+        consultantIds: selectedDistributionConsultants,
+        mode: distributionMode,
+        quantityPerConsultant: distributionMode === "PER_CONSULTANT" ? distributionQuantity : undefined,
+        quantityTotal: distributionMode === "TOTAL" ? totalQuantity : undefined,
+        respectOffices,
+        filters: {
+          statuses: statusesToSend,
+          onlyUnassigned,
+          onlyWithPhones,
+          onlyValidPhones,
+          minRevenue: minRevenue ? Number(minRevenue) : null,
+          maxRevenue: maxRevenue ? Number(maxRevenue) : null,
+        },
       }),
     });
+    setDistributing(false);
 
     if (!res.ok) {
       const err = await res.json().catch(() => null);
@@ -355,6 +385,7 @@ export default function CampaignDetailPage() {
       return;
     }
     const json = await res.json();
+    setDistributionResult(json);
     const totalDistributed = Number(json.totalDistributed ?? 0);
     setMessage(`Distribuição realizada: ${Number.isFinite(totalDistributed) ? totalDistributed : 0} leads.`);
     await Promise.all([loadDetail(), loadDistribution(), loadLeads()]);
@@ -555,11 +586,31 @@ export default function CampaignDetailPage() {
           setSelectedDistributionConsultants={setSelectedDistributionConsultants}
           distributionQuantity={distributionQuantity}
           setDistributionQuantity={setDistributionQuantity}
+          distributionMode={distributionMode}
+          setDistributionMode={setDistributionMode}
+          totalQuantity={totalQuantity}
+          setTotalQuantity={setTotalQuantity}
           onlyNewLeads={onlyNewLeads}
           setOnlyNewLeads={setOnlyNewLeads}
+          selectedStatuses={selectedStatuses}
+          setSelectedStatuses={setSelectedStatuses}
+          onlyUnassigned={onlyUnassigned}
+          setOnlyUnassigned={setOnlyUnassigned}
+          onlyWithPhones={onlyWithPhones}
+          setOnlyWithPhones={setOnlyWithPhones}
+          onlyValidPhones={onlyValidPhones}
+          setOnlyValidPhones={setOnlyValidPhones}
+          minRevenue={minRevenue}
+          maxRevenue={maxRevenue}
+          setMinRevenue={setMinRevenue}
+          setMaxRevenue={setMaxRevenue}
+          respectOffices={respectOffices}
+          setRespectOffices={setRespectOffices}
           handleDistribute={handleDistribute}
           remainingStock={detail?.resumo.estoque ?? 0}
           assigned={detail?.resumo.atribuidos ?? 0}
+          distributing={distributing}
+          distributionResult={distributionResult}
         />
       ) : null}
 
@@ -958,22 +1009,66 @@ function DistributionTab({
   setSelectedDistributionConsultants,
   distributionQuantity,
   setDistributionQuantity,
+  distributionMode,
+  setDistributionMode,
+  totalQuantity,
+  setTotalQuantity,
   onlyNewLeads,
   setOnlyNewLeads,
+  selectedStatuses,
+  setSelectedStatuses,
+  onlyUnassigned,
+  setOnlyUnassigned,
+  onlyWithPhones,
+  setOnlyWithPhones,
+  onlyValidPhones,
+  setOnlyValidPhones,
+  minRevenue,
+  maxRevenue,
+  setMinRevenue,
+  setMaxRevenue,
+  respectOffices,
+  setRespectOffices,
   handleDistribute,
   remainingStock,
   assigned,
+  distributing,
+  distributionResult,
 }: {
   consultants: ConsultantWithOffice[];
   selectedDistributionConsultants: string[];
   setSelectedDistributionConsultants: (ids: string[]) => void;
   distributionQuantity: number;
   setDistributionQuantity: (value: number) => void;
+  distributionMode: "PER_CONSULTANT" | "TOTAL";
+  setDistributionMode: (mode: "PER_CONSULTANT" | "TOTAL") => void;
+  totalQuantity: number;
+  setTotalQuantity: (value: number) => void;
   onlyNewLeads: boolean;
   setOnlyNewLeads: (value: boolean) => void;
+  selectedStatuses: LeadStatus[];
+  setSelectedStatuses: Dispatch<SetStateAction<LeadStatus[]>>;
+  onlyUnassigned: boolean;
+  setOnlyUnassigned: (value: boolean) => void;
+  onlyWithPhones: boolean;
+  setOnlyWithPhones: (value: boolean) => void;
+  onlyValidPhones: boolean;
+  setOnlyValidPhones: (value: boolean) => void;
+  minRevenue: string;
+  maxRevenue: string;
+  setMinRevenue: (v: string) => void;
+  setMaxRevenue: (v: string) => void;
+  respectOffices: boolean;
+  setRespectOffices: (v: boolean) => void;
   handleDistribute: () => Promise<void>;
   remainingStock: number;
   assigned: number;
+  distributing: boolean;
+  distributionResult: {
+    totalEligible: number;
+    totalDistributed: number;
+    perConsultant: { consultantId: string; name: string; email: string; distributed: number }[];
+  } | null;
 }) {
   return (
     <div className="rounded-2xl border bg-white/80 p-4 shadow-sm space-y-4">
@@ -1001,15 +1096,39 @@ function DistributionTab({
           </select>
           <p className="text-xs text-slate-500">Selecione um ou mais consultores habilitados para esta campanha.</p>
         </div>
-        <div className="space-y-1">
-          <label className="text-xs text-slate-600">Quantidade por consultor</label>
-          <input
-            type="number"
-            min={1}
-            value={distributionQuantity}
-            onChange={(e) => setDistributionQuantity(Math.max(1, Number(e.target.value)))}
+        <div className="space-y-2">
+          <label className="text-xs text-slate-600">Modo de distribuição</label>
+          <select
+            value={distributionMode}
+            onChange={(e) => setDistributionMode(e.target.value as "PER_CONSULTANT" | "TOTAL")}
             className="w-full rounded-lg border px-3 py-2 text-sm"
-          />
+          >
+            <option value="PER_CONSULTANT">Quantidade por consultor</option>
+            <option value="TOTAL">Quantidade total (rodízio)</option>
+          </select>
+          {distributionMode === "PER_CONSULTANT" ? (
+            <div className="space-y-1">
+              <label className="text-xs text-slate-600">Quantidade por consultor</label>
+              <input
+                type="number"
+                min={1}
+                value={distributionQuantity}
+                onChange={(e) => setDistributionQuantity(Math.max(1, Number(e.target.value)))}
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+              />
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <label className="text-xs text-slate-600">Quantidade total</label>
+              <input
+                type="number"
+                min={1}
+                value={totalQuantity}
+                onChange={(e) => setTotalQuantity(Math.max(1, Number(e.target.value)))}
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+              />
+            </div>
+          )}
           <div className="flex items-center gap-2 pt-1">
             <input
               id="only-new"
@@ -1018,12 +1137,30 @@ function DistributionTab({
               onChange={(e) => setOnlyNewLeads(e.target.checked)}
             />
             <label htmlFor="only-new" className="text-xs text-slate-600">
-              Considerar apenas leads NOVOS
+              Apenas leads NOVOS (padrão)
             </label>
           </div>
-          <p className="text-xs text-slate-500">
-            TODO (Etapa 3): adicionar modos TOTAL, filtros avançados e preview de distribuição.
-          </p>
+          {!onlyNewLeads ? (
+            <div className="space-y-1">
+              <p className="text-xs text-slate-600">Status elegíveis</p>
+              <div className="grid grid-cols-2 gap-1 text-xs text-slate-700">
+                {Object.values(LeadStatus).map((status) => (
+                  <label key={status} className="flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      checked={selectedStatuses.includes(status)}
+                      onChange={(e) => {
+                        setSelectedStatuses((prev) =>
+                          e.target.checked ? [...prev, status] : prev.filter((s) => s !== status)
+                        );
+                      }}
+                    />
+                    {status}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
         <div className="space-y-2">
           <label className="text-xs text-slate-600">Resumo</label>
@@ -1033,12 +1170,108 @@ function DistributionTab({
           </div>
           <button
             onClick={handleDistribute}
-            className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+            disabled={distributing}
+            className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
           >
-            Distribuir leads
+            {distributing ? "Distribuindo..." : "Distribuir leads"}
           </button>
         </div>
       </div>
+
+      <div className="grid grid-cols-1 gap-3 rounded-xl border bg-white p-4 text-sm shadow-sm md:grid-cols-3">
+        <div className="space-y-2">
+          <label className="text-xs font-semibold text-slate-700">Filtros</label>
+          <div className="flex items-center gap-2">
+            <input
+              id="only-unassigned"
+              type="checkbox"
+              checked={onlyUnassigned}
+              onChange={(e) => setOnlyUnassigned(e.target.checked)}
+            />
+            <label htmlFor="only-unassigned" className="text-xs text-slate-600">
+              Apenas não atribuídos
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              id="only-phone"
+              type="checkbox"
+              checked={onlyWithPhones}
+              onChange={(e) => setOnlyWithPhones(e.target.checked)}
+            />
+            <label htmlFor="only-phone" className="text-xs text-slate-600">
+              Apenas com telefone
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              id="valid-phone"
+              type="checkbox"
+              checked={onlyValidPhones}
+              onChange={(e) => setOnlyValidPhones(e.target.checked)}
+            />
+            <label htmlFor="valid-phone" className="text-xs text-slate-600">
+              Ignorar telefones inválidos
+            </label>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <label className="text-xs font-semibold text-slate-700">Faturamento</label>
+          <div className="flex items-center gap-2">
+            <input
+              placeholder="Mínimo"
+              type="number"
+              value={minRevenue}
+              onChange={(e) => setMinRevenue(e.target.value)}
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+            />
+            <input
+              placeholder="Máximo"
+              type="number"
+              value={maxRevenue}
+              onChange={(e) => setMaxRevenue(e.target.value)}
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+            />
+          </div>
+          <p className="text-xs text-slate-500">Campos opcionais. Se vazio, não filtram.</p>
+        </div>
+        <div className="space-y-2">
+          <label className="text-xs font-semibold text-slate-700">Escritório</label>
+          <div className="flex items-center gap-2">
+            <input
+              id="respect-offices"
+              type="checkbox"
+              checked={respectOffices}
+              onChange={(e) => setRespectOffices(e.target.checked)}
+            />
+            <label htmlFor="respect-offices" className="text-xs text-slate-600">
+              Distribuir considerando escritório (SAFE TI / JLC Tech)
+            </label>
+          </div>
+          <p className="text-xs text-slate-500">
+            Se desmarcar, distribui dentro do escopo permitido do usuário, mesmo com escritórios diferentes.
+          </p>
+          <p className="text-[11px] text-slate-400">
+            TODO (Etapa 3/4): adicionar filtros de CNAE, cidade, UF, telefone válido e pré-visualização.
+          </p>
+        </div>
+      </div>
+
+      {distributionResult ? (
+        <div className="rounded-xl border bg-white p-4 shadow-sm">
+          <h3 className="text-sm font-semibold text-slate-900">Resumo da última distribuição</h3>
+          <p className="text-sm text-slate-600">
+            Elegíveis: {distributionResult.totalEligible} • Distribuídos: {distributionResult.totalDistributed}
+          </p>
+          <ul className="mt-2 space-y-1 text-sm text-slate-700">
+            {distributionResult.perConsultant.map((row) => (
+              <li key={row.consultantId}>
+                {row.name} ({row.email}): <span className="font-semibold">{row.distributed}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }

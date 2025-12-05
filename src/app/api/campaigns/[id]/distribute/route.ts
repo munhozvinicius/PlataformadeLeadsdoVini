@@ -3,28 +3,51 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUserWithOffices, canDistributeLeads } from "@/lib/permissions";
-import { LeadStatus } from "@prisma/client";
+import { LeadStatus, Role } from "@prisma/client";
 import { logLeadAction, computeLastActivityDate } from "@/lib/leadHistory";
 
 type DistributionMode = "PER_CONSULTANT" | "TOTAL";
 
 type DistributionFilters = {
-  onlyStatus?: LeadStatus[];
-  onlyWithPhone?: boolean;
-  avoidDuplicates?: boolean;
+  statuses?: LeadStatus[];
+  onlyUnassigned?: boolean;
+  onlyWithPhones?: boolean;
+  onlyValidPhones?: boolean;
+  minRevenue?: number | null;
+  maxRevenue?: number | null;
 };
 
 type RequestBody = {
-  consultants?: string[];
+  consultantIds?: string[];
   mode?: DistributionMode;
   quantityPerConsultant?: number;
-  totalQuantity?: number;
+  quantityTotal?: number;
   filters?: DistributionFilters;
-  officeId?: string | null;
+  respectOffices?: boolean;
 };
 
-function hasPhone(lead: { telefone?: string | null; telefone1?: string | null; telefone2?: string | null; telefone3?: string | null }) {
-  return Boolean(lead.telefone || lead.telefone1 || lead.telefone2 || lead.telefone3);
+function hasPhone(lead: {
+  telefone?: string | null;
+  telefone1?: string | null;
+  telefone2?: string | null;
+  telefone3?: string | null;
+}) {
+  return Boolean(
+    (lead.telefone ?? "").trim() ||
+      (lead.telefone1 ?? "").trim() ||
+      (lead.telefone2 ?? "").trim() ||
+      (lead.telefone3 ?? "").trim()
+  );
+}
+
+function parseRevenue(value?: string | null) {
+  if (!value) return null;
+  const normalized = value
+    .replace(/[^\d.,]/g, "")
+    .replace(/\./g, "")
+    .replace(",", ".");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
@@ -34,16 +57,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   }
 
   const body = (await req.json().catch(() => ({}))) as RequestBody;
-  const consultants = Array.isArray(body.consultants)
-    ? body.consultants.filter((id) => typeof id === "string" && id.trim().length > 0)
+  const consultants = Array.isArray(body.consultantIds)
+    ? body.consultantIds.filter((id) => typeof id === "string" && id.trim().length > 0)
     : [];
   const mode = body.mode;
-  const officeId = body.officeId ?? null;
   const filters: DistributionFilters = body.filters ?? {};
-
-  if (!(await canDistributeLeads(user, params.id, officeId))) {
-    return NextResponse.json({ message: "Forbidden" }, { status: 403 });
-  }
 
   if (!consultants.length) {
     return NextResponse.json({ message: "Informe ao menos um consultor." }, { status: 400 });
@@ -56,22 +74,76 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const quantity =
     mode === "PER_CONSULTANT"
       ? Number(body.quantityPerConsultant ?? 0)
-      : Number(body.totalQuantity ?? 0);
+      : Number(body.quantityTotal ?? 0);
 
   if (!Number.isFinite(quantity) || quantity <= 0) {
     return NextResponse.json({ message: "Quantidade inválida." }, { status: 400 });
   }
 
-  const statuses = filters.onlyStatus?.length ? filters.onlyStatus : [LeadStatus.NOVO];
+  const allowedStatuses = new Set<LeadStatus>(Object.values(LeadStatus));
+  const statuses = (filters.statuses?.length ? filters.statuses : [LeadStatus.NOVO]).filter((status) =>
+    allowedStatuses.has(status)
+  );
+  const onlyUnassigned = filters.onlyUnassigned !== false;
+  const respectOffices = Boolean(body.respectOffices);
+
+  const consultantRecords = await prisma.user.findMany({
+    where: { id: { in: consultants }, role: Role.CONSULTOR },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      officeRecordId: true,
+      role: true,
+    },
+  });
+
+  if (consultantRecords.length !== consultants.length) {
+    return NextResponse.json({ message: "Alguns consultores são inválidos." }, { status: 400 });
+  }
+
+  const consultantOfficeIds = consultantRecords
+    .map((c) => c.officeRecordId)
+    .filter((id): id is string => Boolean(id));
+
+  if (!(await canDistributeLeads(user, params.id, null))) {
+    return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+  }
+
+  const allowedOffices = new Set<string>();
+  if (user.role === Role.GERENTE_NEGOCIOS) {
+    const notManaged = consultantOfficeIds.filter((officeId) => officeId && !user.managedOfficeIds.includes(officeId));
+    if (notManaged.length > 0) {
+      return NextResponse.json({ message: "Consultor fora do seu escopo de escritórios." }, { status: 403 });
+    }
+    user.managedOfficeIds.forEach((id) => allowedOffices.add(id));
+  }
+  if (user.role === Role.PROPRIETARIO) {
+    if (user.officeRecordId && consultantOfficeIds.some((officeId) => officeId && officeId !== user.officeRecordId)) {
+      return NextResponse.json({ message: "Consultor fora do seu escritório." }, { status: 403 });
+    }
+    if (user.officeRecordId) {
+      allowedOffices.add(user.officeRecordId);
+    }
+  }
+
+  const officeConstraint =
+    respectOffices && consultantOfficeIds.length
+      ? consultantOfficeIds.filter(
+          (officeId) => officeId && (!allowedOffices.size || allowedOffices.has(officeId))
+        )
+      : Array.from(allowedOffices);
 
   const requiredCount = mode === "PER_CONSULTANT" ? quantity * consultants.length : quantity;
-  const takeAmount = Math.max(requiredCount * 2, requiredCount); // pequena folga para filtros extras
+  const takeAmount = Math.max(requiredCount * 2, requiredCount + 10);
+
+  const statusFilter = statuses.length ? statuses : [LeadStatus.NOVO];
 
   const eligibleWhere = {
     campanhaId: params.id,
-    status: { in: statuses },
-    OR: [{ consultorId: null }, { status: LeadStatus.NOVO }],
-    ...(officeId ? { officeId } : {}),
+    status: { in: statusFilter },
+    ...(onlyUnassigned ? { consultorId: null } : {}),
+    ...(officeConstraint.length ? { officeId: { in: officeConstraint } } : {}),
   };
 
   const rawLeads = await prisma.lead.findMany({
@@ -88,19 +160,19 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       telefone3: true,
       documento: true,
       cnpj: true,
+      vlFatPresumido: true,
     },
   });
 
   let leads = rawLeads;
-  if (filters.onlyWithPhone) {
+  if (filters.onlyWithPhones || filters.onlyValidPhones) {
     leads = leads.filter(hasPhone);
   }
-  if (filters.avoidDuplicates) {
-    const seen = new Set<string>();
+  if (filters.minRevenue != null || filters.maxRevenue != null) {
     leads = leads.filter((lead) => {
-      const key = (lead.documento ?? lead.cnpj ?? lead.id).toString();
-      if (seen.has(key)) return false;
-      seen.add(key);
+      const revenue = parseRevenue(lead.vlFatPresumido);
+      if (filters.minRevenue != null && (revenue == null || revenue < filters.minRevenue)) return false;
+      if (filters.maxRevenue != null && (revenue == null || revenue > filters.maxRevenue)) return false;
       return true;
     });
   }
@@ -112,19 +184,28 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const assignments = new Map<string, string[]>(); // consultantId -> leadIds
   consultants.forEach((id) => assignments.set(id, []));
 
-  const distributeCount = mode === "PER_CONSULTANT" ? quantity * consultants.length : quantity;
-  let cursor = 0;
-  while (cursor < leads.length && Array.from(assignments.values()).flat().length < distributeCount) {
-    for (const consultant of consultants) {
-      if (cursor >= leads.length) break;
-      const current = assignments.get(consultant);
+  if (mode === "PER_CONSULTANT") {
+    let cursor = 0;
+    for (const consultantId of consultants) {
+      const current = assignments.get(consultantId);
       if (!current) continue;
-      if (mode === "PER_CONSULTANT" && current.length >= quantity) {
-        continue;
+      while (current.length < quantity && cursor < leads.length) {
+        current.push(leads[cursor].id);
+        cursor += 1;
       }
-      current.push(leads[cursor].id);
-      cursor += 1;
-      if (Array.from(assignments.values()).flat().length >= distributeCount) break;
+    }
+  } else {
+    let cursor = 0;
+    let distributed = 0;
+    while (cursor < leads.length && distributed < quantity) {
+      for (const consultantId of consultants) {
+        if (cursor >= leads.length || distributed >= quantity) break;
+        const current = assignments.get(consultantId);
+        if (!current) continue;
+        current.push(leads[cursor].id);
+        cursor += 1;
+        distributed += 1;
+      }
     }
   }
 
@@ -157,7 +238,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     distributedLeads.map((entry) =>
       logLeadAction({
         leadId: entry.leadId,
-        action: "ASSIGN",
+        action: "DISTRIBUICAO_AUTOMATICA",
         fromUserId: leads.find((l) => l.id === entry.leadId)?.consultorId ?? undefined,
         toUserId: entry.consultantId,
         byUserId: user.id,
@@ -166,16 +247,18 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     )
   );
 
-  const distributedPerConsultant = Object.fromEntries(
-    Array.from(assignments.entries()).map(([consultantId, leadIds]) => [consultantId, leadIds.length])
-  );
+  const perConsultant = consultantRecords.map((consultant) => ({
+    consultantId: consultant.id,
+    name: consultant.name ?? consultant.email ?? consultant.id,
+    email: consultant.email ?? "",
+    distributed: assignments.get(consultant.id)?.length ?? 0,
+  }));
   const totalDistributed = distributedLeads.length;
-  const remaining = await prisma.lead.count({ where: eligibleWhere });
 
   return NextResponse.json({
-    distributedPerConsultant,
+    totalEligible: leads.length,
     totalDistributed,
-    remaining,
-    message: "Distribuição aplicada. TODO: Integrar com UI da aba Distribuição (Etapa 3).",
+    perConsultant,
+    message: "Distribuição aplicada com sucesso.",
   });
 }

@@ -6,7 +6,8 @@ export type LeadAction =
   | "ASSIGN"
   | "REASSIGN"
   | "RECAPTURE"
-  | "STATUS_CHANGE";
+  | "STATUS_CHANGE"
+  | "DISTRIBUICAO_AUTOMATICA";
 
 type LogLeadActionParams = {
   leadId: string;
