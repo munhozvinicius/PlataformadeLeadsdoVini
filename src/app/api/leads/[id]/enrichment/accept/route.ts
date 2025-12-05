@@ -79,7 +79,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   if (suggestion.type === "PHONE") {
     const phones: { rotulo: string; valor: string }[] = Array.isArray(lead.telefones)
-      ? (lead.telefones as any[])
+      ? (lead.telefones as { rotulo: string; valor: string }[])
       : [];
     const normalize = (v: string) => v.replace(/\D+/g, "");
     const exists = phones.some((p) => normalize(p.valor) === normalize(suggestion!.value));
@@ -103,4 +103,3 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   return NextResponse.json({ success: true });
 }
-

@@ -427,12 +427,13 @@ function LeadDrawer({
   const thermometer = useMemo(() => {
     let score = 0;
     events.forEach((ev) => {
+      const payload = (ev.payload as Record<string, unknown> | null) ?? {};
       if (ev.type === "PHONE_VALIDATION") {
-        const verdict = (ev.payload as any)?.verdict;
+        const verdict = typeof payload.verdict === "string" ? payload.verdict : undefined;
         if (verdict === "good") score += 2;
         if (verdict === "bad") score -= 2;
       }
-      if (ev.type === "STATUS" && (ev.payload as any)?.to === "PERDIDO") score -= 3;
+      if (ev.type === "STATUS" && payload.to === "PERDIDO") score -= 3;
     });
     const label = score >= 4 ? "Lead quente" : score >= 0 ? "Lead morno" : "Lead frio";
     return { score, label };
@@ -523,6 +524,7 @@ function LeadDrawer({
     loadLeadProducts,
     loadEvents,
     createEvent,
+    lead.telefones,
   ]);
 
   const handleFormChange = (
@@ -1177,7 +1179,27 @@ function LeadDrawer({
                 </div>
                 <div className="space-y-4">
                   {timelineItems.map((item) => {
-                    const payload = (item.payload ?? {}) as any;
+                    const payload = (item.payload as Record<string, unknown> | undefined) ?? {};
+                    const activityType =
+                      item.type === "ACTIVITY" && typeof payload.activityType === "string"
+                        ? payload.activityType
+                        : undefined;
+                    const channelLabel =
+                      item.type === "ACTIVITY" && typeof payload.channel === "string"
+                        ? payload.channel
+                        : undefined;
+                    const outcomeLabel =
+                      typeof payload.outcomeLabel === "string" ? payload.outcomeLabel : undefined;
+                    const nextFollowUp =
+                      typeof payload.nextFollowUpAt === "string" ? payload.nextFollowUpAt : undefined;
+                    const stageBefore =
+                      typeof payload.stageBefore === "string" ? (payload.stageBefore as LeadStatusId) : undefined;
+                    const stageAfter =
+                      typeof payload.stageAfter === "string" ? (payload.stageAfter as LeadStatusId) : undefined;
+                    const reason = typeof payload.reason === "string" ? payload.reason : undefined;
+                    const phone = typeof payload.phone === "string" ? payload.phone : undefined;
+                    const verdict = typeof payload.verdict === "string" ? payload.verdict : undefined;
+                    const note = typeof payload.note === "string" ? payload.note : undefined;
                     return (
                       <div key={item.id} className="relative pl-6">
                         <span className="absolute left-0 top-2 h-3 w-3 rounded-full bg-slate-900" aria-hidden />
@@ -1186,7 +1208,7 @@ function LeadDrawer({
                             <div className="text-sm font-semibold text-slate-900">
                               {item.type === "STATUS" && "Mudança de status"}
                               {item.type === "NOTE" && "Atividade / Nota"}
-                              {item.type === "ACTIVITY" && (payload.activityType || "Atividade")}
+                              {item.type === "ACTIVITY" && (activityType || "Atividade")}
                               {item.type === "PHONE_VALIDATION" && "Validação de telefone"}
                               {item.type === "PHONE_UPDATE" && "Telefone adicionado/atualizado"}
                               {item.type === "CONTACT_UPDATE" && "Contato atualizado"}
@@ -1208,37 +1230,43 @@ function LeadDrawer({
                           <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-600">
                             {item.type === "STATUS" && (
                               <span className="rounded-full bg-amber-100 px-2 py-0.5">
-                                {stageLabel(payload.from)} → {stageLabel(payload.to)}
+                                {stageLabel(payload.from as LeadStatusId)} →{" "}
+                                {stageLabel(payload.to as LeadStatusId)}
                               </span>
                             )}
                             {item.type === "PHONE_VALIDATION" && (
                               <span
                                 className={`rounded-full px-2 py-0.5 ${
-                                  payload.verdict === "good"
+                                  verdict === "good"
                                     ? "bg-emerald-100 text-emerald-700"
                                     : "bg-red-100 text-red-700"
                                 }`}
                               >
-                                {payload.verdict === "good" ? "Contato bom" : "Contato ruim"} ({payload.phone})
+                                {verdict === "good" ? "Contato bom" : "Contato ruim"} ({phone})
                               </span>
                             )}
-                            {payload.outcomeLabel ? (
-                              <span className="rounded-full bg-slate-100 px-2 py-0.5">{payload.outcomeLabel}</span>
+                            {outcomeLabel ? (
+                              <span className="rounded-full bg-slate-100 px-2 py-0.5">{outcomeLabel}</span>
                             ) : null}
-                            {payload.nextFollowUpAt ? (
+                            {nextFollowUp ? (
                               <span className="rounded-full bg-emerald-100 px-2 py-0.5">
-                                Próximo contato: {formatDate(payload.nextFollowUpAt, true)}
+                                Próximo contato: {formatDate(nextFollowUp, true)}
                               </span>
                             ) : null}
-                            {payload.reason ? (
-                              <span className="rounded-full bg-red-100 px-2 py-0.5">Motivo: {payload.reason}</span>
+                            {reason ? (
+                              <span className="rounded-full bg-red-100 px-2 py-0.5">Motivo: {reason}</span>
+                            ) : null}
+                            {stageBefore ? (
+                              <span className="rounded-full bg-amber-50 px-2 py-0.5">
+                                {stageLabel(stageBefore)} → {stageLabel(stageAfter ?? stageBefore)}
+                              </span>
                             ) : null}
                           </div>
-                          {payload.note ? (
-                            <p className="mt-2 whitespace-pre-wrap text-sm text-slate-800">{payload.note}</p>
+                          {note ? (
+                            <p className="mt-2 whitespace-pre-wrap text-sm text-slate-800">{note}</p>
                           ) : null}
-                          {payload.phone && item.type === "PHONE_VALIDATION" && payload.reason ? (
-                            <p className="mt-1 text-xs text-slate-600">Detalhe: {payload.reason}</p>
+                          {phone && item.type === "PHONE_VALIDATION" && reason ? (
+                            <p className="mt-1 text-xs text-slate-600">Detalhe: {reason}</p>
                           ) : null}
                         </div>
                       </div>

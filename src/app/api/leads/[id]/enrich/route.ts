@@ -72,12 +72,12 @@ export async function POST(_req: NextRequest, { params }: Params) {
       }),
     );
     return NextResponse.json(persisted);
-  } catch (err: any) {
-    if (err?.code === "ENRICHMENT_NOT_CONFIGURED") {
+  } catch (err: unknown) {
+    const error = err as { code?: string };
+    if (error?.code === "ENRICHMENT_NOT_CONFIGURED") {
       return NextResponse.json({ message: "Enriquecimento não configurado" }, { status: 400 });
     }
     console.error("[ENRICH_ERROR]", err);
     return NextResponse.json({ message: "Erro ao buscar enriquecimento" }, { status: 500 });
   }
 }
-
