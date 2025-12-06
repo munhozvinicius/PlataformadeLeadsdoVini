@@ -42,7 +42,6 @@ type Lead = {
   vertical?: string | null;
   endereco?: string | null;
   emails?: string[];
-  telefones?: { rotulo: string; valor: string }[];
   logradouro?: string | null;
   numero?: string | null;
   cep?: string | null;
