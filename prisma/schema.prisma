@@ -165,6 +165,9 @@ model Lead {
   nextStepNote       String?
   telefones          Json?
   emails             String[]
+  lostReason         String?
+  lostReasonComment  String?
+  lostAt             DateTime?
   site               String?
   contatoPrincipal   Json?
   observacoesGerais  String?

@@ -7,7 +7,6 @@ import React, {
   useState,
   FormEvent,
   ChangeEvent,
-  useRef,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -78,9 +77,9 @@ type LeadEvent = {
 type LeadEnrichmentSuggestion = {
   id: string;
   leadId: string;
-  type: string;
+  type: EnrichmentSuggestionType;
   source: string;
-  value: string;
+  value: unknown;
   status: "PENDING" | "ACCEPTED" | "REJECTED" | string;
   createdAt: string;
 };
@@ -163,6 +162,32 @@ const OUTCOME_OPTIONS = [
   { code: "OUTRO", label: "Outro (descrever)" },
 ];
 
+type EnrichmentSuggestionType =
+  | "PHONE"
+  | "EMAIL"
+  | "ADDRESS"
+  | "CNAE"
+  | "PORTE"
+  | "RESPONSIBLE"
+  | "SITE"
+  | "OTHER";
+
+type EnrichmentSuggestionCard = {
+  id: string;
+  type: EnrichmentSuggestionType;
+  label: string;
+  value: unknown;
+  source: string;
+  applied?: boolean;
+  ignored?: boolean;
+};
+
+async function logLeadEvent(input: { type: string; leadId: string; userId?: string; payload?: unknown }) {
+  // TODO: integrar com infraestrutura real de eventos/gamificação
+  // Por ora, apenas registra no console para facilitar tracing.
+  console.log("[lead-event]", input);
+}
+
 function stageLabel(id: LeadStatusId) {
   return LEAD_STATUS.find((s) => s.id === id)?.title ?? id;
 }
@@ -200,10 +225,16 @@ function LeadDrawer({
 }: {
   lead: Lead;
   onClose: () => void;
-  onStageChange: (leadId: string, stage: LeadStatusId) => Promise<void>;
+  onStageChange: (leadId: string, stage: LeadStatusId, extras?: { lostReason?: string; lostComment?: string }) => Promise<void>;
   onActivitySaved: () => Promise<void>;
 }) {
-  const [activeTab, setActiveTab] = useState<"dados" | "atividades" | "enriquecimento">("dados");
+  const [selectedStatus, setSelectedStatus] = useState<LeadStatusId>(lead.status);
+  const [statusDirty, setStatusDirty] = useState(false);
+  const [savingStatus, setSavingStatus] = useState(false);
+  const [statusFeedback, setStatusFeedback] = useState("");
+  const [lostModalOpen, setLostModalOpen] = useState(false);
+  const [lostReason, setLostReason] = useState<string>("");
+  const [lostComment, setLostComment] = useState<string>("");
   const [activities, setActivities] = useState<LeadActivity[]>([]);
   const [activitiesLoading, setActivitiesLoading] = useState(false);
   const [form, setForm] = useState<ActivityFormState>({
@@ -229,13 +260,23 @@ function LeadDrawer({
   const [productFilters, setProductFilters] = useState({ tower: "", category: "", search: "" });
   const [productsSaving, setProductsSaving] = useState(false);
   const [productSaveState, setProductSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const saveProductsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [events, setEvents] = useState<LeadEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
-  const [suggestions, setSuggestions] = useState<LeadEnrichmentSuggestion[]>([]);
+  const [suggestions, setSuggestions] = useState<EnrichmentSuggestionCard[]>([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState<string>("");
   const [additionalPhones, setAdditionalPhones] = useState<{ rotulo: string; valor: string }[]>([]);
+  const [cartDirty, setCartDirty] = useState(false);
+  const [customProduct, setCustomProduct] = useState({ name: "", value: "", note: "", qty: 1 });
+  const LOST_REASON_OPTIONS = [
+    { value: "TELEFONE_INVALIDO", label: "Telefone inválido" },
+    { value: "EMPRESA_FECHADA", label: "Empresa fechada" },
+    { value: "SEM_INTERESSE", label: "Sem interesse" },
+    { value: "JA_CLIENTE_CONCORRENTE", label: "Já é cliente de concorrente" },
+    { value: "ORCAMENTO_BAIXO", label: "Orçamento baixo / preço" },
+    { value: "NAO_RETORNOU", label: "Não retornou / sumiu" },
+    { value: "OUTRO", label: "Outro" },
+  ];
   const empresaNome = lead.razaoSocial ?? lead.nomeFantasia ?? "Não informado";
   const documento = (lead.documento ?? lead.cnpj ?? "Não informado").toString();
   const vertical = lead.vertical ?? "Não informado";
@@ -300,6 +341,7 @@ function LeadDrawer({
         const data = (await res.json()) as LeadProduct[];
         setLeadProducts(data);
         setProductSaveState("idle");
+        setCartDirty(false);
       }
     } catch (err) {
       console.error("Erro ao carregar produtos do lead", err);
@@ -321,6 +363,7 @@ function LeadDrawer({
           throw new Error("Erro ao salvar produtos");
         }
         setProductSaveState("saved");
+        setCartDirty(false);
         createEvent("PRODUCT_CART_UPDATE", { count: items.length });
       } catch (err) {
         console.error(err);
@@ -335,11 +378,10 @@ function LeadDrawer({
   const queueProductSave = useCallback(
     (items: LeadProduct[]) => {
       setLeadProducts(items);
-      setProductSaveState("saving");
-      if (saveProductsTimer.current) clearTimeout(saveProductsTimer.current);
-      saveProductsTimer.current = setTimeout(() => persistProducts(items), 700);
+      setProductSaveState("idle");
+      setCartDirty(true);
     },
-    [persistProducts],
+    [],
   );
 
   const addProductToLead = useCallback(
@@ -449,7 +491,18 @@ function LeadDrawer({
         return;
       }
       const data = (await res.json()) as LeadEnrichmentSuggestion[];
-      setSuggestions(data.filter((s) => s.status === "PENDING"));
+      const normalized: EnrichmentSuggestionCard[] = data
+        .filter((s) => s.status === "PENDING")
+        .map((s) => ({
+          id: s.id,
+          type: s.type,
+          label: s.type,
+          value: s.value,
+          source: s.source,
+          applied: s.status === "ACCEPTED",
+          ignored: s.status === "REJECTED",
+        }));
+      setSuggestions(normalized);
     } catch (err) {
       console.error(err);
       setSuggestionsError("Falha de conexão ao buscar sugestões");
@@ -459,36 +512,95 @@ function LeadDrawer({
   }, [lead.id]);
 
   const acceptSuggestion = useCallback(
-    async (suggestion: LeadEnrichmentSuggestion) => {
+    async (suggestion: EnrichmentSuggestionCard) => {
       await fetch(`/api/leads/${lead.id}/enrichment/accept`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ suggestionId: suggestion.id, type: suggestion.type, value: suggestion.value, source: suggestion.source }),
       });
-      setSuggestions((prev) => prev.filter((s) => s.id !== suggestion.id));
+      setSuggestions((prev) =>
+        prev.map((s) => (s.id === suggestion.id ? { ...s, applied: true, ignored: false } : s)),
+      );
       if (suggestion.type === "PHONE") {
         setAdditionalPhones((prev) => {
           const exists = prev.some((p) => normalizePhone(p.valor) === normalizePhone(suggestion.value));
           if (exists) return prev;
           return [...prev, { rotulo: "Enriquecimento", valor: suggestion.value }];
         });
+      } else if (suggestion.type === "EMAIL") {
+        if (typeof suggestion.value === "string") {
+          setEmailValue(suggestion.value);
+        }
+      } else if (suggestion.type === "ADDRESS") {
+        setStatusFeedback("Endereço aplicado");
+      } else if (suggestion.type === "SITE" && typeof suggestion.value === "string") {
+        setSiteValue(suggestion.value);
+      } else if (suggestion.type === "RESPONSIBLE") {
+        const val =
+          typeof suggestion.value === "string"
+            ? ((): { nome?: string; cargo?: string } => {
+                try {
+                  return JSON.parse(suggestion.value);
+                } catch {
+                  return { nome: suggestion.value };
+                }
+              })()
+            : (suggestion.value as { nome?: string; cargo?: string });
+        if (val?.nome) setContactName(val.nome);
       }
+      logLeadEvent({
+        type: "ENRICHMENT_ACCEPTED",
+        leadId: lead.id,
+        userId: "",
+        payload: { suggestionId: suggestion.id, type: suggestion.type, source: suggestion.source },
+      });
       loadEvents();
+      setStatusFeedback("Enriquecimento aplicado");
     },
     [lead.id, loadEvents],
   );
 
   const rejectSuggestion = useCallback(
-    async (suggestion: LeadEnrichmentSuggestion) => {
+    async (suggestion: EnrichmentSuggestionCard) => {
       await fetch(`/api/leads/${lead.id}/enrichment/reject`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ suggestionId: suggestion.id }),
       });
-      setSuggestions((prev) => prev.filter((s) => s.id !== suggestion.id));
+      setSuggestions((prev) =>
+        prev.map((s) => (s.id === suggestion.id ? { ...s, ignored: true } : s)),
+      );
+      logLeadEvent({
+        type: "ENRICHMENT_REJECTED",
+        leadId: lead.id,
+        userId: "",
+        payload: { suggestionId: suggestion.id, type: suggestion.type, source: suggestion.source },
+      });
       loadEvents();
     },
     [lead.id, loadEvents],
+  );
+
+  const handleStageSave = useCallback(
+    async (status: LeadStatusId, options?: { reason?: string; comment?: string }) => {
+      if (status === "PERDIDO" && !options?.reason) {
+        setLostModalOpen(true);
+        return;
+      }
+      await onStageChange(lead.id, status, { lostReason: options?.reason, lostComment: options?.comment });
+      await loadEvents();
+      setSelectedStatus(status);
+      setStatusDirty(false);
+      setStatusFeedback("Lead atualizado");
+      setLostModalOpen(false);
+      logLeadEvent({
+        type: status === "PERDIDO" ? "LEAD_MARKED_LOST" : "LEAD_STATUS_CHANGED",
+        leadId: lead.id,
+        userId: "",
+        payload: { status, reason: options?.reason },
+      });
+    },
+    [lead.id, loadEvents, onStageChange],
   );
 
   useEffect(() => {
@@ -510,6 +622,9 @@ function LeadDrawer({
       ? (lead.telefones as { rotulo: string; valor: string }[])
       : [];
     setAdditionalPhones(extraPhones);
+    setSelectedStatus(lead.status);
+    setStatusDirty(false);
+    setStatusFeedback("");
   }, [
     lead.id,
     lead.status,
@@ -624,15 +739,20 @@ function LeadDrawer({
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        onClose();
+        if (lostModalOpen) {
+          setLostModalOpen(false);
+          setSelectedStatus(lead.status);
+          setStatusDirty(false);
+        } else {
+          onClose();
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
-      if (saveProductsTimer.current) clearTimeout(saveProductsTimer.current);
     };
-  }, [onClose]);
+  }, [onClose, lostModalOpen, lead.status]);
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -661,304 +781,6 @@ function LeadDrawer({
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 pb-6">
-          <div className="flex gap-2 border-b pb-3 pt-4">
-            <button
-              onClick={() => setActiveTab("dados")}
-              className={`rounded-md px-3 py-2 text-sm font-medium ${
-                activeTab === "dados" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              Dados do cliente
-            </button>
-            <button
-              onClick={() => setActiveTab("atividades")}
-              className={`rounded-md px-3 py-2 text-sm font-medium ${
-                activeTab === "atividades"
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              Atividades / Notas
-            </button>
-            <button
-              onClick={() => setActiveTab("enriquecimento")}
-              className={`rounded-md px-3 py-2 text-sm font-medium ${
-                activeTab === "enriquecimento"
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              Enriquecimento online
-            </button>
-          </div>
-
-          {activeTab === "dados" ? (
-            <div className="space-y-6 py-4">
-              <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-emerald-50 via-white to-slate-50 p-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs uppercase text-slate-500">Termômetro do lead</p>
-                    <p className="text-lg font-semibold text-slate-900">{thermometer.label}</p>
-                    <p className="text-sm text-slate-600">Score: {thermometer.score}</p>
-                  </div>
-                  <div className="h-12 w-12 rounded-full border border-emerald-200 bg-white text-center text-sm font-semibold text-emerald-700 shadow-sm flex items-center justify-center">
-                    {thermometer.score}
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm md:col-span-2">
-                  <p className="text-xs uppercase text-slate-500">Empresa</p>
-                  <p className="text-lg font-semibold text-slate-900">{empresaNome}</p>
-                  <p className="text-sm text-slate-600">Documento: {documento}</p>
-                  <p className="text-sm text-slate-600">Vertical: {vertical}</p>
-                  {lead.cnae ? <p className="text-xs text-slate-500">CNAE: {lead.cnae}</p> : null}
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
-                  <p className="text-xs uppercase text-slate-500">Localização</p>
-                  <p className="text-sm text-slate-700">Cidade / UF: {cidadeUf}</p>
-                  <p className="text-sm text-slate-600">Logradouro: {logradouro}</p>
-                  <p className="text-sm text-slate-600">CEP / Número: {cepNumero}</p>
-                  <p className="text-sm text-slate-600">Território: {territorio}</p>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
-                  <p className="text-xs uppercase text-slate-500">Informações comerciais</p>
-                  <p className="text-sm text-slate-700">Faturamento presumido: {faturamento}</p>
-                  <p className="text-sm text-slate-700">Oferta de marketing: {ofertaMkt}</p>
-                  <p className="text-sm text-slate-700">Estratégia: {estrategia}</p>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
-                  <p className="text-xs uppercase text-slate-500">Campanha e estágio</p>
-                  <p className="text-sm text-slate-700">Campanha: {lead.campanha?.nome ?? "-"}</p>
-                  <label className="mt-2 block text-xs text-slate-500">Mudar estágio</label>
-                  <select
-                    value={lead.status}
-                    onChange={async (e) => {
-                      await onStageChange(lead.id, e.target.value as LeadStatusId);
-                      loadEvents();
-                    }}
-                    className="w-full rounded-lg border px-3 py-2 text-sm"
-                  >
-                    {LEAD_STATUS.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.title}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="mt-2 text-xs text-slate-500">Criado em {formatDate(lead.createdAt)}</p>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm md:col-span-2">
-                  <p className="text-xs uppercase text-slate-500">Contatos & Canais</p>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <div className="space-y-1">
-                      <label className="text-xs text-slate-600">Site</label>
-                      <input
-                        value={siteValue}
-                        onChange={(e) => setSiteValue(e.target.value)}
-                        className="w-full rounded-lg border px-3 py-2 text-sm"
-                        placeholder="https://"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-slate-600">Email</label>
-                      <input
-                        value={emailValue}
-                        onChange={(e) => setEmailValue(e.target.value)}
-                        className="w-full rounded-lg border px-3 py-2 text-sm"
-                        placeholder="email@empresa.com"
-                      />
-                    </div>
-                    <div className="space-y-1 md:col-span-2">
-                      <label className="text-xs text-slate-600">Contato principal</label>
-                      <input
-                        value={contactName}
-                        onChange={(e) => setContactName(e.target.value)}
-                        className="w-full rounded-lg border px-3 py-2 text-sm"
-                        placeholder="Nome do contato"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex flex-col gap-2">
-                    <p className="text-xs uppercase text-slate-500">Telefones</p>
-                    {[
-                      { rotulo: "Telefone 1", valor: lead.telefone1 },
-                      { rotulo: "Telefone 2", valor: lead.telefone2 },
-                      { rotulo: "Telefone 3", valor: lead.telefone3 },
-                      ...additionalPhones,
-                    ].filter((t) => t.valor).length === 0 ? (
-                      <p className="text-sm text-slate-600">Telefone não informado</p>
-                    ) : null}
-                    {[...[
-                      { rotulo: "Telefone 1", valor: lead.telefone1 },
-                      { rotulo: "Telefone 2", valor: lead.telefone2 },
-                      { rotulo: "Telefone 3", valor: lead.telefone3 },
-                    ].filter((t) => t.valor), ...additionalPhones]
-                      .map((phone, idx) => (
-                        <div key={`${phone.valor}-${idx}`} className="flex items-center justify-between gap-2">
-                          <a href={`tel:${phone.valor}`} className="text-sm text-slate-800 hover:underline">
-                            {phone.rotulo}: {phone.valor}
-                          </a>
-                          <div className="flex items-center gap-1 text-xs">
-                            <button
-                              onClick={() =>
-                                createEvent("PHONE_VALIDATION", { phone: phone.valor, verdict: "good" })
-                              }
-                              className="rounded-full border border-emerald-200 px-2 py-1 text-emerald-700 hover:bg-emerald-50"
-                            >
-                              👍
-                            </button>
-                            <button
-                              onClick={() => {
-                                const reason = window.prompt("Motivo da rejeição do telefone?") || "";
-                                createEvent("PHONE_VALIDATION", {
-                                  phone: phone.valor,
-                                  verdict: "bad",
-                                  reason: reason || "Sem motivo informado",
-                                });
-                              }}
-                              className="rounded-full border border-red-200 px-2 py-1 text-red-700 hover:bg-red-50"
-                            >
-                              👎
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    <div className="flex flex-col gap-2 pt-2">
-                      <div className="flex flex-col gap-2 md:flex-row">
-                        <input
-                          className="flex-1 rounded-lg border px-2 py-2 text-sm"
-                          placeholder="Rótulo"
-                          value={newPhone.rotulo}
-                          onChange={(e) => setNewPhone((prev) => ({ ...prev, rotulo: e.target.value }))}
-                        />
-                        <input
-                          className="flex-1 rounded-lg border px-2 py-2 text-sm"
-                          placeholder="Telefone"
-                          value={newPhone.valor}
-                          onChange={(e) => setNewPhone((prev) => ({ ...prev, valor: e.target.value }))}
-                        />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={addPhone}
-                          disabled={savingPhone}
-                          className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
-                        >
-                          {savingPhone ? "Salvando..." : "Adicionar telefone"}
-                        </button>
-                        <button
-                          onClick={saveContactFields}
-                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                        >
-                          Salvar contatos
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm xl:col-span-3">
-                  <div className="flex flex-col gap-2 border-b border-dashed pb-3 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <p className="text-xs uppercase text-slate-500">Catálogo de produtos Vivo</p>
-                      <p className="text-sm text-slate-600">
-                        Monte a ideia de proposta e registre no carrinho do lead. Autosave ativo.
-                      </p>
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      {productSaveState === "saving" || productsSaving
-                        ? "Salvando..."
-                        : productSaveState === "saved"
-                        ? "Salvo"
-                        : productSaveState === "error"
-                        ? "Erro ao salvar"
-                        : "Pronto"}
-                    </div>
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-1 gap-4 xl:grid-cols-2">
-                    <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                        <div className="space-y-1">
-                          <label className="text-xs text-slate-600">Torre</label>
-                          <select
-                            value={productFilters.tower}
-                            onChange={(e) =>
-                              setProductFilters((prev) => ({ ...prev, tower: e.target.value, category: "" }))
-                            }
-                            className="w-full rounded-lg border px-3 py-2 text-sm"
-                          >
-                            <option value="">Todas</option>
-                            {TOWER_OPTIONS.map((tower) => (
-                              <option key={tower} value={tower}>
-                                {tower}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-xs text-slate-600">Categoria</label>
-                          <select
-                            value={productFilters.category}
-                            onChange={(e) =>
-                              setProductFilters((prev) => ({ ...prev, category: e.target.value }))
-                            }
-                            className="w-full rounded-lg border px-3 py-2 text-sm"
-                          >
-                            <option value="">Todas</option>
-                            {categoryOptions.map((cat) => (
-                              <option key={cat} value={cat}>
-                                {cat}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs text-slate-600">Buscar produto</label>
-                        <input
-                          value={productFilters.search}
-                          onChange={(e) =>
-                            setProductFilters((prev) => ({ ...prev, search: e.target.value }))
-                          }
-                          className="w-full rounded-lg border px-3 py-2 text-sm"
-                          placeholder="Digite parte do nome"
-                        />
-                      </div>
-
-                      <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
-                        {filteredCatalog.map((item) => (
-                          <div
-                            key={item.id}
-                            className="flex items-start justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm"
-                          >
-                            <div>
-                              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                                <span className="rounded-full bg-slate-100 px-2 py-0.5">{item.tower}</span>
-                                <span className="text-slate-600">{item.category}</span>
-                              </div>
-                              <p className="text-sm font-semibold text-slate-900">{item.name}</p>
-                            </div>
-                            <button
-                              onClick={() => addProductToLead(item)}
-                              className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800"
-                            >
-                              Adicionar
-                            </button>
-                          </div>
-                        ))}
-                        {filteredCatalog.length === 0 ? (
-                          <p className="text-sm text-slate-500">Nenhum produto encontrado para o filtro.</p>
-                        ) : null}
-                      </div>
-                    </div>
-
                     <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
                       <div className="flex items-center justify-between">
                         <div>
@@ -1050,299 +872,68 @@ function LeadDrawer({
                 </div>
               </div>
             </div>
-          ) : activeTab === "atividades" ? (
-            <div className="space-y-6 py-4">
-              <form
-                onSubmit={submitActivity}
-                className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm"
-              >
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <div className="space-y-1">
-                    <label className="text-xs text-slate-600">Tipo de atividade</label>
-                    <select
-                      name="activityType"
-                      value={form.activityType}
-                      onChange={handleFormChange}
-                      className="w-full rounded-lg border px-3 py-2 text-sm"
-                    >
-                      {ACTIVITY_TYPES.map((type) => (
-                        <option key={type} value={type}>
-                          {type}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-slate-600">Canal</label>
-                    <select
-                      name="channel"
-                      value={form.channel}
-                      onChange={handleFormChange}
-                      className="w-full rounded-lg border px-3 py-2 text-sm"
-                    >
-                      {CHANNEL_OPTIONS.map((channel) => (
-                        <option key={channel.value} value={channel.value}>
-                          {channel.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-slate-600">Resultado / palitagem</label>
-                    <select
-                      name="outcomeCode"
-                      value={form.outcomeCode}
-                      onChange={(e) => {
-                        const selected = OUTCOME_OPTIONS.find((opt) => opt.code === e.target.value);
-                        setForm((prev) => ({
-                          ...prev,
-                          outcomeCode: selected?.code ?? "",
-                          outcomeLabel: selected?.label ?? "",
-                        }));
-                      }}
-                      className="w-full rounded-lg border px-3 py-2 text-sm"
-                    >
-                      <option value="">Selecione</option>
-                      {OUTCOME_OPTIONS.map((opt) => (
-                        <option key={opt.code} value={opt.code}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-slate-600">Próximo contato (opcional)</label>
-                    <input
-                      type="datetime-local"
-                      name="nextFollowUpAt"
-                      value={form.nextFollowUpAt}
-                      onChange={handleFormChange}
-                      className="w-full rounded-lg border px-3 py-2 text-sm"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-slate-600">Próximo passo (texto curto)</label>
-                    <input
-                      name="nextStepNote"
-                      value={form.nextStepNote}
-                      onChange={handleFormChange}
-                      className="w-full rounded-lg border px-3 py-2 text-sm"
-                      placeholder="Ex: Ligar semana que vem..."
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-slate-600">Estágio após atividade</label>
-                    <select
-                      name="newStage"
-                      value={form.newStage}
-                      onChange={(e) => setForm((prev) => ({ ...prev, newStage: e.target.value as LeadStatusId }))}
-                      className="w-full rounded-lg border px-3 py-2 text-sm"
-                    >
-                      {LEAD_STATUS.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.title}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs text-slate-600">Observação detalhada</label>
-                  <textarea
-                    name="note"
-                    value={form.note}
-                    onChange={handleFormChange}
-                    className="w-full rounded-lg border px-3 py-2 text-sm"
-                    rows={3}
-                    required
-                  />
-                </div>
-                {error ? <p className="text-sm text-red-600">{error}</p> : null}
-                <div className="flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-semibold hover:bg-slate-800 disabled:opacity-60"
-                  >
-                    {saving ? "Salvando..." : "Salvar atividade"}
-                  </button>
-                </div>
-              </form>
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-slate-900">Timeline unificada</h3>
-                  {(activitiesLoading || eventsLoading) ? (
-                    <span className="text-xs text-slate-500">Carregando...</span>
-                  ) : null}
-                </div>
-                <div className="space-y-4">
-                  {timelineItems.map((item) => {
-                    const payload = (item.payload as Record<string, unknown> | undefined) ?? {};
-                    const activityType =
-                      item.type === "ACTIVITY" && typeof payload.activityType === "string"
-                        ? payload.activityType
-                        : undefined;
-                    const channelLabel =
-                      item.type === "ACTIVITY" && typeof payload.channel === "string"
-                        ? payload.channel
-                        : undefined;
-                    const outcomeLabel =
-                      typeof payload.outcomeLabel === "string" ? payload.outcomeLabel : undefined;
-                    const nextFollowUp =
-                      typeof payload.nextFollowUpAt === "string" ? payload.nextFollowUpAt : undefined;
-                    const stageBefore =
-                      typeof payload.stageBefore === "string" ? (payload.stageBefore as LeadStatusId) : undefined;
-                    const stageAfter =
-                      typeof payload.stageAfter === "string" ? (payload.stageAfter as LeadStatusId) : undefined;
-                    const reason = typeof payload.reason === "string" ? payload.reason : undefined;
-                    const phone = typeof payload.phone === "string" ? payload.phone : undefined;
-                    const verdict = typeof payload.verdict === "string" ? payload.verdict : undefined;
-                    const note = typeof payload.note === "string" ? payload.note : undefined;
-                    return (
-                      <div key={item.id} className="relative pl-6">
-                        <span className="absolute left-0 top-2 h-3 w-3 rounded-full bg-slate-900" aria-hidden />
-                        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-                          <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-                            <div className="text-sm font-semibold text-slate-900">
-                              {item.type === "STATUS" && "Mudança de status"}
-                              {item.type === "NOTE" && "Atividade / Nota"}
-                              {item.type === "ACTIVITY" && (activityType || "Atividade")}
-                              {item.type === "PHONE_VALIDATION" && "Validação de telefone"}
-                              {item.type === "PHONE_UPDATE" && "Telefone adicionado/atualizado"}
-                              {item.type === "CONTACT_UPDATE" && "Contato atualizado"}
-                              {item.type === "PRODUCT_CART_UPDATE" && "Carrinho atualizado"}
-                              {item.type === "OPEN" && "Ficha aberta"}
-                              {![
-                                "STATUS",
-                                "NOTE",
-                                "ACTIVITY",
-                                "PHONE_VALIDATION",
-                                "PHONE_UPDATE",
-                                "CONTACT_UPDATE",
-                                "PRODUCT_CART_UPDATE",
-                                "OPEN",
-                              ].includes(item.type) && item.type}
-                            </div>
-                            <div className="text-xs text-slate-500">{formatDate(item.createdAt, true)}</div>
-                          </div>
-                          <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-600">
-                            {channelLabel ? (
-                              <span className="rounded-full bg-slate-100 px-2 py-0.5">
-                                {CHANNEL_OPTIONS.find((c) => c.value === channelLabel)?.label ?? channelLabel}
-                              </span>
-                            ) : null}
-                            {item.type === "STATUS" && (
-                              <span className="rounded-full bg-amber-100 px-2 py-0.5">
-                                {stageLabel(payload.from as LeadStatusId)} →{" "}
-                                {stageLabel(payload.to as LeadStatusId)}
-                              </span>
-                            )}
-                            {item.type === "PHONE_VALIDATION" && (
-                              <span
-                                className={`rounded-full px-2 py-0.5 ${
-                                  verdict === "good"
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : "bg-red-100 text-red-700"
-                                }`}
-                              >
-                                {verdict === "good" ? "Contato bom" : "Contato ruim"} ({phone})
-                              </span>
-                            )}
-                            {outcomeLabel ? (
-                              <span className="rounded-full bg-slate-100 px-2 py-0.5">{outcomeLabel}</span>
-                            ) : null}
-                            {nextFollowUp ? (
-                              <span className="rounded-full bg-emerald-100 px-2 py-0.5">
-                                Próximo contato: {formatDate(nextFollowUp, true)}
-                              </span>
-                            ) : null}
-                            {reason ? (
-                              <span className="rounded-full bg-red-100 px-2 py-0.5">Motivo: {reason}</span>
-                            ) : null}
-                            {stageBefore ? (
-                              <span className="rounded-full bg-amber-50 px-2 py-0.5">
-                                {stageLabel(stageBefore)} → {stageLabel(stageAfter ?? stageBefore)}
-                              </span>
-                            ) : null}
-                          </div>
-                          {note ? (
-                            <p className="mt-2 whitespace-pre-wrap text-sm text-slate-800">{note}</p>
-                          ) : null}
-                          {phone && item.type === "PHONE_VALIDATION" && reason ? (
-                            <p className="mt-1 text-xs text-slate-600">Detalhe: {reason}</p>
-                          ) : null}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {timelineItems.length === 0 && !(activitiesLoading || eventsLoading) ? (
-                    <p className="text-sm text-slate-500">Nenhum evento registrado ainda.</p>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4 py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase text-slate-500">Enriquecimento online</p>
-                  <p className="text-sm text-slate-600">
-                    Busque dados na internet e aceite/recuse sugestões para este lead.
-                  </p>
-                </div>
-                <button
-                  onClick={fetchSuggestions}
-                  disabled={suggestionsLoading}
-                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
-                >
-                  {suggestionsLoading ? "Buscando..." : "Buscar dados na internet"}
-                </button>
-              </div>
-              {suggestionsError ? <p className="text-sm text-red-600">{suggestionsError}</p> : null}
-              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="space-y-3">
-                  {suggestionsLoading ? <p className="text-sm text-slate-600">Carregando sugestões...</p> : null}
-                  {suggestions.length === 0 && !suggestionsLoading ? (
-                    <p className="text-sm text-slate-500">
-                      Nenhuma sugestão disponível. Clique em &ldquo;Buscar dados na internet&rdquo;.
-                    </p>
-                  ) : null}
-                  {suggestions.map((suggestion) => (
-                    <div
-                      key={suggestion.id}
-                      className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 md:flex-row md:items-center md:justify-between"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5">{suggestion.type}</span>
-                          <span className="text-slate-500">Fonte: {suggestion.source}</span>
-                        </div>
-                        <p className="text-sm font-semibold text-slate-900">{suggestion.value}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => acceptSuggestion(suggestion)}
-                          className="rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500"
-                        >
-                          Aceitar
-                        </button>
-                        <button
-                          onClick={() => rejectSuggestion(suggestion)}
-                          className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                        >
-                          Rejeitar
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
+          </div>
         </div>
       </div>
     </div>
+      {lostModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-[min(480px,90vw)] rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-slate-900">Registrar motivo da perda</h3>
+            <p className="text-sm text-slate-600">Escolha o motivo principal e um comentário opcional.</p>
+            <div className="mt-4 space-y-2">
+              <label className="text-xs text-slate-600">Motivo</label>
+              <select
+                value={lostReason}
+                onChange={(e) => setLostReason(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+              >
+                <option value="">Selecione</option>
+                {LOST_REASON_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="mt-3 space-y-2">
+              <label className="text-xs text-slate-600">Comentário (opcional)</label>
+              <textarea
+                value={lostComment}
+                onChange={(e) => setLostComment(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+                rows={3}
+                placeholder="Detalhe do porquê o lead foi perdido"
+              />
+            </div>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                onClick={() => {
+                  setLostModalOpen(false);
+                  setSelectedStatus(lead.status);
+                  setStatusDirty(false);
+                  setLostReason("");
+                  setLostComment("");
+                }}
+                className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  if (!lostReason) return;
+                  setStatusDirty(true);
+                  handleStageSave("PERDIDO", { reason: lostReason, comment: lostComment });
+                }}
+                disabled={!lostReason}
+                className="rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"
+              >
+                Confirmar perda
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
   );
 }
 
@@ -1514,27 +1105,15 @@ function ConsultantBoard({
     [grouped],
   );
 
-  const handleStageChange = async (leadId: string, stage: LeadStatusId) => {
-    let motivo: string | undefined;
-    let observacao: string | undefined;
-    if (stage === "PERDIDO") {
-      const motivoPrompt =
-        window.prompt(
-          "Informe o motivo do perdido (ex: Telefone inválido, Não pertence à empresa, Empresa fechada, Sem interesse, Concorrência, Orçamento baixo, Ficou de ligar e sumiu, Outro):",
-        ) || "";
-      if (!motivoPrompt.trim()) return;
-      motivo = motivoPrompt.trim();
-      if (motivo.toLowerCase() === "outro") {
-        const obs = window.prompt("Descreva o motivo:") || "";
-        if (!obs.trim()) return;
-        observacao = obs.trim();
-      }
-    }
-
+  const handleStageChange = async (
+    leadId: string,
+    stage: LeadStatusId,
+    extras?: { lostReason?: string; lostComment?: string },
+  ) => {
     await fetch(`/api/leads/${leadId}/status`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: stage, motivo, observacao }),
+      body: JSON.stringify({ status: stage, motivo: extras?.lostReason, observacao: extras?.lostComment }),
     });
     await loadLeads();
   };
@@ -1730,3 +1309,17 @@ export default function BoardPage() {
     </div>
   );
 }
+  const addCustomProduct = useCallback(() => {
+    if (!customProduct.name.trim()) return;
+    const product: LeadProduct = {
+      productId: `custom-${Date.now()}`,
+      tower: "Custom",
+      category: "Custom",
+      name: customProduct.name.trim(),
+      quantity: customProduct.qty || 1,
+      monthlyValue: customProduct.value ? Number(customProduct.value) : null,
+      note: customProduct.note || null,
+    };
+    queueProductSave([...leadProducts, product]);
+    setCustomProduct({ name: "", value: "", note: "", qty: 1 });
+  }, [customProduct, leadProducts, queueProductSave]);

@@ -102,6 +102,9 @@ export async function POST(req: Request, { params }: Params) {
       lastOutcomeNote: observacao ?? lead.lastOutcomeNote ?? null,
       nextFollowUpAt: null,
       nextStepNote: null,
+      lostReason: status === LeadStatus.PERDIDO ? motivo ?? null : null,
+      lostReasonComment: status === LeadStatus.PERDIDO ? observacao ?? null : null,
+      lostAt: status === LeadStatus.PERDIDO ? now : null,
     },
   });
 

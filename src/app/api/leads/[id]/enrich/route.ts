@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { fetchExternalEnrichmentForLead } from "@/lib/enrichment/externalEnrichmentService";
+import { fetchExternalEnrichmentForLead, EnrichmentSuggestion } from "@/lib/enrichment/externalEnrichmentService";
 import { Role } from "@prisma/client";
 import { isOfficeAdmin } from "@/lib/authRoles";
 
@@ -49,7 +49,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
     const persisted = await Promise.all(
       suggestions.map(async (sugg) => {
         const existing = await prisma.leadEnrichmentSuggestion.findFirst({
-          where: { leadId: params.id, type: sugg.type, value: sugg.value },
+          where: { leadId: params.id, type: sugg.type, value: String(sugg.value) },
         });
         if (existing) {
           if (existing.status !== "ACCEPTED") {
@@ -65,13 +65,22 @@ export async function POST(_req: NextRequest, { params }: Params) {
             leadId: params.id,
             type: sugg.type,
             source: sugg.source,
-            value: sugg.value,
+            value: typeof sugg.value === "string" ? sugg.value : JSON.stringify(sugg.value),
             status: "PENDING",
           },
         });
       }),
     );
-    return NextResponse.json(persisted);
+    const normalized: EnrichmentSuggestion[] = persisted.map((p) => ({
+      id: p.id,
+      type: p.type as EnrichmentSuggestion["type"],
+      label: p.type,
+      value: p.value,
+      source: p.source,
+      applied: p.status === "ACCEPTED",
+      ignored: p.status === "REJECTED",
+    }));
+    return NextResponse.json(normalized);
   } catch (err: unknown) {
     const error = err as { code?: string };
     if (error?.code === "ENRICHMENT_NOT_CONFIGURED") {

@@ -90,6 +90,66 @@ export async function POST(req: NextRequest, { params }: Params) {
         data: { telefones: phones },
       });
     }
+  } else if (suggestion.type === "EMAIL") {
+    const emails: string[] = Array.isArray(lead.emails) ? lead.emails : [];
+    if (!emails.includes(suggestion.value)) {
+      emails.push(String(suggestion.value));
+      await prisma.lead.update({ where: { id: params.id }, data: { emails } });
+    }
+  } else if (suggestion.type === "ADDRESS") {
+    let addressValue: Record<string, unknown> = {};
+    try {
+      addressValue = typeof suggestion.value === "string" ? JSON.parse(suggestion.value) : (suggestion.value as Record<string, unknown>);
+    } catch {
+      addressValue = { endereco: suggestion.value };
+    }
+    await prisma.lead.update({
+      where: { id: params.id },
+      data: {
+        endereco: typeof suggestion.value === "string" ? suggestion.value : lead.endereco,
+        logradouro: (addressValue.logradouro as string) ?? lead.logradouro,
+        cidade: (addressValue.cidade as string) ?? lead.cidade,
+        estado: (addressValue.estado as string) ?? lead.estado,
+        cep: (addressValue.cep as string) ?? lead.cep,
+      },
+    });
+  } else if (suggestion.type === "CNAE") {
+    let cnaeValue: Record<string, unknown> = {};
+    try {
+      cnaeValue = typeof suggestion.value === "string" ? JSON.parse(suggestion.value) : (suggestion.value as Record<string, unknown>);
+    } catch {
+      cnaeValue = {};
+    }
+    await prisma.lead.update({
+      where: { id: params.id },
+      data: {
+        cnae: (cnaeValue.cnae as string) ?? lead.cnae,
+        vertical: (cnaeValue.segmento as string) ?? lead.vertical,
+      },
+    });
+  } else if (suggestion.type === "PORTE") {
+    await prisma.lead.update({
+      where: { id: params.id },
+      data: {
+        externalData: {
+          ...(lead.externalData as Record<string, unknown> | null),
+          porte: suggestion.value,
+        },
+      },
+    });
+  } else if (suggestion.type === "RESPONSIBLE") {
+    let resp: Record<string, unknown> = {};
+    try {
+      resp = typeof suggestion.value === "string" ? JSON.parse(suggestion.value) : (suggestion.value as Record<string, unknown>);
+    } catch {
+      resp = { nome: suggestion.value };
+    }
+    await prisma.lead.update({
+      where: { id: params.id },
+      data: {
+        contatoPrincipal: { nome: (resp.nome as string) ?? lead.contatoPrincipal?.nome, cargo: resp.cargo },
+      },
+    });
   }
 
   await prisma.leadEvent.create({
