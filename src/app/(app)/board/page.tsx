@@ -1228,6 +1228,11 @@ function LeadDrawer({
                             <div className="text-xs text-slate-500">{formatDate(item.createdAt, true)}</div>
                           </div>
                           <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-600">
+                            {channelLabel ? (
+                              <span className="rounded-full bg-slate-100 px-2 py-0.5">
+                                {CHANNEL_OPTIONS.find((c) => c.value === channelLabel)?.label ?? channelLabel}
+                              </span>
+                            ) : null}
                             {item.type === "STATUS" && (
                               <span className="rounded-full bg-amber-100 px-2 py-0.5">
                                 {stageLabel(payload.from as LeadStatusId)} →{" "}
