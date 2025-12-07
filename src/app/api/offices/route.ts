@@ -8,13 +8,30 @@ import {
   getOfficeUserCounts,
   normalizeOptionalString,
 } from "@/app/api/offices/helpers";
-import { requireMaster } from "@/lib/requireMaster";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { Role } from "@prisma/client";
 
 export async function GET() {
-  const auth = await requireMaster();
-  if ("response" in auth) return auth.response;
+  const session = await getServerSession(authOptions);
+  if (!session?.user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+
+  const { role, id: userId } = session.user;
+
+  // Master e Gerente Sênior veem tudo
+  let whereClause = {};
+
+  if (role === Role.GERENTE_NEGOCIOS) {
+    whereClause = { businessManagerId: userId };
+  } else if (role === Role.PROPRIETARIO) {
+    whereClause = { ownerId: userId };
+  } else if (role !== Role.MASTER && role !== Role.GERENTE_SENIOR) {
+    // Consultor não vê lista de escritórios (ou vê só o dele? Normalmente não precisa listar na admin)
+    return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+  }
 
   const offices = await prisma.officeRecord.findMany({
+    where: whereClause,
     select: {
       id: true,
       name: true,
@@ -40,8 +57,15 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const auth = await requireMaster();
-  if ("response" in auth) return auth.response;
+  const session = await getServerSession(authOptions);
+  if (!session?.user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+
+  const { role, id: userId } = session.user;
+
+  // Apenas Master, Gerente Sênior e Gerente de Negócios podem criar escritórios
+  if (role !== Role.MASTER && role !== Role.GERENTE_SENIOR && role !== Role.GERENTE_NEGOCIOS) {
+    return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+  }
 
   const body = await req.json().catch(() => ({}));
   const name = typeof body.name === "string" ? body.name.trim() : "";
@@ -51,9 +75,18 @@ export async function POST(req: Request) {
   const city = normalizeOptionalString(body.city);
   const notes = normalizeOptionalString(body.notes);
   const active = typeof body.active === "boolean" ? body.active : true;
-  const seniorManagerId = normalizeOptionalString(body.seniorManagerId);
-  const businessManagerId = normalizeOptionalString(body.businessManagerId);
+
+  // Se for GN criando, ele automaticamente se torna o businessManager se não especificado (ou força?)
+  // Se for Master/GS, pode definir quem quiser.
+  let seniorManagerId = normalizeOptionalString(body.seniorManagerId);
+  let businessManagerId = normalizeOptionalString(body.businessManagerId);
   const ownerId = normalizeOptionalString(body.ownerId);
+
+  if (role === Role.GERENTE_NEGOCIOS) {
+    // Força o GN atual como gestor do escritório que ele está criando
+    businessManagerId = userId;
+    // Pode ou não definir seniorManagerId? Geralmente herda ou deixa null.
+  }
 
   if (!name) {
     return NextResponse.json({ error: "Nome do escritório é obrigatório." }, { status: 400 });

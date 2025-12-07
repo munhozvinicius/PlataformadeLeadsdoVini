@@ -43,8 +43,69 @@ function avg(values: number[]) {
 
 export async function GET() {
   const session = await getServerSession(authOptions);
-  if (!session?.user || session.user.role !== Role.MASTER) {
+
+  // Autorização: MASTER, GERENTE_SENIOR, GERENTE_NEGOCIOS, PROPRIETARIO
+  const allowedRoles = [Role.MASTER, Role.GERENTE_SENIOR, Role.GERENTE_NEGOCIOS, Role.PROPRIETARIO];
+  if (!session?.user || !allowedRoles.includes(session.user.role)) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
+  const user = session.user;
+  let baseLeadWhere: any = {};
+  let baseUserWhere: any = { role: Role.CONSULTOR };
+
+  // Lógica de Filtragem Hierárquica
+  if (user.role === Role.MASTER || user.role === Role.GERENTE_SENIOR) {
+    // Vê tudo globalmente
+    baseLeadWhere = {};
+    baseUserWhere = { role: Role.CONSULTOR };
+  } else if (user.role === Role.GERENTE_NEGOCIOS) {
+    // Vê apenas escritórios onde é gestor de negócios
+    // Encontrar escritórios gerenciados por este usuário
+    const managedOffices = await prisma.officeRecord.findMany({
+      where: { businessManagerId: user.id },
+      select: { id: true }
+    });
+    const officeIds = managedOffices.map(o => o.id);
+
+    // Consultores desses escritórios
+    baseUserWhere = { role: Role.CONSULTOR, officeRecordId: { in: officeIds } };
+
+    // Leads desses consultores OU leads sem consultor mas vinculados a uma campanha (difícil filtrar estoque sem escritório, mas vamos filtrar por consultor atribuído por enquanto ou assumir global se não tiver consultor? 
+    // Melhor: filtrar leads atribuídos a consultores da carteira dele.
+    // Para simplificar: Leads atribuídos a users desses escritórios.
+    // Atenção: Leads sem atribuição (estoque) podem não estar visíveis se não tiver link com escritório.
+    // Assumindo que o dashboard foca em leads distribuídos/trabalhados. 
+    // Para KPIs globais, vamos filtrar por consultor nos escritórios.
+
+    // Precisamos buscar IDs dos consultores primeiro para montar o filtro de leads
+    const consultoresIds = (await prisma.user.findMany({
+      where: { role: Role.CONSULTOR, officeRecordId: { in: officeIds } },
+      select: { id: true }
+    })).map(u => u.id);
+
+    baseLeadWhere = { consultorId: { in: consultoresIds } };
+
+  } else if (user.role === Role.PROPRIETARIO) {
+    // Vê apenas seu escritório (se ownerId estiver setado num officeRecord ou direto no user)
+    // A logica atual usa officeRecordId no user ou ownerId no OfficeRecord. Vamos buscar OfficeRecord onde ele é owner.
+    const ownedOffice = await prisma.officeRecord.findFirst({
+      where: { ownerId: user.id },
+      select: { id: true }
+    });
+
+    if (ownedOffice) {
+      baseUserWhere = { role: Role.CONSULTOR, officeRecordId: ownedOffice.id };
+      const consultoresIds = (await prisma.user.findMany({
+        where: { role: Role.CONSULTOR, officeRecordId: ownedOffice.id },
+        select: { id: true }
+      })).map(u => u.id);
+      baseLeadWhere = { consultorId: { in: consultoresIds } };
+    } else {
+      // Fallback: Se não achar escritório gerenciado, vê zero ou apenas leads que ele mesmo atenda (caso houver).
+      baseUserWhere = { id: "none" };
+      baseLeadWhere = { consultorId: "none" };
+    }
   }
 
   const now = new Date();
@@ -53,22 +114,22 @@ export async function GET() {
   const startWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const cutoff72h = new Date(now.getTime() - 72 * 60 * 60 * 1000);
 
-  // KPIs gerais
+  // KPIs gerais (Filtrados)
   const [totalLeads, leadsAtivos, leadsEmTratativa, leadsGanhos, leadsPerdidos, leadsImportadosHoje, leadsImportadosSemana] =
     await Promise.all([
-      prisma.lead.count(),
-      prisma.lead.count({ where: { status: { in: [LeadStatus.NOVO, LeadStatus.EM_CONTATO] } } }),
-      prisma.lead.count({ where: { status: { in: [LeadStatus.EM_CONTATO, LeadStatus.EM_NEGOCIACAO] } } }),
-      prisma.lead.count({ where: { status: LeadStatus.FECHADO } }),
-      prisma.lead.count({ where: { status: LeadStatus.PERDIDO } }),
-      prisma.lead.count({ where: { createdAt: { gte: startToday } } }),
-      prisma.lead.count({ where: { createdAt: { gte: startWeek } } }),
+      prisma.lead.count({ where: baseLeadWhere }),
+      prisma.lead.count({ where: { ...baseLeadWhere, status: { in: [LeadStatus.NOVO, LeadStatus.EM_CONTATO] } } }),
+      prisma.lead.count({ where: { ...baseLeadWhere, status: { in: [LeadStatus.EM_CONTATO, LeadStatus.EM_NEGOCIACAO] } } }),
+      prisma.lead.count({ where: { ...baseLeadWhere, status: LeadStatus.FECHADO } }),
+      prisma.lead.count({ where: { ...baseLeadWhere, status: LeadStatus.PERDIDO } }),
+      prisma.lead.count({ where: { ...baseLeadWhere, createdAt: { gte: startToday } } }),
+      prisma.lead.count({ where: { ...baseLeadWhere, createdAt: { gte: startWeek } } }),
     ]);
   const taxaConversaoGeral = totalLeads > 0 ? leadsGanhos / totalLeads : 0;
 
-  // Performance por consultor
+  // Performance por consultor (Filtrados)
   const consultants = await prisma.user.findMany({
-    where: { role: Role.CONSULTOR },
+    where: baseUserWhere,
     select: { id: true, name: true, email: true, office: true },
   });
 
@@ -149,7 +210,14 @@ export async function GET() {
   const campaigns = await prisma.campanha.findMany({ select: { id: true, nome: true } });
   const campanhasPerf: CampaignPerf[] = [];
   for (const camp of campaigns) {
-    const baseWhere = { campanhaId: camp.id };
+    // Modificar filtro da campanha para respeitar o filtro base de leads
+    const baseWhere = { campanhaId: camp.id, ...baseLeadWhere };
+
+    // Se baseLeadWhere filtra por consultorId, então 'estoque' (consultorId: null) sempre será 0 nesse scope filtrado, o que faz sentido (Proprietário não vê estoque geral, só o que já foi distribuído para seus consultores?) 
+    // Discutível. Mas para garantir segurança, PROPRIETÁRIO/GN não vê estoque global não-distribuído. Só MASTER vê.
+
+    // Mas 'atribuidos' funciona bem.
+
     const [totalBase, atribuidos, estoque, trabalhados, ganhos, perdidos] = await Promise.all([
       prisma.lead.count({ where: baseWhere }),
       prisma.lead.count({ where: { ...baseWhere, consultorId: { not: null } } }),
@@ -158,10 +226,14 @@ export async function GET() {
       prisma.lead.count({ where: { ...baseWhere, status: LeadStatus.FECHADO } }),
       prisma.lead.count({ where: { ...baseWhere, status: LeadStatus.PERDIDO } }),
     ]);
+
+    // Só incluir campanha se tiver leads relevantes para o usuário
+    if (totalBase === 0) continue;
+
     const topMotivosPerdaRaw = await prisma.leadActivity.groupBy({
       by: ["outcomeLabel"],
       _count: { outcomeLabel: true },
-      where: { lead: { campanhaId: camp.id, status: LeadStatus.PERDIDO } },
+      where: { lead: { campanhaId: camp.id, status: LeadStatus.PERDIDO, ...baseLeadWhere } },
       orderBy: { _count: { outcomeLabel: "desc" } },
       take: 5,
     });
@@ -172,7 +244,7 @@ export async function GET() {
 
     // tempos
     const firstActivitiesCamp = await prisma.leadActivity.findMany({
-      where: { lead: { campanhaId: camp.id } },
+      where: { lead: { campanhaId: camp.id, ...baseLeadWhere } },
       orderBy: { createdAt: "asc" },
       select: { leadId: true, createdAt: true },
     });
@@ -197,7 +269,7 @@ export async function GET() {
         .filter((v) => v > 0),
     );
     const concluCamp = await prisma.lead.findMany({
-      where: { campanhaId: camp.id, status: { in: [LeadStatus.FECHADO, LeadStatus.PERDIDO] } },
+      where: { campanhaId: camp.id, status: { in: [LeadStatus.FECHADO, LeadStatus.PERDIDO] }, ...baseLeadWhere },
       select: { createdAt: true, updatedAt: true },
     });
     const tempoMedioConclusao = avg(
@@ -226,10 +298,13 @@ export async function GET() {
     _count: { outcomeLabel: true },
     orderBy: { _count: { outcomeLabel: "desc" } },
     take: 5,
+    // Aplicar filtro de lead no heatmap também
+    where: { lead: baseLeadWhere }
   });
 
-  // Saúde da base
+  // Saúde da base (Filtrada)
   const leadsAll = await prisma.lead.findMany({
+    where: baseLeadWhere,
     select: { documento: true, cnpj: true, cidade: true, estado: true, telefone1: true, telefone2: true, telefone3: true, status: true },
   });
   const phoneRegex = /^\+?\d{8,15}$/;
@@ -273,8 +348,9 @@ export async function GET() {
     .sort((a, b) => b.taxa - a.taxa)
     .slice(0, 5);
 
-  // Atividades recentes
+  // Atividades recentes (Filtrada por lead)
   const atividadesRecentesRaw = await prisma.leadActivity.findMany({
+    where: { lead: baseLeadWhere },
     orderBy: { createdAt: "desc" },
     take: 20,
     select: {

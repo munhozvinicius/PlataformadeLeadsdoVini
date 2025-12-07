@@ -25,11 +25,23 @@ export async function assignUserOffices(userId: string, offices: Office[]) {
 }
 
 export async function getManagedOfficeIds(userId: string): Promise<string[]> {
-  const entries = await prisma.managerOffice.findMany({
-    where: { managerId: userId },
-    select: { officeRecordId: true },
-  });
-  return entries.map((entry) => entry.officeRecordId);
+  const [managerEntries, businessManagerOffices] = await Promise.all([
+    prisma.managerOffice.findMany({
+      where: { managerId: userId },
+      select: { officeRecordId: true },
+    }),
+    prisma.officeRecord.findMany({
+      where: { businessManagerId: userId },
+      select: { id: true },
+    })
+  ]);
+
+  const ids = new Set([
+    ...managerEntries.map((e) => e.officeRecordId),
+    ...businessManagerOffices.map((o) => o.id)
+  ]);
+
+  return Array.from(ids);
 }
 
 export async function assignManagedOffices(userId: string, officeRecordIds: string[]) {
