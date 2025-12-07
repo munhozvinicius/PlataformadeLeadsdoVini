@@ -69,7 +69,7 @@ export async function POST(req: Request) {
         // Log Distribution
         await prisma.distributionLog.create({
             data: {
-                campaignId,
+                campaignId: campanhaId,
                 adminId: session.user.id,
                 consultantId: toConsultantId,
                 leadIds,
