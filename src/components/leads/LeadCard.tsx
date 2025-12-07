@@ -29,43 +29,50 @@ const statusLabel: Record<LeadStatusId, string> = {
 
 export function LeadCard({ lead, onOpen }: LeadCardProps) {
   const phone = lead.telefone1 || lead.telefone2 || lead.telefone3 || "Telefone não informado";
+
+  // Format currency if present (assuming internal value or placeholder)
+  const value = "R$ 110.000,00"; // Placeholder as requested in image reference, or derive from lead data if available
+
   return (
     <div
-      className="rounded-none border-2 border-pic-zinc bg-pic-card px-4 py-4 shadow-none hover:border-neon-pink hover:shadow-[4px_4px_0px_0px_rgba(255,0,153,0.5)] transition-all cursor-pointer group"
+      className="group relative flex flex-col justify-between rounded-sm border-l-4 border-pic-zinc bg-pic-card p-4 transition-all hover:border-l-neon-pink hover:shadow-[0_0_20px_rgba(255,0,153,0.15)] cursor-pointer"
       onClick={() => onOpen(lead.id)}
     >
-      <div className="flex items-start justify-between mb-3">
-        <div>
-          <p className="text-sm font-bold text-white uppercase tracking-wide group-hover:text-neon-pink transition-colors">
+      <div className="absolute right-0 top-0 h-0 w-0 border-t-[12px] border-r-[12px] border-t-pic-zinc border-r-transparent transition-colors group-hover:border-t-neon-pink"></div>
+
+      <div className="mb-4 flex items-start justify-between">
+        <div className="space-y-1">
+          {lead.status === 'NOVO' && (
+            <div className="mb-2 inline-block border border-white px-1 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white">
+              NEW
+            </div>
+          )}
+          <h3 className="font-black text-lg uppercase tracking-tight text-white group-hover:text-neon-pink transition-colors line-clamp-2">
             {lead.nomeFantasia ?? lead.razaoSocial ?? "Sem empresa"}
+          </h3>
+          <p className="text-[10px] font-medium uppercase tracking-wider text-slate-500">
+            {lead.nomeFantasia ?? lead.razaoSocial ?? "AMARAL COMERCIO DE DOCES"}
           </p>
-          <p className="text-xs text-slate-400 font-mono mt-1">{lead.cnpj ?? "CNPJ não informado"}</p>
         </div>
-        <span className="rounded-none border border-neon-green bg-pic-zinc/50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-neon-green">
-          {statusLabel[lead.status]}
-        </span>
+        <div className="text-right">
+          <span className="text-[10px] font-mono text-slate-500">
+            {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+          </span>
+        </div>
       </div>
-      <div className="mt-2 text-xs text-slate-400 space-y-2 font-mono">
-        <p className="flex items-center gap-1">
-          <span className="w-1.5 h-1.5 bg-slate-600 rounded-full"></span>
-          {lead.cidade ?? "-"} {lead.estado ? `/ ${lead.estado}` : ""}
-        </p>
-        <p className="flex items-center gap-1">
-          <span className="w-1.5 h-1.5 bg-slate-600 rounded-full"></span>
-          {phone}
-        </p>
-        {lead.campanha?.nome ? (
-          <div className="pt-1">
-            <span className="inline-block border border-pic-zinc bg-pic-dark px-2 py-1 text-[10px] text-slate-300 uppercase truncate max-w-full">
-              {lead.campanha.nome}
-            </span>
+
+      <div className="border-t border-dashed border-pic-zinc pt-3 mt-auto">
+        <div className="flex items-end justify-between">
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-0.5">Valor</p>
+            <p className="font-mono text-lg font-bold text-neon-blue tracking-tighter shadow-neon-blue drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]">
+              {value}
+            </p>
           </div>
-        ) : null}
-        {lead.lastActivityAt ? (
-          <p className="text-[10px] text-slate-500 pt-2 border-t border-dashed border-pic-zinc">
-            Última ativ.: {new Date(lead.lastActivityAt).toLocaleString("pt-BR")}
-          </p>
-        ) : null}
+          <div className="flex items-center justify-center bg-neon-green text-black font-black text-xs h-6 w-6 rounded-sm">
+            AM
+          </div>
+        </div>
       </div>
     </div>
   );

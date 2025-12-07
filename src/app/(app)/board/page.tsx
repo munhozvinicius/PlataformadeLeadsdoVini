@@ -5,26 +5,15 @@ import React, {
   useEffect,
   useMemo,
   useState,
-  FormEvent,
-  ChangeEvent,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { LEAD_STATUS, LeadStatusId } from "@/constants/leadStatus";
 import { Role, Profile } from "@prisma/client";
-import { PRODUCT_CATALOG, ProductCatalogItem, TOWER_OPTIONS } from "@/lib/productCatalog";
+import { LeadCard } from "@/components/leads/LeadCard";
+import { LeadDetailModal } from "@/components/leads/LeadDetailModal";
 
 type ViewerRole = Role | Profile;
-
-type LeadProduct = {
-  productId: string;
-  tower: string;
-  category: string;
-  name: string;
-  quantity: number;
-  monthlyValue?: number | null;
-  note?: string | null;
-};
 
 type Lead = {
   id: string;
@@ -54,69 +43,14 @@ type Lead = {
   consultor?: { id: string; name?: string | null; email?: string | null } | null;
   isWorked?: boolean;
   lastActivityAt?: string | null;
-  lastOutcomeLabel?: string | null;
-  lastOutcomeNote?: string | null;
   nextFollowUpAt?: string | null;
   nextStepNote?: string | null;
   createdAt?: string | null;
   site?: string | null;
   contatoPrincipal?: { nome?: string; cargo?: string; telefone?: string; email?: string };
-  productCart?: LeadProduct[] | null;
+  productCart?: any[] | null;
   telefones?: { rotulo: string; valor: string }[];
-};
-
-type LeadEvent = {
-  id: string;
-  leadId: string;
-  userId: string;
-  type: string;
-  payload?: unknown;
-  createdAt: string;
-};
-
-type LeadEnrichmentSuggestion = {
-  id: string;
-  leadId: string;
-  type: EnrichmentSuggestionType;
-  source: string;
-  value: unknown;
-  status: "PENDING" | "ACCEPTED" | "REJECTED" | string;
-  createdAt: string;
-};
-
-type LeadActivity = {
-  id: string;
-  activityType: string;
-  channel?: string | null;
-  outcomeCode?: string | null;
-  outcomeLabel?: string | null;
-  note: string;
-  stageBefore?: LeadStatusId | null;
-  stageAfter?: LeadStatusId | null;
-  nextFollowUpAt?: string | null;
-  nextStepNote?: string | null;
-  createdAt: string;
-  user?: { id: string; name?: string | null; email?: string | null; role?: string | null };
-};
-
-type ActivityFormState = {
-  activityType: string;
-  channel: string;
-  outcomeCode: string;
-  outcomeLabel: string;
-  newStage: LeadStatusId;
-  nextFollowUpAt: string;
-  nextStepNote: string;
-  note: string;
-};
-
-type ConsultantBoardProps = {
-  viewerRole: ViewerRole;
-  consultantId?: string;
-  campaignId?: string;
-  refreshSignal: number;
-  onCampaignsUpdate?: (campaigns: { id: string; name: string }[]) => void;
-  officeIds?: string[];
+  externalData?: any;
 };
 
 type Metrics = {
@@ -131,1569 +65,14 @@ type Metrics = {
   followUps: number;
 };
 
-const ACTIVITY_TYPES = [
-  "Contato inicial",
-  "Retorno de ligação",
-  "Follow-up",
-  "Qualificação",
-  "Proposta enviada",
-  "Negociação",
-  "Outros",
-] as const;
-
-const CHANNEL_OPTIONS = [
-  { value: "TELEFONE", label: "Telefone" },
-  { value: "WHATSAPP", label: "WhatsApp" },
-  { value: "EMAIL", label: "E-mail" },
-  { value: "VISITA", label: "Visita" },
-  { value: "OUTRO", label: "Outro" },
-];
-
-const OUTCOME_OPTIONS = [
-  { code: "SEM_CONTATO", label: "Não conseguiu contato" },
-  { code: "NUMERO_INVALIDO", label: "Número inválido / errado" },
-  { code: "FALOU_SECRETARIA", label: "Falou com secretária / terceiro" },
-  { code: "CLIENTE_SEM_INTERESSE", label: "Cliente sem interesse" },
-  { code: "SEM_ORCAMENTO", label: "Sem orçamento no momento" },
-  { code: "SEM_PERFIL", label: "Cliente sem perfil" },
-  { code: "JA_ATENDE_OUTRO_FORNECEDOR", label: "Já atende com outro fornecedor" },
-  { code: "FECHOU_COM_CONCORRENTE", label: "Fechou com concorrente" },
-  { code: "VAI_AVALIAR_RETORNAR", label: "Vai avaliar e retornar" },
-  { code: "OUTRO", label: "Outro (descrever)" },
-];
-
-type EnrichmentSuggestionType =
-  | "PHONE"
-  | "EMAIL"
-  | "ADDRESS"
-  | "CNAE"
-  | "PORTE"
-  | "RESPONSIBLE"
-  | "SITE"
-  | "OTHER";
-
-type EnrichmentSuggestionCard = {
-  id: string;
-  type: EnrichmentSuggestionType;
-  field?: string;
-  label: string;
-  value: unknown;
-  source: string;
-  applied?: boolean;
-  ignored?: boolean;
+type ConsultantBoardProps = {
+  viewerRole: ViewerRole;
+  consultantId?: string;
+  campaignId?: string;
+  refreshSignal: number;
+  onCampaignsUpdate?: (campaigns: { id: string; name: string }[]) => void;
+  officeIds?: string[];
 };
-
-async function logLeadEvent(input: {
-  type: string;
-  leadId: string;
-  userId?: string;
-  payload?: unknown;
-}) {
-  // TODO: integrar com infraestrutura real de eventos/gamificação
-  // Por ora, apenas registra no console para facilitar tracing.
-  console.log("[lead-event]", input);
-}
-
-function stageLabel(id: LeadStatusId) {
-  return LEAD_STATUS.find((s) => s.id === id)?.title ?? id;
-}
-
-function formatDate(value?: string | Date | null, withTime = false) {
-  if (!value) return "-";
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return withTime
-    ? date.toLocaleString("pt-BR", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
-
-function datetimeLocalValue(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
-    date.getHours()
-  )}:${pad(date.getMinutes())}`;
-}
-
-function LeadDrawer({
-  lead,
-  onClose,
-  onStageChange,
-  onActivitySaved,
-}: {
-  lead: Lead;
-  onClose: () => void;
-  onStageChange: (leadId: string, stage: LeadStatusId, extras?: { lostReason?: string; lostComment?: string }) => Promise<void>;
-  onActivitySaved: () => Promise<void>;
-}) {
-  const [selectedStatus, setSelectedStatus] = useState<LeadStatusId>(lead.status);
-  const [statusDirty, setStatusDirty] = useState(false);
-  const [statusFeedback, setStatusFeedback] = useState("");
-  const [lostModalOpen, setLostModalOpen] = useState(false);
-  const [lostReason, setLostReason] = useState<string>("");
-  const [lostComment, setLostComment] = useState<string>("");
-  const [activities, setActivities] = useState<LeadActivity[]>([]);
-  const [activitiesLoading, setActivitiesLoading] = useState(false);
-  const [form, setForm] = useState<ActivityFormState>({
-    activityType: ACTIVITY_TYPES[0],
-    channel: CHANNEL_OPTIONS[0].value,
-    outcomeCode: "",
-    outcomeLabel: "",
-    newStage: lead.status,
-    nextFollowUpAt: "",
-    nextStepNote: "",
-    note: "",
-  });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string>("");
-  const [newPhone, setNewPhone] = useState({ rotulo: "", valor: "" });
-  const [savingPhone, setSavingPhone] = useState(false);
-  const [siteValue, setSiteValue] = useState(lead.site ?? "");
-  const [emailValue, setEmailValue] = useState((lead.emails && lead.emails[0]) || "");
-  const [contactName, setContactName] = useState(lead.contatoPrincipal?.nome ?? "");
-  const [leadProducts, setLeadProducts] = useState<LeadProduct[]>(
-    Array.isArray(lead.productCart) ? (lead.productCart as LeadProduct[]) : [],
-  );
-  const [productFilters, setProductFilters] = useState({ tower: "", category: "", search: "" });
-  const [productsSaving, setProductsSaving] = useState(false);
-  const [events, setEvents] = useState<LeadEvent[]>([]);
-  const [eventsLoading, setEventsLoading] = useState(false);
-  const [suggestions, setSuggestions] = useState<EnrichmentSuggestionCard[]>([]);
-  type EnrichmentStatus =
-    | "idle"
-    | "fetching_base"
-    | "merging_data"
-    | "preparing_suggestions"
-    | "success"
-    | "empty"
-    | "error";
-  const [enrichmentStatus, setEnrichmentStatus] = useState<EnrichmentStatus>("idle");
-  const [enrichmentError, setEnrichmentError] = useState<string | null>(null);
-  const [enrichmentReason, setEnrichmentReason] = useState<string | null>(null);
-  const [additionalPhones, setAdditionalPhones] = useState<{ rotulo: string; valor: string }[]>([]);
-  const [cartDirty, setCartDirty] = useState(false);
-  const [customProduct, setCustomProduct] = useState({ name: "", value: "", note: "", qty: 1 });
-  const [catalogOpen, setCatalogOpen] = useState(false);
-  const LOST_REASON_OPTIONS = [
-    { value: "TELEFONE_INVALIDO", label: "Telefone inválido" },
-    { value: "EMPRESA_FECHADA", label: "Empresa fechada" },
-    { value: "SEM_INTERESSE", label: "Sem interesse" },
-    { value: "JA_CLIENTE_CONCORRENTE", label: "Já é cliente de concorrente" },
-    { value: "ORCAMENTO_BAIXO", label: "Orçamento baixo / preço" },
-    { value: "NAO_RETORNOU", label: "Não retornou / sumiu" },
-    { value: "OUTRO", label: "Outro" },
-  ];
-  const empresaNome = lead.razaoSocial ?? lead.nomeFantasia ?? "Não informado";
-  const documento = (lead.documento ?? lead.cnpj ?? "Não informado").toString();
-  const vertical = lead.vertical ?? "Não informado";
-  const cidadeUf =
-    lead.cidade || lead.estado
-      ? `${lead.cidade ?? "Não informado"}${lead.estado ? ` / ${lead.estado}` : ""}`
-      : "Não informado";
-  const logradouro = lead.logradouro ?? lead.endereco ?? "Não informado";
-  const cepNumero = `${lead.cep ?? "Não informado"} / ${lead.numero ?? "Não informado"}`;
-  const territorio = lead.territorio ?? "Não informado";
-  const faturamento = lead.vlFatPresumido ?? "Não informado";
-  const ofertaMkt = lead.ofertaMkt ?? "Não informado";
-  const estrategia = lead.estrategia ?? "Não informado";
-
-  const loadActivities = useCallback(async () => {
-    setActivitiesLoading(true);
-    try {
-      const res = await fetch(`/api/activities?leadId=${lead.id}`, { cache: "no-store" });
-      if (res.ok) {
-        setActivities(await res.json());
-      }
-    } finally {
-      setActivitiesLoading(false);
-    }
-  }, [lead.id]);
-
-  const loadEvents = useCallback(async () => {
-    setEventsLoading(true);
-    try {
-      const res = await fetch(`/api/leads/${lead.id}/events`, { cache: "no-store" });
-      if (res.ok) {
-        const data = (await res.json()) as LeadEvent[];
-        setEvents(data);
-      }
-    } catch (err) {
-      console.error("Erro ao carregar eventos", err);
-    } finally {
-      setEventsLoading(false);
-    }
-  }, [lead.id]);
-
-  const createEvent = useCallback(
-    async (type: string, payload?: unknown) => {
-      try {
-        await fetch(`/api/leads/${lead.id}/events`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type, payload }),
-        });
-        loadEvents();
-      } catch (err) {
-        console.error("Erro ao registrar evento", err);
-      }
-    },
-    [lead.id, loadEvents],
-  );
-
-  const loadLeadProducts = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/leads/${lead.id}/products`, { cache: "no-store" });
-      if (res.ok) {
-        const data = (await res.json()) as LeadProduct[];
-        setLeadProducts(data);
-        setCartDirty(false);
-      }
-    } catch (err) {
-      console.error("Erro ao carregar produtos do lead", err);
-    }
-  }, [lead.id]);
-
-  const normalizePhone = (value: string) => value.replace(/\D+/g, "");
-
-  const persistProducts = useCallback(
-    async (items: LeadProduct[]) => {
-      setProductsSaving(true);
-      try {
-        const res = await fetch(`/api/leads/${lead.id}/products`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ products: items }),
-        });
-        if (!res.ok) {
-          throw new Error("Erro ao salvar produtos");
-        }
-        setCartDirty(false);
-        createEvent("PRODUCT_CART_UPDATE", { count: items.length });
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setProductsSaving(false);
-      }
-    },
-    [lead.id, createEvent],
-  );
-
-  const queueProductSave = useCallback(
-    (items: LeadProduct[]) => {
-      setLeadProducts(items);
-      setCartDirty(true);
-    },
-    [],
-  );
-
-  const addProductToLead = useCallback(
-    (product: ProductCatalogItem) => {
-      const existingIndex = leadProducts.findIndex((p) => p.productId === product.id);
-      const next = [...leadProducts];
-      if (existingIndex >= 0) {
-        next[existingIndex] = { ...next[existingIndex], quantity: next[existingIndex].quantity + 1 };
-      } else {
-        next.push({
-          productId: product.id,
-          tower: product.tower,
-          category: product.category,
-          name: product.name,
-          quantity: 1,
-        });
-      }
-      queueProductSave(next);
-    },
-    [leadProducts, queueProductSave],
-  );
-
-  const updateProductField = useCallback(
-    (productId: string, field: keyof LeadProduct, value: unknown) => {
-      const next = leadProducts.map((item) =>
-        item.productId === productId ? { ...item, [field]: value } : item,
-      );
-      queueProductSave(next);
-    },
-    [leadProducts, queueProductSave],
-  );
-
-  const removeProduct = useCallback(
-    (productId: string) => {
-      queueProductSave(leadProducts.filter((p) => p.productId !== productId));
-    },
-    [leadProducts, queueProductSave],
-  );
-
-  const addCustomProduct = useCallback(() => {
-    if (!customProduct.name.trim()) return;
-    const product: LeadProduct = {
-      productId: `custom-${Date.now()}`,
-      tower: "Custom",
-      category: "Custom",
-      name: customProduct.name.trim(),
-      quantity: customProduct.qty || 1,
-      monthlyValue: customProduct.value ? Number(customProduct.value) : null,
-      note: customProduct.note || null,
-    };
-    queueProductSave([...leadProducts, product]);
-    setCustomProduct({ name: "", value: "", note: "", qty: 1 });
-  }, [customProduct, leadProducts, queueProductSave]);
-
-  const categoryOptions = useMemo(() => {
-    if (!productFilters.tower) return Array.from(new Set(PRODUCT_CATALOG.map((p) => p.category)));
-    return Array.from(
-      new Set(PRODUCT_CATALOG.filter((p) => p.tower === productFilters.tower).map((p) => p.category)),
-    );
-  }, [productFilters.tower]);
-
-  const filteredCatalog = useMemo(
-    () =>
-      PRODUCT_CATALOG.filter((item) => {
-        const matchesTower = productFilters.tower ? item.tower === productFilters.tower : true;
-        const matchesCategory = productFilters.category ? item.category === productFilters.category : true;
-        const matchesSearch = productFilters.search
-          ? item.name.toLowerCase().includes(productFilters.search.toLowerCase())
-          : true;
-        return matchesTower && matchesCategory && matchesSearch;
-      }),
-    [productFilters],
-  );
-
-  const timelineItems = useMemo(() => {
-    const activityEvents: LeadEvent[] = activities.map((a) => ({
-      id: `activity-${a.id}`,
-      leadId: lead.id,
-      userId: a.user?.id ?? "",
-      type: "ACTIVITY",
-      payload: {
-        activityType: a.activityType,
-        channel: a.channel,
-        outcomeLabel: a.outcomeLabel,
-        note: a.note,
-        nextFollowUpAt: a.nextFollowUpAt,
-        stageBefore: a.stageBefore,
-        stageAfter: a.stageAfter,
-        user: a.user,
-      },
-      createdAt: a.createdAt,
-    }));
-    const combined = [...events, ...activityEvents];
-    return combined.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
-  }, [activities, events, lead.id]);
-
-  const thermometer = useMemo(() => {
-    let score = 0;
-    events.forEach((ev) => {
-      const payload = (ev.payload as Record<string, unknown> | null) ?? {};
-      if (ev.type === "PHONE_VALIDATION") {
-        const verdict = typeof payload.verdict === "string" ? payload.verdict : undefined;
-        if (verdict === "good") score += 2;
-        if (verdict === "bad") score -= 2;
-      }
-      if (ev.type === "STATUS" && payload.to === "PERDIDO") score -= 3;
-    });
-    const label = score >= 4 ? "Lead quente" : score >= 0 ? "Lead morno" : "Lead frio";
-    return { score, label };
-  }, [events]);
-
-  const formatSuggestionValue = useCallback((suggestion: EnrichmentSuggestionCard) => {
-    if (suggestion.type === "PHONE" && typeof suggestion.value === "string") {
-      return suggestion.value.replace(/(\\d{2})(\\d{4,5})(\\d{4})/, "($1) $2-$3");
-    }
-    if ((suggestion.type === "EMAIL" || suggestion.type === "SITE") && typeof suggestion.value === "string") {
-      return suggestion.value;
-    }
-    if (suggestion.type === "ADDRESS") {
-      try {
-        const addr =
-          typeof suggestion.value === "string"
-            ? JSON.parse(suggestion.value)
-            : (suggestion.value as Record<string, unknown>);
-        return `${addr.logradouro ?? ""} ${addr.numero ?? ""} ${addr.bairro ?? ""} ${addr.cidade ?? ""} ${
-          addr.estado ?? ""
-        } ${addr.cep ?? ""}`.replace(/\\s+/g, " ").trim();
-      } catch {
-        return String(suggestion.value ?? "");
-      }
-    }
-    if (suggestion.type === "CNAE") {
-      if (typeof suggestion.value === "string") return suggestion.value;
-      const obj = suggestion.value as Record<string, unknown>;
-      return `${obj.descricao ?? obj.cnae ?? ""}`.trim();
-    }
-    if (suggestion.type === "PORTE") {
-      return typeof suggestion.value === "string" ? suggestion.value : String(suggestion.value ?? "");
-    }
-    if (suggestion.type === "RESPONSIBLE") {
-      try {
-        const resp =
-          typeof suggestion.value === "string"
-            ? JSON.parse(suggestion.value)
-            : (suggestion.value as Record<string, unknown>);
-        return `${resp.nome ?? ""}${resp.cargo ? ` • ${resp.cargo}` : ""}`.trim();
-      } catch {
-        return String(suggestion.value ?? "");
-      }
-    }
-    return typeof suggestion.value === "string" ? suggestion.value : JSON.stringify(suggestion.value ?? "");
-  }, []);
-
-  const fetchSuggestions = useCallback(async () => {
-    setEnrichmentStatus("fetching_base");
-    setEnrichmentError(null);
-    setEnrichmentReason(null);
-    setSuggestions([]);
-    try {
-      const document =
-        (lead.documento ?? lead.cnpj ?? "")
-          .toString()
-          .replace(/\D+/g, "");
-      if (!document) {
-        setEnrichmentError("Documento inválido para enriquecimento");
-        setEnrichmentStatus("error");
-        return;
-      }
-      const res = await fetch(`/api/enrichment/${document}`, { method: "GET", cache: "no-store" });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        setEnrichmentError(data?.message || "Erro ao buscar sugestões");
-        setEnrichmentStatus("error");
-        return;
-      }
-      const payload = await res.json();
-      const list = (payload.suggestions as LeadEnrichmentSuggestion[] | undefined) ?? [];
-      const reason = payload.reason as string | undefined;
-      setEnrichmentReason(reason ?? null);
-      setEnrichmentStatus("merging_data");
-      const normalized: EnrichmentSuggestionCard[] = list
-        .filter((s) => s.status === "PENDING")
-        .map((s) => ({
-          id: s.id,
-          type: s.type,
-          field: (s as unknown as { field?: string }).field,
-          label: (s as unknown as { label?: string }).label ?? s.type,
-          value: s.value,
-          source: s.source,
-          applied: s.status === "ACCEPTED",
-          ignored: s.status === "REJECTED",
-        }));
-      setEnrichmentStatus("preparing_suggestions");
-      setSuggestions(normalized);
-      setEnrichmentStatus(normalized.length === 0 ? "empty" : "success");
-    } catch (err) {
-      console.error(err);
-      setEnrichmentError("Falha de conexão ao buscar sugestões");
-      setEnrichmentStatus("error");
-    } finally {
-      // status already set above
-    }
-  }, [lead.cnpj, lead.documento]);
-
-  const acceptSuggestion = useCallback(
-    async (suggestion: EnrichmentSuggestionCard) => {
-      await fetch(`/api/leads/${lead.id}/enrichment/accept`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ suggestionId: suggestion.id, type: suggestion.type, value: suggestion.value, source: suggestion.source }),
-      });
-      setSuggestions((prev) =>
-        prev.map((s) => (s.id === suggestion.id ? { ...s, applied: true, ignored: false } : s)),
-      );
-      if (suggestion.type === "PHONE") {
-        const phoneValue =
-          typeof suggestion.value === "string" ? suggestion.value : String(suggestion.value ?? "");
-        setAdditionalPhones((prev) => {
-          const exists = prev.some((p) => normalizePhone(p.valor) === normalizePhone(phoneValue));
-          if (exists) return prev;
-          return [...prev, { rotulo: "Enriquecimento", valor: phoneValue }];
-        });
-      } else if (suggestion.type === "EMAIL") {
-        if (typeof suggestion.value === "string") {
-          setEmailValue(suggestion.value);
-        }
-      } else if (suggestion.type === "ADDRESS") {
-        setStatusFeedback("Endereço aplicado");
-      } else if (suggestion.type === "SITE" && typeof suggestion.value === "string") {
-        setSiteValue(suggestion.value);
-      } else if (suggestion.type === "RESPONSIBLE") {
-        const val =
-          typeof suggestion.value === "string"
-            ? ((): { nome?: string; cargo?: string } => {
-                try {
-                  return JSON.parse(suggestion.value);
-                } catch {
-                  return { nome: suggestion.value };
-                }
-              })()
-            : (suggestion.value as { nome?: string; cargo?: string });
-        if (val?.nome) setContactName(val.nome);
-      }
-      logLeadEvent({
-        type: "ENRICHMENT_ACCEPTED",
-        leadId: lead.id,
-        payload: { suggestionId: suggestion.id, type: suggestion.type, source: suggestion.source },
-      });
-      loadEvents();
-      createEvent("ENRICHMENT_APPLIED", {
-        suggestionId: suggestion.id,
-        type: suggestion.type,
-        source: suggestion.source,
-      });
-      setStatusFeedback("Enriquecimento aplicado");
-    },
-    [lead.id, loadEvents, createEvent],
-  );
-
-  const rejectSuggestion = useCallback(
-    async (suggestion: EnrichmentSuggestionCard) => {
-      await fetch(`/api/leads/${lead.id}/enrichment/reject`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ suggestionId: suggestion.id }),
-      });
-      setSuggestions((prev) =>
-        prev.map((s) => (s.id === suggestion.id ? { ...s, ignored: true } : s)),
-      );
-      logLeadEvent({
-        type: "ENRICHMENT_IGNORED",
-        leadId: lead.id,
-        payload: { suggestionId: suggestion.id, type: suggestion.type, source: suggestion.source },
-      });
-      loadEvents();
-    },
-    [lead.id, loadEvents],
-  );
-
-  const handleStageSave = useCallback(
-    async (status: LeadStatusId, options?: { reason?: string; comment?: string }) => {
-      if (status === "PERDIDO" && !options?.reason) {
-        setLostModalOpen(true);
-        return;
-      }
-      await onStageChange(lead.id, status, { lostReason: options?.reason, lostComment: options?.comment });
-      await loadEvents();
-      setSelectedStatus(status);
-      setStatusDirty(false);
-      setStatusFeedback("Lead atualizado");
-      setLostModalOpen(false);
-      logLeadEvent({
-        type: status === "PERDIDO" ? "LEAD_MARKED_LOST" : "LEAD_STATUS_CHANGED",
-        leadId: lead.id,
-        userId: "",
-        payload: { status, reason: options?.reason },
-      });
-    },
-    [lead.id, loadEvents, onStageChange],
-  );
-
-  useEffect(() => {
-    setForm((prev) => ({
-      ...prev,
-      newStage: lead.status,
-      nextFollowUpAt: datetimeLocalValue(lead.nextFollowUpAt ?? null),
-      nextStepNote: lead.nextStepNote ?? "",
-    }));
-    loadActivities();
-    setSiteValue(lead.site ?? "");
-    setEmailValue((lead.emails && lead.emails[0]) || "");
-    setContactName(lead.contatoPrincipal?.nome ?? "");
-    setLeadProducts(Array.isArray(lead.productCart) ? (lead.productCart as LeadProduct[]) : []);
-    loadLeadProducts();
-    loadEvents();
-    createEvent("OPEN", { ts: new Date().toISOString() });
-    const extraPhones = Array.isArray(lead.telefones)
-      ? (lead.telefones as { rotulo: string; valor: string }[])
-      : [];
-    setAdditionalPhones(extraPhones);
-    setSelectedStatus(lead.status);
-    setStatusDirty(false);
-    setStatusFeedback("");
-  }, [
-    lead.id,
-    lead.status,
-    lead.nextFollowUpAt,
-    lead.nextStepNote,
-    loadActivities,
-    lead.site,
-    lead.emails,
-    lead.contatoPrincipal,
-    lead.productCart,
-    loadLeadProducts,
-    loadEvents,
-    createEvent,
-    lead.telefones,
-  ]);
-
-  const handleFormChange = (
-    event: ChangeEvent<HTMLSelectElement | HTMLInputElement | HTMLTextAreaElement>,
-  ) => {
-    const { name, value } = event.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const submitActivity = async (event: FormEvent) => {
-    event.preventDefault();
-    setError("");
-    if (!form.note.trim()) {
-      setError("Observação é obrigatória");
-      return;
-    }
-    setSaving(true);
-    const payload = {
-      leadId: lead.id,
-      activityType: form.activityType,
-      channel: form.channel,
-      outcomeCode: form.outcomeCode || null,
-      outcomeLabel: form.outcomeLabel || null,
-      note: form.note,
-      newStage: form.newStage,
-      nextFollowUpAt: form.nextFollowUpAt ? new Date(form.nextFollowUpAt).toISOString() : null,
-      nextStepNote: form.nextStepNote || null,
-    };
-
-    const res = await fetch("/api/activities", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    setSaving(false);
-    if (!res.ok) {
-      setError("Erro ao salvar atividade.");
-      return;
-    }
-
-    setForm((prev) => ({
-      ...prev,
-      note: "",
-      outcomeCode: "",
-      outcomeLabel: "",
-      nextFollowUpAt: prev.nextFollowUpAt,
-    }));
-    await Promise.all([loadActivities(), onActivitySaved()]);
-    await createEvent("NOTE", {
-      activityType: form.activityType,
-      channel: form.channel,
-      outcomeCode: form.outcomeCode,
-      outcomeLabel: form.outcomeLabel,
-      note: form.note,
-      nextFollowUpAt: form.nextFollowUpAt,
-      newStage: form.newStage,
-    });
-  };
-
-  async function addPhone() {
-    if (!newPhone.rotulo || !newPhone.valor) return;
-    setSavingPhone(true);
-    await fetch(`/api/consultor/leads/${lead.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ addTelefone: newPhone, observacao: "Telefone adicionado via ficha" }),
-    });
-    setNewPhone({ rotulo: "", valor: "" });
-    setSavingPhone(false);
-    await onActivitySaved();
-    await createEvent("PHONE_UPDATE", { ...newPhone });
-    setAdditionalPhones((prev) => {
-      const exists = prev.some((p) => normalizePhone(p.valor) === normalizePhone(newPhone.valor));
-      if (exists) return prev;
-      return [...prev, { rotulo: newPhone.rotulo, valor: newPhone.valor }];
-    });
-  }
-
-  async function saveContactFields() {
-    await fetch(`/api/consultor/leads/${lead.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        site: siteValue || null,
-        email: emailValue || null,
-        contatoPrincipal: contactName ? { nome: contactName } : null,
-        observacao: "Atualização de contato/site",
-      }),
-    });
-    await onActivitySaved();
-    await createEvent("CONTACT_UPDATE", {
-      site: siteValue || null,
-      email: emailValue || null,
-      contactName,
-    });
-  }
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        if (lostModalOpen) {
-          setLostModalOpen(false);
-          setSelectedStatus(lead.status);
-          setStatusDirty(false);
-        } else {
-          onClose();
-        }
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [onClose, lostModalOpen, lead.status]);
-
-  const isEnriching =
-    enrichmentStatus === "fetching_base" ||
-    enrichmentStatus === "merging_data" ||
-    enrichmentStatus === "preparing_suggestions";
-
-  return (
-    <>
-      <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-        <div className="absolute inset-0 z-0" onClick={onClose} aria-hidden />
-        <div className="relative z-10 flex h-[90vh] w-[min(1200px,95vw)] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-          <div className="sticky top-0 z-10 flex items-start justify-between border-b bg-white/95 px-6 py-4 backdrop-blur">
-            <div className="space-y-1">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Lead</p>
-              <h2 className="text-2xl font-semibold leading-tight text-slate-900">
-                {lead.razaoSocial ?? lead.nomeFantasia ?? "Sem empresa"}
-              </h2>
-              <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
-                  {stageLabel(lead.status)}
-                </span>
-                <span>{lead.campanha?.nome ?? "Campanha não informada"}</span>
-                {documento ? <span className="text-slate-500">CNPJ/Doc: {documento}</span> : null}
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Fechar
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-5">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-                <p className="text-xs uppercase text-slate-500">Termômetro</p>
-                <p className="text-lg font-semibold text-slate-900">{thermometer.label}</p>
-                <p className="text-xs text-slate-500">Score: {thermometer.score}</p>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-                <p className="text-xs uppercase text-slate-500">Última atividade</p>
-                <p className="text-sm text-slate-700">{formatDate(lead.lastActivityAt, true)}</p>
-              </div>
-            </div>
-
-            <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase text-slate-500">Status & campanha</p>
-                  <p className="text-sm text-slate-600">Atualize o estágio e confirme para salvar.</p>
-                </div>
-                {statusFeedback ? <span className="text-xs text-emerald-600">{statusFeedback}</span> : null}
-              </div>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-600">Estágio</label>
-                  <select
-                    value={selectedStatus}
-                    onChange={(e) => {
-                      const next = e.target.value as LeadStatusId;
-                      setSelectedStatus(next);
-                      setStatusDirty(next !== lead.status);
-                    }}
-                    className="rounded-lg border px-3 py-2 text-sm"
-                  >
-                    {LEAD_STATUS.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-600">Campanha</label>
-                  <input
-                    value={lead.campanha?.nome ?? "Não informado"}
-                    disabled
-                    className="rounded-lg border bg-slate-50 px-3 py-2 text-sm"
-                  />
-                </div>
-                <div className="flex items-end justify-end">
-                  <button
-                    onClick={() => {
-                      if (selectedStatus === "PERDIDO" && !lostReason) {
-                        setLostModalOpen(true);
-                        return;
-                      }
-                      handleStageSave(
-                        selectedStatus,
-                        selectedStatus === "PERDIDO" ? { reason: lostReason, comment: lostComment } : undefined,
-                      );
-                    }}
-                    disabled={!statusDirty}
-                    className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-50"
-                  >
-                    Salvar alterações
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase text-slate-500">Informações do cliente</p>
-                  <p className="text-sm text-slate-600">Dados básicos do lead.</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-600">Empresa</label>
-                  <input
-                    value={empresaNome}
-                    disabled
-                    className="rounded-lg border bg-slate-50 px-3 py-2 text-sm"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-600">Documento</label>
-                  <input value={documento} disabled className="rounded-lg border bg-slate-50 px-3 py-2 text-sm" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-600">Vertical</label>
-                  <input value={vertical} disabled className="rounded-lg border bg-slate-50 px-3 py-2 text-sm" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-600">Cidade / UF</label>
-                  <input value={cidadeUf} disabled className="rounded-lg border bg-slate-50 px-3 py-2 text-sm" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-600">Endereço</label>
-                  <input value={logradouro} disabled className="rounded-lg border bg-slate-50 px-3 py-2 text-sm" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-600">CEP / Número</label>
-                  <input value={cepNumero} disabled className="rounded-lg border bg-slate-50 px-3 py-2 text-sm" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-600">Território</label>
-                  <input value={territorio} disabled className="rounded-lg border bg-slate-50 px-3 py-2 text-sm" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-600">Faturamento presumido</label>
-                  <input value={faturamento} disabled className="rounded-lg border bg-slate-50 px-3 py-2 text-sm" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-600">Oferta / Estratégia</label>
-                  <input
-                    value={`${ofertaMkt} • ${estrategia}`}
-                    disabled
-                    className="rounded-lg border bg-slate-50 px-3 py-2 text-sm"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase text-slate-500">Contatos & canais</p>
-                  <p className="text-sm text-slate-600">Atualize telefones, e-mail e site.</p>
-                </div>
-                <button
-                  onClick={saveContactFields}
-                  className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                >
-                  Salvar contatos
-                </button>
-              </div>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-600">Site</label>
-                  <input
-                    value={siteValue}
-                    onChange={(e) => setSiteValue(e.target.value)}
-                    className="rounded-lg border px-3 py-2 text-sm"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-600">E-mail</label>
-                  <input
-                    value={emailValue}
-                    onChange={(e) => setEmailValue(e.target.value)}
-                    className="rounded-lg border px-3 py-2 text-sm"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-600">Contato principal</label>
-                  <input
-                    value={contactName}
-                    onChange={(e) => setContactName(e.target.value)}
-                    className="rounded-lg border px-3 py-2 text-sm"
-                  />
-                </div>
-              </div>
-                <div className="space-y-2">
-                  <p className="text-xs uppercase text-slate-500">Telefones</p>
-                  <div className="flex flex-col gap-2">
-                    {additionalPhones.map((phone, idx) => (
-                      <div
-                        key={`${phone.valor}-${idx}`}
-                        className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm"
-                      >
-                        <div>
-                          <p className="font-semibold text-slate-900">{phone.valor}</p>
-                          <p className="text-xs text-slate-500">{phone.rotulo}</p>
-                        </div>
-                        <div className="flex items-center gap-2 text-lg">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              logLeadEvent({
-                                type: "PHONE_FEEDBACK",
-                                leadId: lead.id,
-                                payload: { phone: phone.valor, rating: "GOOD" },
-                              })
-                            }
-                            title="Bom"
-                            className="text-emerald-600 hover:text-emerald-700"
-                          >
-                            👍
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              logLeadEvent({
-                                type: "PHONE_FEEDBACK",
-                                leadId: lead.id,
-                                payload: { phone: phone.valor, rating: "BAD" },
-                              })
-                            }
-                            title="Ruim"
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            👎
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                    {additionalPhones.length === 0 ? (
-                      <p className="text-sm text-slate-500">Nenhum telefone cadastrado.</p>
-                    ) : null}
-                  </div>
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                  <input
-                    value={newPhone.rotulo}
-                    onChange={(e) => setNewPhone((prev) => ({ ...prev, rotulo: e.target.value }))}
-                    placeholder="Rótulo (ex: Comercial)"
-                    className="rounded-lg border px-3 py-2 text-sm"
-                  />
-                  <input
-                    value={newPhone.valor}
-                    onChange={(e) => setNewPhone((prev) => ({ ...prev, valor: e.target.value }))}
-                    placeholder="Telefone"
-                    className="rounded-lg border px-3 py-2 text-sm"
-                  />
-                  <button
-                    onClick={addPhone}
-                    disabled={!newPhone.rotulo || !newPhone.valor || savingPhone}
-                    className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-                  >
-                    {savingPhone ? "Salvando..." : "Adicionar telefone"}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase text-slate-500">Enriquecimento online</p>
-                  <p className="text-sm text-slate-600">Sugestões automáticas a partir do CNPJ.</p>
-                </div>
-                <button
-                  onClick={fetchSuggestions}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold hover:bg-slate-50"
-                  disabled={isEnriching}
-                >
-                  {isEnriching ? "Buscando..." : "🔍 Enriquecer dados do CNPJ"}
-                </button>
-              </div>
-              <EnrichmentStatusBar status={enrichmentStatus} hasSuggestions={suggestions.length > 0} />
-              {enrichmentStatus === "idle" ? (
-                <p className="text-sm text-slate-500">
-                  Clique em “Buscar dados” para tentar enriquecer este CNPJ.
-                </p>
-              ) : null}
-              {enrichmentStatus === "fetching_base" || enrichmentStatus === "merging_data" || enrichmentStatus === "preparing_suggestions" ? (
-                <p className="text-sm text-slate-500">Buscando dados de Receita / BrasilAPI…</p>
-              ) : null}
-              {enrichmentStatus === "error" && enrichmentError ? (
-                <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                  <span>Não foi possível buscar dados de enriquecimento agora.</span>
-                  <button
-                    onClick={fetchSuggestions}
-                    className="rounded-lg border border-red-200 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
-                  >
-                    Tentar novamente
-                  </button>
-                </div>
-              ) : null}
-              {enrichmentStatus === "empty" ? (
-                <p className="text-sm text-slate-500">
-                  Nenhum dado novo encontrado para este CNPJ nos serviços de enriquecimento.
-                  {enrichmentReason === "NOT_FOUND" ? " CNPJ não encontrado na Receita / BrasilAPI." : ""}
-                </p>
-              ) : null}
-              {enrichmentStatus === "success" && suggestions.filter((s) => !s.ignored).length === 0 ? (
-                <p className="text-sm text-slate-500">
-                  Nenhuma sugestão pendente. Já aplicou ou ignorou todos os dados deste CNPJ.
-                </p>
-              ) : null}
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                {suggestions
-                  .filter((s) => !s.ignored)
-                  .map((s) => (
-                    <div key={s.id} className="rounded-lg border border-slate-200 p-3 shadow-sm">
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">{s.label}</p>
-                          <p className="text-xs text-slate-500">
-                            {s.type} • Fonte: {s.source}
-                          </p>
-                        </div>
-                        {s.applied ? (
-                          <span className="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-700">
-                            Aplicado
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="mt-2 text-sm text-slate-700 break-words">{formatSuggestionValue(s)}</p>
-                      <div className="mt-3 flex items-center gap-2">
-                        <button
-                          onClick={() => acceptSuggestion(s)}
-                          disabled={s.applied}
-                          className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-                        >
-                          Manter
-                        </button>
-                        <button
-                          onClick={() => rejectSuggestion(s)}
-                          className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                        >
-                          Ignorar
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                {enrichmentStatus === "success" &&
-                suggestions.filter((s) => !s.applied && !s.ignored).length === 0 ? (
-                  <p className="text-sm text-slate-500">Nenhuma sugestão pendente.</p>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.2fr_1fr]">
-              <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs uppercase text-slate-500">Planta Vivo</p>
-                    <p className="text-sm text-slate-600">Produtos planejados para este CNPJ.</p>
-                  </div>
-                  <button
-                    onClick={() => setCatalogOpen((prev) => !prev)}
-                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                  >
-                    {catalogOpen ? "Fechar Planta Vivo" : "Abrir Planta Vivo"}
-                  </button>
-                </div>
-                {catalogOpen ? (
-                  <>
-                    <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                      <select
-                        value={productFilters.tower}
-                        onChange={(e) => setProductFilters((prev) => ({ ...prev, tower: e.target.value }))}
-                        className="rounded-lg border px-3 py-2 text-sm"
-                      >
-                        <option value="">Todas as torres</option>
-                        {TOWER_OPTIONS.map((tower) => (
-                          <option key={tower} value={tower}>
-                            {tower}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        value={productFilters.category}
-                        onChange={(e) => setProductFilters((prev) => ({ ...prev, category: e.target.value }))}
-                        className="rounded-lg border px-3 py-2 text-sm"
-                      >
-                        <option value="">Todas as categorias</option>
-                        {categoryOptions.map((category) => (
-                          <option key={category} value={category}>
-                            {category}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        value={productFilters.search}
-                        onChange={(e) => setProductFilters((prev) => ({ ...prev, search: e.target.value }))}
-                        placeholder="Buscar produto"
-                        className="rounded-lg border px-3 py-2 text-sm"
-                      />
-                    </div>
-                    <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
-                      {filteredCatalog.map((product) => (
-                        <div
-                          key={product.id}
-                          className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                        >
-                          <div>
-                            <p className="font-semibold text-slate-900">{product.name}</p>
-                            <p className="text-xs text-slate-500">
-                              {product.tower} • {product.category}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => addProductToLead(product)}
-                            className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                          >
-                            Adicionar
-                          </button>
-                        </div>
-                      ))}
-                      {filteredCatalog.length === 0 ? (
-                        <p className="text-sm text-slate-500">Nenhum produto encontrado.</p>
-                      ) : null}
-                    </div>
-                  </>
-                ) : null}
-              </div>
-
-              <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs uppercase text-slate-500">Carrinho do lead</p>
-                    <p className="text-sm text-slate-600">Produtos planejados para este CNPJ.</p>
-                  </div>
-                  <button
-                    onClick={() => persistProducts(leadProducts)}
-                    disabled={!cartDirty || productsSaving}
-                    className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-                  >
-                    {productsSaving ? "Salvando..." : "Salvar carrinho"}
-                  </button>
-                </div>
-                <div className="overflow-hidden rounded-lg border border-slate-200">
-                  <table className="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
-                      <tr>
-                        <th className="px-3 py-2">Produto</th>
-                        <th className="px-3 py-2">Qtd</th>
-                        <th className="px-3 py-2">Valor (R$)</th>
-                        <th className="px-3 py-2">Obs.</th>
-                        <th className="px-3 py-2" />
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {leadProducts.map((item) => (
-                        <tr key={item.productId}>
-                          <td className="px-3 py-2 align-top">
-                            <p className="font-semibold text-slate-900">{item.name}</p>
-                            <p className="text-xs text-slate-500">
-                              {item.tower} • {item.category}
-                            </p>
-                          </td>
-                          <td className="px-3 py-2 align-top">
-                            <input
-                              type="number"
-                              min={1}
-                              value={item.quantity}
-                              onChange={(e) =>
-                                updateProductField(item.productId, "quantity", Number(e.target.value) || 1)
-                              }
-                              className="w-16 rounded-lg border px-2 py-1 text-sm"
-                            />
-                          </td>
-                          <td className="px-3 py-2 align-top">
-                            <input
-                              type="number"
-                              min={0}
-                              step="0.01"
-                              value={item.monthlyValue ?? ""}
-                              onChange={(e) =>
-                                updateProductField(
-                                  item.productId,
-                                  "monthlyValue",
-                                  e.target.value ? Number(e.target.value) : null,
-                                )
-                              }
-                              className="w-28 rounded-lg border px-2 py-1 text-sm"
-                              placeholder="Opcional"
-                            />
-                          </td>
-                          <td className="px-3 py-2 align-top">
-                            <input
-                              value={item.note ?? ""}
-                              onChange={(e) => updateProductField(item.productId, "note", e.target.value)}
-                              className="w-full rounded-lg border px-2 py-1 text-sm"
-                              placeholder="Observação"
-                            />
-                          </td>
-                          <td className="px-3 py-2 align-top">
-                            <button
-                              onClick={() => removeProduct(item.productId)}
-                              className="text-xs font-semibold text-red-600 hover:text-red-700"
-                            >
-                              Remover
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                      {leadProducts.length === 0 ? (
-                        <tr>
-                          <td className="px-3 py-3 text-sm text-slate-500" colSpan={5}>
-                            Nenhum produto no carrinho ainda. Adicione pelo catálogo ao lado.
-                          </td>
-                        </tr>
-                      ) : null}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="space-y-2 rounded-lg border border-dashed border-slate-200 p-3">
-                  <p className="text-xs uppercase text-slate-500">Produto customizado</p>
-                  <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
-                    <input
-                      value={customProduct.name}
-                      onChange={(e) => setCustomProduct((prev) => ({ ...prev, name: e.target.value }))}
-                      placeholder="Nome"
-                      className="rounded-lg border px-3 py-2 text-sm"
-                    />
-                    <input
-                      type="number"
-                      min={1}
-                      value={customProduct.qty}
-                      onChange={(e) => setCustomProduct((prev) => ({ ...prev, qty: Number(e.target.value) || 1 }))}
-                      placeholder="Qtd"
-                      className="rounded-lg border px-3 py-2 text-sm"
-                    />
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={customProduct.value}
-                      onChange={(e) => setCustomProduct((prev) => ({ ...prev, value: e.target.value }))}
-                      placeholder="Valor (R$)"
-                      className="rounded-lg border px-3 py-2 text-sm"
-                    />
-                    <input
-                      value={customProduct.note}
-                      onChange={(e) => setCustomProduct((prev) => ({ ...prev, note: e.target.value }))}
-                      placeholder="Observação"
-                      className="rounded-lg border px-3 py-2 text-sm"
-                    />
-                  </div>
-                  <button
-                    onClick={addCustomProduct}
-                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                  >
-                    Adicionar customizado
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase text-slate-500">Atividades / Notas</p>
-                  <p className="text-sm text-slate-600">Registre interações e visualize a linha do tempo.</p>
-                </div>
-              </div>
-              <form onSubmit={submitActivity} className="space-y-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-slate-600">Tipo</label>
-                    <select
-                      name="activityType"
-                      value={form.activityType}
-                      onChange={handleFormChange}
-                      className="rounded-lg border px-3 py-2 text-sm"
-                    >
-                      {ACTIVITY_TYPES.map((type) => (
-                        <option key={type} value={type}>
-                          {type}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-slate-600">Canal</label>
-                    <select
-                      name="channel"
-                      value={form.channel}
-                      onChange={handleFormChange}
-                      className="rounded-lg border px-3 py-2 text-sm"
-                    >
-                      {CHANNEL_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-slate-600">Resultado</label>
-                    <select
-                      name="outcomeCode"
-                      value={form.outcomeCode}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          outcomeCode: e.target.value,
-                          outcomeLabel: OUTCOME_OPTIONS.find((o) => o.code === e.target.value)?.label ?? "",
-                        }))
-                      }
-                      className="rounded-lg border px-3 py-2 text-sm"
-                    >
-                      <option value="">Selecione</option>
-                      {OUTCOME_OPTIONS.map((opt) => (
-                        <option key={opt.code} value={opt.code}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-slate-600">Próximo contato</label>
-                    <input
-                      type="datetime-local"
-                      name="nextFollowUpAt"
-                      value={form.nextFollowUpAt}
-                      onChange={handleFormChange}
-                      className="rounded-lg border px-3 py-2 text-sm"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-slate-600">Estágio após atividade</label>
-                    <select
-                      name="newStage"
-                      value={form.newStage}
-                      onChange={(e) => setForm((prev) => ({ ...prev, newStage: e.target.value as LeadStatusId }))}
-                      className="rounded-lg border px-3 py-2 text-sm"
-                    >
-                      {LEAD_STATUS.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.title}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-slate-600">Próximo passo</label>
-                    <input
-                      name="nextStepNote"
-                      value={form.nextStepNote}
-                      onChange={handleFormChange}
-                      className="rounded-lg border px-3 py-2 text-sm"
-                    />
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-600">Observação</label>
-                  <textarea
-                    name="note"
-                    value={form.note}
-                    onChange={handleFormChange}
-                    rows={3}
-                    className="rounded-lg border px-3 py-2 text-sm"
-                    placeholder="Resumo da interação"
-                  />
-                </div>
-                {error ? <p className="text-sm text-red-600">{error}</p> : null}
-                <div className="flex items-center justify-end gap-2">
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-                  >
-                    {saving ? "Salvando..." : "Salvar atividade"}
-                  </button>
-                </div>
-              </form>
-
-              <div className="space-y-2">
-                <p className="text-xs uppercase text-slate-500">Timeline</p>
-                <div className="space-y-2 rounded-lg border border-slate-100 p-3">
-                  {activitiesLoading || eventsLoading ? (
-                    <p className="text-sm text-slate-500">Carregando...</p>
-                  ) : null}
-                  {timelineItems.map((item) => (
-                    <div key={item.id} className="flex items-start gap-3 rounded-lg border border-slate-100 bg-white p-3">
-                      <div className="mt-1 h-2 w-2 rounded-full bg-slate-400" aria-hidden />
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-700">
-                            {item.type}
-                          </span>
-                          <span>{formatDate(item.createdAt, true)}</span>
-                          {item.userId ? <span>por {item.userId}</span> : null}
-                        </div>
-                        <p className="text-sm text-slate-800">
-                          {typeof item.payload === "object" && item.payload && "note" in item.payload
-                            ? (item.payload as { note?: string }).note ?? ""
-                            : "Registro de evento"}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                  {timelineItems.length === 0 ? (
-                    <p className="text-sm text-slate-500">Nenhuma atividade registrada.</p>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {lostModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="w-[min(480px,90vw)] rounded-2xl bg-white p-6 shadow-2xl">
-            <h3 className="text-lg font-semibold text-slate-900">Registrar motivo da perda</h3>
-            <p className="text-sm text-slate-600">Escolha o motivo principal e um comentário opcional.</p>
-            <div className="mt-4 space-y-2">
-              <label className="text-xs text-slate-600">Motivo</label>
-              <select
-                value={lostReason}
-                onChange={(e) => setLostReason(e.target.value)}
-                className="w-full rounded-lg border px-3 py-2 text-sm"
-              >
-                <option value="">Selecione</option>
-                {LOST_REASON_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="mt-3 space-y-2">
-              <label className="text-xs text-slate-600">Comentário (opcional)</label>
-              <textarea
-                value={lostComment}
-                onChange={(e) => setLostComment(e.target.value)}
-                className="w-full rounded-lg border px-3 py-2 text-sm"
-                rows={3}
-                placeholder="Detalhe do porquê o lead foi perdido"
-              />
-            </div>
-            <div className="mt-4 flex items-center justify-end gap-2">
-              <button
-                onClick={() => {
-                  setLostModalOpen(false);
-                  setSelectedStatus(lead.status);
-                  setStatusDirty(false);
-                  setLostReason("");
-                  setLostComment("");
-                }}
-                className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={() => {
-                  if (!lostReason) return;
-                  setStatusDirty(true);
-                  handleStageSave("PERDIDO", { reason: lostReason, comment: lostComment });
-                }}
-                disabled={!lostReason}
-                className="rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"
-              >
-                Confirmar perda
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </>
-  );
-}
-
-function LeadCard({
-  lead,
-  onClick,
-}: {
-  lead: Lead;
-  onClick: () => void;
-}) {
-  const mainPhone = lead.telefone1 ?? lead.telefone ?? "Telefone não informado";
-  const hasFollowUp = Boolean(lead.nextFollowUpAt);
-  const followUpLabel = hasFollowUp ? formatDate(lead.nextFollowUpAt, true) : null;
-  const documento = (lead.documento ?? lead.cnpj ?? "").toString();
-  const statusColor: Record<LeadStatusId, string> = {
-    NOVO: "bg-emerald-500",
-    EM_CONTATO: "bg-amber-500",
-    EM_NEGOCIACAO: "bg-blue-500",
-    FECHADO: "bg-slate-500",
-    PERDIDO: "bg-red-500",
-  };
-  const statusText: Record<LeadStatusId, string> = {
-    NOVO: "NOVO",
-    EM_CONTATO: "EM CONTATO",
-    EM_NEGOCIACAO: "EM NEGOCIAÇÃO",
-    FECHADO: "FECHADO",
-    PERDIDO: "PERDIDO",
-  };
-
-  return (
-    <div
-      onClick={onClick}
-      className="relative rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm hover:shadow-md transition cursor-pointer space-y-2"
-    >
-      <span
-        className={`absolute right-2 top-2 h-2 w-2 rounded-full ${statusColor[lead.status] ?? "bg-slate-400"}`}
-        aria-hidden
-      />
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-sm font-semibold text-slate-900 leading-tight line-clamp-2">
-            {lead.razaoSocial ?? lead.nomeFantasia ?? "Sem empresa"}
-          </p>
-          <p className="text-xs text-slate-500">
-            {lead.vertical ?? "Vertical não informada"} •{" "}
-            {lead.cidade || lead.estado ? `${lead.cidade ?? "-"}${lead.estado ? `/${lead.estado}` : ""}` : "Cidade não informada"}
-          </p>
-        </div>
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-700">
-          {statusText[lead.status]}
-        </span>
-      </div>
-      <div className="text-xs text-slate-600 space-y-1">
-        <p className="font-medium text-slate-800">{mainPhone}</p>
-        {lead.telefone2 ? <p className="text-[11px] text-slate-500">{lead.telefone2}</p> : null}
-        {lead.telefone3 ? <p className="text-[11px] text-slate-500">{lead.telefone3}</p> : null}
-        {documento ? <p className="text-[11px] text-slate-500">Doc: {documento}</p> : null}
-        {lead.vlFatPresumido ? (
-          <p className="text-[11px] text-slate-500">Faturamento: {lead.vlFatPresumido}</p>
-        ) : null}
-      </div>
-      {hasFollowUp ? (
-        <div className="rounded-lg bg-amber-50 px-2 py-1 text-[11px] text-amber-700">
-          Próximo contato: {followUpLabel}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 function ConsultantBoard({
   viewerRole,
@@ -1706,7 +85,7 @@ function ConsultantBoard({
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
 
   const loadLeads = useCallback(async () => {
@@ -1753,7 +132,7 @@ function ConsultantBoard({
     }
     const params = new URLSearchParams();
     if (consultantId) params.set("consultantId", consultantId);
-    if (campaignId) params.set("campaignId", campaignId);
+    if (campaignId && campaignId !== "all") params.set("campaignId", campaignId);
     if (officeIds && officeIds.length) params.set("officeIds", officeIds.join(","));
     const res = await fetch(`/api/consultor/metrics?${params.toString()}`, { cache: "no-store" });
     if (res.ok) {
@@ -1765,12 +144,6 @@ function ConsultantBoard({
     loadLeads();
     loadMetrics();
   }, [loadLeads, loadMetrics, refreshSignal]);
-
-  useEffect(() => {
-    if (!selectedLead) return;
-    const updated = leads.find((l) => l.id === selectedLead.id);
-    if (updated) setSelectedLead(updated);
-  }, [leads, selectedLead]);
 
   const grouped = useMemo(() => {
     const map: Record<LeadStatusId, Lead[]> = {
@@ -1796,88 +169,92 @@ function ConsultantBoard({
     [grouped],
   );
 
-  const handleStageChange = async (
-    leadId: string,
-    stage: LeadStatusId,
-    extras?: { lostReason?: string; lostComment?: string },
-  ) => {
-    await fetch(`/api/leads/${leadId}/status`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: stage, motivo: extras?.lostReason, observacao: extras?.lostComment }),
-    });
-    await loadLeads();
-  };
+  const selectedLead = useMemo(() => leads.find((l) => l.id === selectedLeadId), [leads, selectedLeadId]);
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-xl border bg-white p-3 shadow-sm flex flex-wrap gap-3">
-        {summary.map((item) => (
-          <div key={item.id} className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2">
-            <span className="text-xs text-slate-500">{item.title}</span>
-            <span className="text-lg font-semibold text-slate-900">{item.count}</span>
-          </div>
-        ))}
+    <div className="space-y-6">
+      {/* Metrics Section */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-pic-card border border-pic-zinc p-4 rounded-sm flex flex-col justify-between hover:border-neon-pink transition-colors group">
+          <span className="text-[10px] uppercase tracking-widest text-slate-500 group-hover:text-neon-pink transition-colors">Total Leads</span>
+          <span className="text-3xl font-black text-white">{metrics?.totalLeads ?? 0}</span>
+          <span className="text-[10px] text-slate-600">Trabalhados: {metrics?.workedLeads ?? 0}</span>
+        </div>
+        <div className="bg-pic-card border border-pic-zinc p-4 rounded-sm flex flex-col justify-between hover:border-neon-green transition-colors group">
+          <span className="text-[10px] uppercase tracking-widest text-slate-500 group-hover:text-neon-green transition-colors">Taxa Contato</span>
+          <span className="text-3xl font-black text-white">{metrics?.contactRate ?? 0}%</span>
+          <span className="text-[10px] text-slate-600">Pendentes: {metrics?.notWorkedLeads ?? 0}</span>
+        </div>
+        <div className="bg-pic-card border border-pic-zinc p-4 rounded-sm flex flex-col justify-between hover:border-neon-blue transition-colors group">
+          <span className="text-[10px] uppercase tracking-widest text-slate-500 group-hover:text-neon-blue transition-colors">Negociação</span>
+          <span className="text-3xl font-black text-white">{metrics?.negotiationRate ?? 0}%</span>
+          <span className="text-[10px] text-slate-600">Ativ. média: {metrics?.avgActivities ?? 0}</span>
+        </div>
+        <div className="bg-pic-card border border-pic-zinc p-4 rounded-sm flex flex-col justify-between hover:border-white transition-colors group">
+          <span className="text-[10px] uppercase tracking-widest text-slate-500 group-hover:text-white transition-colors">Fechamento</span>
+          <span className="text-3xl font-black text-white">{metrics?.closeRate ?? 0}%</span>
+          <span className="text-[10px] text-slate-600">Follow-ups: {metrics?.followUps ?? 0}</span>
+        </div>
       </div>
 
-      {metrics ? (
-        <div className="rounded-xl border bg-white p-4 shadow-sm grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-          <div className="rounded-lg bg-slate-50 p-3">
-            <p className="text-xs text-slate-500">Leads totais</p>
-            <p className="text-lg font-semibold">{metrics.totalLeads}</p>
-            <p className="text-xs text-slate-500">Trabalhados: {metrics.workedLeads}</p>
-          </div>
-          <div className="rounded-lg bg-slate-50 p-3">
-            <p className="text-xs text-slate-500">Taxa de contato</p>
-            <p className="text-lg font-semibold">{metrics.contactRate}%</p>
-            <p className="text-xs text-slate-500">Não trabalhados: {metrics.notWorkedLeads}</p>
-          </div>
-          <div className="rounded-lg bg-slate-50 p-3">
-            <p className="text-xs text-slate-500">Taxa de negociação</p>
-            <p className="text-lg font-semibold">{metrics.negotiationRate}%</p>
-            <p className="text-xs text-slate-500">Atividades/lead: {metrics.avgActivities}</p>
-          </div>
-          <div className="rounded-lg bg-slate-50 p-3">
-            <p className="text-xs text-slate-500">Taxa de fechamento</p>
-            <p className="text-lg font-semibold">{metrics.closeRate}%</p>
-            <p className="text-xs text-slate-500">Follow-ups próximos 7d: {metrics.followUps}</p>
-          </div>
+      {error ? <div className="p-4 bg-red-900/20 border border-red-500 text-red-200 text-sm font-mono">{error}</div> : null}
+
+      {loading ? (
+        <div className="flex items-center justify-center p-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-neon-pink"></div>
         </div>
       ) : null}
 
-      {error ? <div className="text-sm text-red-600">{error}</div> : null}
-      {loading ? <div className="text-sm text-slate-600">Carregando...</div> : null}
       {viewerRole === "MASTER" && !consultantId ? (
-        <div className="text-sm text-slate-600">Selecione um consultor para visualizar o board.</div>
+        <div className="p-12 text-center border-2 border-dashed border-pic-zinc rounded-sm">
+          <p className="text-slate-500 font-mono text-sm uppercase">Selecione um consultor para visualizar o board</p>
+        </div>
       ) : null}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
+      {/* Kanban Board */}
+      <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar min-h-[calc(100vh-280px)]">
         {LEAD_STATUS.map((stage) => (
           <div
             key={stage.id}
-            className="rounded-xl border border-slate-200 bg-white/80 backdrop-blur p-3 flex flex-col gap-3 min-h-[240px]"
+            className="flex-shrink-0 w-80 flex flex-col bg-pic-dark/50 rounded-sm border-t-2 border-transparent hover:border-neon-pink/30 transition-colors"
           >
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-700">{stage.title}</h2>
-              <span className="text-xs text-slate-400">{grouped[stage.id]?.length ?? 0}</span>
+            {/* Column Header */}
+            <div className="p-3 mb-2 flex items-center justify-between border-b border-pic-zinc bg-pic-card/30">
+              <h2 className="text-xs font-black uppercase tracking-widest text-slate-300">{stage.title}</h2>
+              <span className="bg-pic-zinc text-white text-[10px] px-2 py-0.5 rounded-full font-bold">
+                {grouped[stage.id]?.length ?? 0}
+              </span>
             </div>
-            <div className="flex flex-col gap-2 overflow-y-auto max-h-[70vh] pr-1">
+
+            {/* Column Content */}
+            <div className="flex-1 p-2 space-y-3 overflow-y-auto custom-scrollbar max-h-[800px]">
               {(grouped[stage.id] || []).map((lead) => (
-                <LeadCard key={lead.id} lead={lead} onClick={() => setSelectedLead(lead)} />
+                <LeadCard
+                  key={lead.id}
+                  lead={lead as any}
+                  onOpen={() => setSelectedLeadId(lead.id)}
+                />
               ))}
+              {grouped[stage.id]?.length === 0 && (
+                <div className="h-24 flex items-center justify-center border-2 border-dashed border-pic-zinc/50 opacity-50">
+                  <span className="text-[10px] uppercase text-slate-600">Vazio</span>
+                </div>
+              )}
             </div>
           </div>
         ))}
       </div>
 
-      {selectedLead ? (
-        <LeadDrawer
-          lead={selectedLead}
-          onClose={() => setSelectedLead(null)}
-          onStageChange={handleStageChange}
-          onActivitySaved={loadLeads}
+      {selectedLead && (
+        <LeadDetailModal
+          lead={selectedLead as any}
+          onClose={() => setSelectedLeadId(null)}
+          onRefresh={async () => {
+            await loadLeads();
+            await loadMetrics();
+          }}
         />
-      ) : null}
+      )}
     </div>
   );
 }
@@ -1897,145 +274,115 @@ export default function BoardPage() {
     if (status === "unauthenticated") {
       router.replace("/login");
     }
-    const sessionProfile = session?.user.profile ?? session?.user.role;
-    if (status === "authenticated" && sessionProfile === "CONSULTOR") {
-      setSelectedConsultant(session.user.id);
-    }
-  }, [status, session, router]);
-
-  useEffect(() => {
-    if (status !== "authenticated" || !session?.user) return;
-    const sessionProfile = session.user.profile ?? session.user.role ?? "";
-    if (sessionProfile === "CONSULTOR") return;
-    const canSelectOtherConsultant = ["MASTER", "GERENTE_SENIOR", "GERENTE_NEGOCIOS"].includes(
-      sessionProfile,
-    );
-    const consultantFromQuery = searchParams.get("consultantId");
-    const campaignFromQuery = searchParams.get("campaignId");
-    if (consultantFromQuery && canSelectOtherConsultant) {
-      setSelectedConsultant(consultantFromQuery);
-    }
-    if (campaignFromQuery) {
-      setSelectedCampaign(campaignFromQuery);
-    }
-  }, [status, session, searchParams]);
+  }, [status, router]);
 
   const loadConsultants = useCallback(async () => {
-    const res = await fetch("/api/admin/users", { cache: "no-store" });
+    const res = await fetch("/api/admin/users?role=CONSULTANT", { cache: "no-store" });
     if (res.ok) {
-      const data = await res.json();
-      const onlyConsultants = (data as typeof consultants).filter((u) => u.role === "CONSULTOR");
-      setConsultants(onlyConsultants);
-      if (!selectedConsultant && onlyConsultants.length > 0) {
-        setSelectedConsultant(onlyConsultants[0].id);
-      }
+      setConsultants(await res.json());
     }
-  }, [selectedConsultant]);
+  }, []);
+
+  const loadOffices = useCallback(async () => {
+    // Placeholder if office filter needed
+  }, []);
 
   useEffect(() => {
-    if (session?.user.role === "MASTER") {
+    if (session?.user.role === "MASTER" || session?.user.role === "MANAGER") {
       loadConsultants();
+      loadOffices();
     }
-  }, [session, loadConsultants]);
+  }, [session, loadConsultants, loadOffices]);
 
-  if (status === "loading" || !session?.user) {
-    return <div>Carregando...</div>;
-  }
+  // Set default consultant if user is consultant
+  useEffect(() => {
+    if (session?.user.role === "CONSULTANT" && session.user.id) {
+      setSelectedConsultant(session.user.id);
+    }
+  }, [session]);
 
-  const viewerRole = (session.user.profile ?? session.user.role) as ViewerRole;
+  const viewerRole = (session?.user.role as ViewerRole) ?? "CONSULTANT";
 
   return (
-    <div className="relative space-y-4">
-      <header className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Board</p>
-          <h1 className="text-2xl font-semibold">Esteira de leads</h1>
-          <p className="text-sm text-slate-500">
-            {session.user.name ?? session.user.email} • Perfil:{" "}
-            {session.user.profile ?? session.user.role}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-3 items-center">
-          {viewerRole === "MASTER" ? (
-            <select
-              value={selectedConsultant}
-              onChange={(e) => setSelectedConsultant(e.target.value)}
-              className="rounded-lg border px-3 py-2 text-sm"
-            >
-              <option value="">Selecione um consultor</option>
-              {consultants.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.email})
-                </option>
-              ))}
-            </select>
-          ) : null}
-          <select
-            value={selectedCampaign}
-            onChange={(e) => setSelectedCampaign(e.target.value)}
-            className="rounded-lg border px-3 py-2 text-sm"
-          >
-            <option value="all">Todas as campanhas</option>
-            {campaignOptions.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name || c.id}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={() => setRefreshSignal((prev) => prev + 1)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-100"
-          >
-            Atualizar
-          </button>
-        </div>
-      </header>
+    <main className="min-h-screen bg-pic-dark text-slate-200 overflow-hidden flex flex-col">
+      {/* Top Bar / Filters */}
+      <div className="bg-pic-dark/95 backdrop-blur z-20 border-b border-pic-zinc sticky top-0">
+        <div className="p-4 flex flex-col md:flex-row gap-4 items-center justify-between max-w-[1920px] mx-auto w-full">
 
-      <ConsultantBoard
-        viewerRole={viewerRole}
-        consultantId={viewerRole === "CONSULTOR" ? session.user.id : selectedConsultant || undefined}
-        campaignId={selectedCampaign}
-        refreshSignal={refreshSignal}
-        onCampaignsUpdate={setCampaignOptions}
-        officeIds={session.user.officeIds}
-      />
-    </div>
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 bg-neon-pink flex items-center justify-center font-black text-black text-xl shadow-[0_0_15px_rgba(255,0,153,0.5)]">
+              LP
+            </div>
+            <div>
+              <h1 className="text-xl font-black text-white uppercase tracking-tighter">
+                Leads <span className="text-neon-pink">Platform</span>
+              </h1>
+              <p className="text-[10px] text-slate-500 uppercase tracking-widest">
+                CRM & Performance Dashboard
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {/* Consultant Filter (Admin only) */}
+            {(viewerRole === "MASTER" || viewerRole === "MANAGER") && (
+              <div className="relative group">
+                <select
+                  value={selectedConsultant}
+                  onChange={(e) => setSelectedConsultant(e.target.value)}
+                  className="bg-black border border-pic-zinc text-slate-300 text-xs uppercase font-bold py-2 px-3 pr-8 focus:border-neon-blue outline-none appearance-none min-w-[200px]"
+                >
+                  <option value="">Selecione Consultor...</option>
+                  {consultants.map(c => (
+                    <option key={c.id} value={c.id}>{c.name || c.email}</option>
+                  ))}
+                </select>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none text-[10px]">▼</div>
+              </div>
+            )}
+
+            {/* Campaign Filter */}
+            <div className="relative group">
+              <select
+                value={selectedCampaign}
+                onChange={(e) => setSelectedCampaign(e.target.value)}
+                className="bg-black border border-pic-zinc text-slate-300 text-xs uppercase font-bold py-2 px-3 pr-8 focus:border-neon-green outline-none appearance-none min-w-[180px]"
+              >
+                <option value="all">Todas Campanhas</option>
+                {campaignOptions.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none text-[10px]">▼</div>
+            </div>
+
+            <button
+              onClick={() => setRefreshSignal(prev => prev + 1)}
+              className="w-8 h-8 flex items-center justify-center border border-pic-zinc text-slate-400 hover:text-white hover:border-white transition-colors"
+              title="Atualizar"
+            >
+              ↻
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Board Area */}
+      <div className="flex-1 overflow-hidden p-6 relative">
+        {/* Background Grid Accent */}
+        <div className="absolute inset-0 bg-[url('/grid-pattern.svg')] opacity-[0.03] pointer-events-none"></div>
+        <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-neon-pink/20 to-transparent"></div>
+
+        <div className="h-full max-w-[1920px] mx-auto w-full">
+          <ConsultantBoard
+            viewerRole={viewerRole}
+            consultantId={selectedConsultant}
+            campaignId={selectedCampaign}
+            refreshSignal={refreshSignal}
+            onCampaignsUpdate={setCampaignOptions}
+          />
+        </div>
+      </div>
+    </main>
   );
-}
-function EnrichmentStatusBar({ status, hasSuggestions }: { status: string; hasSuggestions: boolean }) {
-  const baseClasses = "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold";
-  const byStatus: Record<string, { text: string; className: string }> = {
-    idle: {
-      text: "🔍 Pronto pra investigar este CNPJ. Clique em “Enriquecer dados do CNPJ”.",
-      className: "bg-slate-100 text-slate-700",
-    },
-    fetching_base: {
-      text: "🔍 Puxando dados públicos da empresa… segura aí que já vem coisa boa.",
-      className: "bg-blue-50 text-blue-700",
-    },
-    merging_data: {
-      text: "🔍 Cruzando informações e limpando o que veio torto… quase lá.",
-      className: "bg-blue-50 text-blue-700",
-    },
-    preparing_suggestions: {
-      text: "🔍 Montando sugestões pra você decidir o que vale manter.",
-      className: "bg-blue-50 text-blue-700",
-    },
-    success: {
-      text: hasSuggestions
-        ? "✅ Enriquecimento pronto. Revise os cards e clique em “Manter”."
-        : "ℹ️ Não achamos nada novo, mas o CNPJ parece ok.",
-      className: "bg-emerald-50 text-emerald-700",
-    },
-    empty: {
-      text: "ℹ️ Não achamos nada novo, mas o CNPJ parece ok.",
-      className: "bg-slate-100 text-slate-700",
-    },
-    error: {
-      text: "⚠️ Não deu pra enriquecer agora (API pública falhou). Tenta de novo mais tarde.",
-      className: "bg-red-50 text-red-700",
-    },
-  };
-  const current = byStatus[status] ?? byStatus.idle;
-  return <div className={`${baseClasses} ${current.className}`}>{current.text}</div>;
 }
