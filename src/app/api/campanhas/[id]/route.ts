@@ -36,7 +36,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || !["MASTER", "PROPRIETARIO"].includes(session.user.role)) {
+    if (!session?.user?.role || !["MASTER", "PROPRIETARIO"].includes(session.user.role)) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
