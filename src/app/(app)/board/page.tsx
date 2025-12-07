@@ -182,7 +182,12 @@ type EnrichmentSuggestionCard = {
   ignored?: boolean;
 };
 
-async function logLeadEvent(input: { type: string; leadId: string; userId?: string; payload?: unknown }) {
+async function logLeadEvent(input: {
+  type: string;
+  leadId: string;
+  userId?: string;
+  payload?: unknown;
+}) {
   // TODO: integrar com infraestrutura real de eventos/gamificação
   // Por ora, apenas registra no console para facilitar tracing.
   console.log("[lead-event]", input);
@@ -266,6 +271,7 @@ function LeadDrawer({
   const [additionalPhones, setAdditionalPhones] = useState<{ rotulo: string; valor: string }[]>([]);
   const [cartDirty, setCartDirty] = useState(false);
   const [customProduct, setCustomProduct] = useState({ name: "", value: "", note: "", qty: 1 });
+  const [catalogOpen, setCatalogOpen] = useState(false);
   const LOST_REASON_OPTIONS = [
     { value: "TELEFONE_INVALIDO", label: "Telefone inválido" },
     { value: "EMPRESA_FECHADA", label: "Empresa fechada" },
@@ -489,6 +495,48 @@ function LeadDrawer({
     return { score, label };
   }, [events]);
 
+  const formatSuggestionValue = useCallback((suggestion: EnrichmentSuggestionCard) => {
+    if (suggestion.type === "PHONE" && typeof suggestion.value === "string") {
+      return suggestion.value.replace(/(\\d{2})(\\d{4,5})(\\d{4})/, "($1) $2-$3");
+    }
+    if ((suggestion.type === "EMAIL" || suggestion.type === "SITE") && typeof suggestion.value === "string") {
+      return suggestion.value;
+    }
+    if (suggestion.type === "ADDRESS") {
+      try {
+        const addr =
+          typeof suggestion.value === "string"
+            ? JSON.parse(suggestion.value)
+            : (suggestion.value as Record<string, unknown>);
+        return `${addr.logradouro ?? ""} ${addr.numero ?? ""} ${addr.bairro ?? ""} ${addr.cidade ?? ""} ${
+          addr.estado ?? ""
+        } ${addr.cep ?? ""}`.replace(/\\s+/g, " ").trim();
+      } catch {
+        return String(suggestion.value ?? "");
+      }
+    }
+    if (suggestion.type === "CNAE") {
+      if (typeof suggestion.value === "string") return suggestion.value;
+      const obj = suggestion.value as Record<string, unknown>;
+      return `${obj.descricao ?? obj.cnae ?? ""}`.trim();
+    }
+    if (suggestion.type === "PORTE") {
+      return typeof suggestion.value === "string" ? suggestion.value : String(suggestion.value ?? "");
+    }
+    if (suggestion.type === "RESPONSIBLE") {
+      try {
+        const resp =
+          typeof suggestion.value === "string"
+            ? JSON.parse(suggestion.value)
+            : (suggestion.value as Record<string, unknown>);
+        return `${resp.nome ?? ""}${resp.cargo ? ` • ${resp.cargo}` : ""}`.trim();
+      } catch {
+        return String(suggestion.value ?? "");
+      }
+    }
+    return typeof suggestion.value === "string" ? suggestion.value : JSON.stringify(suggestion.value ?? "");
+  }, []);
+
   const fetchSuggestions = useCallback(async () => {
     setSuggestionsLoading(true);
     setSuggestionsError("");
@@ -505,7 +553,7 @@ function LeadDrawer({
         .map((s) => ({
           id: s.id,
           type: s.type,
-          label: s.type,
+          label: (s as unknown as { label?: string }).label ?? s.type,
           value: s.value,
           source: s.source,
           applied: s.status === "ACCEPTED",
@@ -562,7 +610,6 @@ function LeadDrawer({
       logLeadEvent({
         type: "ENRICHMENT_ACCEPTED",
         leadId: lead.id,
-        userId: "",
         payload: { suggestionId: suggestion.id, type: suggestion.type, source: suggestion.source },
       });
       loadEvents();
@@ -582,9 +629,8 @@ function LeadDrawer({
         prev.map((s) => (s.id === suggestion.id ? { ...s, ignored: true } : s)),
       );
       logLeadEvent({
-        type: "ENRICHMENT_REJECTED",
+        type: "ENRICHMENT_IGNORED",
         leadId: lead.id,
-        userId: "",
         payload: { suggestionId: suggestion.id, type: suggestion.type, source: suggestion.source },
       });
       loadEvents();
@@ -764,15 +810,6 @@ function LeadDrawer({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [onClose, lostModalOpen, lead.status]);
-
-  const renderSuggestionValue = (suggestion: EnrichmentSuggestionCard) => {
-    if (typeof suggestion.value === "string") return suggestion.value;
-    try {
-      return JSON.stringify(suggestion.value);
-    } catch {
-      return "";
-    }
-  };
 
   return (
     <>
@@ -964,21 +1001,54 @@ function LeadDrawer({
                   />
                 </div>
               </div>
-              <div className="space-y-2">
-                <p className="text-xs uppercase text-slate-500">Telefones</p>
-                <div className="flex flex-col gap-2">
-                  {additionalPhones.map((phone, idx) => (
-                    <div key={`${phone.valor}-${idx}`} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm">
-                      <div>
-                        <p className="font-semibold text-slate-900">{phone.valor}</p>
-                        <p className="text-xs text-slate-500">{phone.rotulo}</p>
+                <div className="space-y-2">
+                  <p className="text-xs uppercase text-slate-500">Telefones</p>
+                  <div className="flex flex-col gap-2">
+                    {additionalPhones.map((phone, idx) => (
+                      <div
+                        key={`${phone.valor}-${idx}`}
+                        className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm"
+                      >
+                        <div>
+                          <p className="font-semibold text-slate-900">{phone.valor}</p>
+                          <p className="text-xs text-slate-500">{phone.rotulo}</p>
+                        </div>
+                        <div className="flex items-center gap-2 text-lg">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              logLeadEvent({
+                                type: "PHONE_FEEDBACK",
+                                leadId: lead.id,
+                                payload: { phone: phone.valor, rating: "GOOD" },
+                              })
+                            }
+                            title="Bom"
+                            className="text-emerald-600 hover:text-emerald-700"
+                          >
+                            👍
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              logLeadEvent({
+                                type: "PHONE_FEEDBACK",
+                                leadId: lead.id,
+                                payload: { phone: phone.valor, rating: "BAD" },
+                              })
+                            }
+                            title="Ruim"
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            👎
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  {additionalPhones.length === 0 ? (
-                    <p className="text-sm text-slate-500">Nenhum telefone cadastrado.</p>
-                  ) : null}
-                </div>
+                    ))}
+                    {additionalPhones.length === 0 ? (
+                      <p className="text-sm text-slate-500">Nenhum telefone cadastrado.</p>
+                    ) : null}
+                  </div>
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
                   <input
                     value={newPhone.rotulo}
@@ -1035,7 +1105,7 @@ function LeadDrawer({
                           </span>
                         ) : null}
                       </div>
-                      <p className="mt-2 text-sm text-slate-700 break-words">{renderSuggestionValue(s)}</p>
+                      <p className="mt-2 text-sm text-slate-700 break-words">{formatSuggestionValue(s)}</p>
                       <div className="mt-3 flex items-center gap-2">
                         <button
                           onClick={() => acceptSuggestion(s)}
@@ -1063,66 +1133,76 @@ function LeadDrawer({
               <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs uppercase text-slate-500">Catálogo de produtos Vivo</p>
-                    <p className="text-sm text-slate-600">Filtre e adicione ao carrinho do lead.</p>
+                    <p className="text-xs uppercase text-slate-500">Planta Vivo</p>
+                    <p className="text-sm text-slate-600">Produtos planejados para este CNPJ.</p>
                   </div>
-                </div>
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                  <select
-                    value={productFilters.tower}
-                    onChange={(e) => setProductFilters((prev) => ({ ...prev, tower: e.target.value }))}
-                    className="rounded-lg border px-3 py-2 text-sm"
+                  <button
+                    onClick={() => setCatalogOpen((prev) => !prev)}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                   >
-                    <option value="">Todas as torres</option>
-                    {TOWER_OPTIONS.map((tower) => (
-                      <option key={tower} value={tower}>
-                        {tower}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={productFilters.category}
-                    onChange={(e) => setProductFilters((prev) => ({ ...prev, category: e.target.value }))}
-                    className="rounded-lg border px-3 py-2 text-sm"
-                  >
-                    <option value="">Todas as categorias</option>
-                    {categoryOptions.map((category) => (
-                      <option key={category} value={category}>
-                        {category}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    value={productFilters.search}
-                    onChange={(e) => setProductFilters((prev) => ({ ...prev, search: e.target.value }))}
-                    placeholder="Buscar produto"
-                    className="rounded-lg border px-3 py-2 text-sm"
-                  />
+                    {catalogOpen ? "Fechar Planta Vivo" : "Abrir Planta Vivo"}
+                  </button>
                 </div>
-                <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
-                  {filteredCatalog.map((product) => (
-                    <div
-                      key={product.id}
-                      className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    >
-                      <div>
-                        <p className="font-semibold text-slate-900">{product.name}</p>
-                        <p className="text-xs text-slate-500">
-                          {product.tower} • {product.category}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => addProductToLead(product)}
-                        className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                {catalogOpen ? (
+                  <>
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                      <select
+                        value={productFilters.tower}
+                        onChange={(e) => setProductFilters((prev) => ({ ...prev, tower: e.target.value }))}
+                        className="rounded-lg border px-3 py-2 text-sm"
                       >
-                        Adicionar
-                      </button>
+                        <option value="">Todas as torres</option>
+                        {TOWER_OPTIONS.map((tower) => (
+                          <option key={tower} value={tower}>
+                            {tower}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={productFilters.category}
+                        onChange={(e) => setProductFilters((prev) => ({ ...prev, category: e.target.value }))}
+                        className="rounded-lg border px-3 py-2 text-sm"
+                      >
+                        <option value="">Todas as categorias</option>
+                        {categoryOptions.map((category) => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        value={productFilters.search}
+                        onChange={(e) => setProductFilters((prev) => ({ ...prev, search: e.target.value }))}
+                        placeholder="Buscar produto"
+                        className="rounded-lg border px-3 py-2 text-sm"
+                      />
                     </div>
-                  ))}
-                  {filteredCatalog.length === 0 ? (
-                    <p className="text-sm text-slate-500">Nenhum produto encontrado.</p>
-                  ) : null}
-                </div>
+                    <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+                      {filteredCatalog.map((product) => (
+                        <div
+                          key={product.id}
+                          className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        >
+                          <div>
+                            <p className="font-semibold text-slate-900">{product.name}</p>
+                            <p className="text-xs text-slate-500">
+                              {product.tower} • {product.category}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => addProductToLead(product)}
+                            className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                          >
+                            Adicionar
+                          </button>
+                        </div>
+                      ))}
+                      {filteredCatalog.length === 0 ? (
+                        <p className="text-sm text-slate-500">Nenhum produto encontrado.</p>
+                      ) : null}
+                    </div>
+                  </>
+                ) : null}
               </div>
 
               <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
