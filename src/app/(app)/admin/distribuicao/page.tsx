@@ -63,6 +63,7 @@ export default function DistribuicaoPage() {
   const [usersOwner, setUsersOwner] = useState<User[]>([]);
 
   // State - Batches
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [batches, setBatches] = useState<any[]>([]);
   const [loadingBatches, setLoadingBatches] = useState(false);
 
@@ -339,7 +340,46 @@ export default function DistribuicaoPage() {
               <div>Total: <span className="text-white">{selectedCampaign?.totalLeads || 0}</span></div>
               <div>Disp: <span className="text-neon-green">{selectedCampaign?.remainingLeads || 0}</span></div>
             </div>
+
+            {/* Actions for Campaign */}
+            <div className="flex gap-2 pl-4 border-l border-white/10">
+              <button onClick={startEdit} className="p-2 text-slate-400 hover:text-neon-blue transition-colors" title="Editar Detalhes">
+                <Edit className="w-4 h-4" />
+              </button>
+              <button onClick={() => { setActiveTab("batches"); loadBatches(); }} className="p-2 text-slate-400 hover:text-neon-yellow transition-colors" title="Gerenciar Bases / Importações">
+                <Database className="w-4 h-4" />
+              </button>
+              <button onClick={handleDeleteCampaign} className="p-2 text-slate-400 hover:text-red-500 transition-colors" title="Excluir Campanha">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
           </div>
+
+          {isEditing && (
+            <div className="bg-pic-dark/90 border border-white/10 p-4 rounded-xl space-y-4">
+              <h4 className="text-neon-blue font-bold uppercase text-sm">Validar Edição</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <input className="bg-black/30 border border-white/10 rounded px-3 py-2 text-slate-300" placeholder="Nome" value={editName} onChange={e => setEditName(e.target.value)} />
+                <input className="bg-black/30 border border-white/10 rounded px-3 py-2 text-slate-300" placeholder="Descrição" value={editDesc} onChange={e => setEditDesc(e.target.value)} />
+                <select className="bg-black/30 border border-white/10 rounded px-3 py-2 text-slate-300" value={editGN} onChange={e => setEditGN(e.target.value)}>
+                  <option value="">Alterar GN...</option>
+                  {usersGN.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+                <select className="bg-black/30 border border-white/10 rounded px-3 py-2 text-slate-300" value={editGS} onChange={e => setEditGS(e.target.value)}>
+                  <option value="">Alterar GS...</option>
+                  {usersGS.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+                <select className="bg-black/30 border border-white/10 rounded px-3 py-2 text-slate-300" value={editOwner} onChange={e => setEditOwner(e.target.value)}>
+                  <option value="">Alterar Dono...</option>
+                  {usersOwner.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setIsEditing(false)} className="text-xs uppercase font-bold text-slate-500 hover:text-white px-3 py-1">Cancelar</button>
+                <button onClick={handleUpdateCampaign} className="text-xs uppercase font-bold bg-neon-blue text-black px-3 py-1 rounded">Salvar</button>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Left Column: Distribution Actions */}

@@ -17,7 +17,7 @@ export async function DELETE(req: Request, { params }: { params: { id: string, b
 
         await prisma.$transaction(async (tx) => {
             // 1. Get count of leads to be deleted (to update campaign stats if needed, or we just recount)
-            const deletedLeads = await tx.lead.deleteMany({
+            await tx.lead.deleteMany({
                 where: { importBatchId: batchId, campanhaId: campaignId }
             });
 
