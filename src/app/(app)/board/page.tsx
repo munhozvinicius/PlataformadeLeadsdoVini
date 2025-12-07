@@ -230,7 +230,6 @@ function LeadDrawer({
 }) {
   const [selectedStatus, setSelectedStatus] = useState<LeadStatusId>(lead.status);
   const [statusDirty, setStatusDirty] = useState(false);
-  const [savingStatus, setSavingStatus] = useState(false);
   const [statusFeedback, setStatusFeedback] = useState("");
   const [lostModalOpen, setLostModalOpen] = useState(false);
   const [lostReason, setLostReason] = useState<string>("");
@@ -259,7 +258,6 @@ function LeadDrawer({
   );
   const [productFilters, setProductFilters] = useState({ tower: "", category: "", search: "" });
   const [productsSaving, setProductsSaving] = useState(false);
-  const [productSaveState, setProductSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [events, setEvents] = useState<LeadEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<EnrichmentSuggestionCard[]>([]);
@@ -340,7 +338,6 @@ function LeadDrawer({
       if (res.ok) {
         const data = (await res.json()) as LeadProduct[];
         setLeadProducts(data);
-        setProductSaveState("idle");
         setCartDirty(false);
       }
     } catch (err) {
@@ -362,12 +359,10 @@ function LeadDrawer({
         if (!res.ok) {
           throw new Error("Erro ao salvar produtos");
         }
-        setProductSaveState("saved");
         setCartDirty(false);
         createEvent("PRODUCT_CART_UPDATE", { count: items.length });
       } catch (err) {
         console.error(err);
-        setProductSaveState("error");
       } finally {
         setProductsSaving(false);
       }
@@ -378,7 +373,6 @@ function LeadDrawer({
   const queueProductSave = useCallback(
     (items: LeadProduct[]) => {
       setLeadProducts(items);
-      setProductSaveState("idle");
       setCartDirty(true);
     },
     [],
@@ -420,6 +414,21 @@ function LeadDrawer({
     },
     [leadProducts, queueProductSave],
   );
+
+  const addCustomProduct = useCallback(() => {
+    if (!customProduct.name.trim()) return;
+    const product: LeadProduct = {
+      productId: `custom-${Date.now()}`,
+      tower: "Custom",
+      category: "Custom",
+      name: customProduct.name.trim(),
+      quantity: customProduct.qty || 1,
+      monthlyValue: customProduct.value ? Number(customProduct.value) : null,
+      note: customProduct.note || null,
+    };
+    queueProductSave([...leadProducts, product]);
+    setCustomProduct({ name: "", value: "", note: "", qty: 1 });
+  }, [customProduct, leadProducts, queueProductSave]);
 
   const categoryOptions = useMemo(() => {
     if (!productFilters.tower) return Array.from(new Set(PRODUCT_CATALOG.map((p) => p.category)));
@@ -522,10 +531,12 @@ function LeadDrawer({
         prev.map((s) => (s.id === suggestion.id ? { ...s, applied: true, ignored: false } : s)),
       );
       if (suggestion.type === "PHONE") {
+        const phoneValue =
+          typeof suggestion.value === "string" ? suggestion.value : String(suggestion.value ?? "");
         setAdditionalPhones((prev) => {
-          const exists = prev.some((p) => normalizePhone(p.valor) === normalizePhone(suggestion.value));
+          const exists = prev.some((p) => normalizePhone(p.valor) === normalizePhone(phoneValue));
           if (exists) return prev;
-          return [...prev, { rotulo: "Enriquecimento", valor: suggestion.value }];
+          return [...prev, { rotulo: "Enriquecimento", valor: phoneValue }];
         });
       } else if (suggestion.type === "EMAIL") {
         if (typeof suggestion.value === "string") {
@@ -754,128 +765,655 @@ function LeadDrawer({
     };
   }, [onClose, lostModalOpen, lead.status]);
 
-  return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="absolute inset-0 z-0" onClick={onClose} aria-hidden />
-      <div className="relative z-10 flex h-[90vh] w-[min(1200px,95vw)] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-        <div className="sticky top-0 z-10 flex items-start justify-between border-b bg-white/95 px-6 py-4 backdrop-blur">
-          <div className="space-y-1">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Lead</p>
-            <h2 className="text-2xl font-semibold leading-tight text-slate-900">
-              {lead.razaoSocial ?? lead.nomeFantasia ?? "Sem empresa"}
-            </h2>
-            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
-                {stageLabel(lead.status)}
-              </span>
-              <span>{lead.campanha?.nome ?? "Campanha não informada"}</span>
-              {documento ? <span className="text-slate-500">CNPJ/Doc: {documento}</span> : null}
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Fechar
-          </button>
-        </div>
+  const renderSuggestionValue = (suggestion: EnrichmentSuggestionCard) => {
+    if (typeof suggestion.value === "string") return suggestion.value;
+    try {
+      return JSON.stringify(suggestion.value);
+    } catch {
+      return "";
+    }
+  };
 
-        <div className="flex-1 overflow-y-auto px-6 pb-6">
-                    <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs uppercase text-slate-500">Carrinho do lead</p>
-                          <p className="text-sm text-slate-600">Produtos planejados para este CNPJ.</p>
-                        </div>
-                        <span className="text-xs text-slate-500">
-                          {leadProducts.length} item{leadProducts.length === 1 ? "" : "s"}
-                        </span>
-                      </div>
-                      <div className="overflow-hidden rounded-lg border border-slate-200">
-                        <table className="min-w-full divide-y divide-slate-200 text-sm">
-                          <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
-                            <tr>
-                              <th className="px-3 py-2">Produto</th>
-                              <th className="px-3 py-2">Qtd</th>
-                              <th className="px-3 py-2">Valor (R$)</th>
-                              <th className="px-3 py-2">Obs.</th>
-                              <th className="px-3 py-2"></th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                            {leadProducts.map((item) => (
-                              <tr key={item.productId}>
-                                <td className="px-3 py-2 align-top">
-                                  <p className="font-semibold text-slate-900">{item.name}</p>
-                                  <p className="text-xs text-slate-500">
-                                    {item.tower} • {item.category}
-                                  </p>
-                                </td>
-                                <td className="px-3 py-2 align-top">
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    value={item.quantity}
-                                    onChange={(e) =>
-                                      updateProductField(item.productId, "quantity", Number(e.target.value) || 1)
-                                    }
-                                    className="w-16 rounded-lg border px-2 py-1 text-sm"
-                                  />
-                                </td>
-                                <td className="px-3 py-2 align-top">
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    step="0.01"
-                                    value={item.monthlyValue ?? ""}
-                                    onChange={(e) =>
-                                      updateProductField(
-                                        item.productId,
-                                        "monthlyValue",
-                                        e.target.value ? Number(e.target.value) : null,
-                                      )
-                                    }
-                                    className="w-28 rounded-lg border px-2 py-1 text-sm"
-                                    placeholder="Opcional"
-                                  />
-                                </td>
-                                <td className="px-3 py-2 align-top">
-                                  <input
-                                    value={item.note ?? ""}
-                                    onChange={(e) => updateProductField(item.productId, "note", e.target.value)}
-                                    className="w-full rounded-lg border px-2 py-1 text-sm"
-                                    placeholder="Observação"
-                                  />
-                                </td>
-                                <td className="px-3 py-2 align-top">
-                                  <button
-                                    onClick={() => removeProduct(item.productId)}
-                                    className="text-xs font-semibold text-red-600 hover:text-red-700"
-                                  >
-                                    Remover
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                            {leadProducts.length === 0 ? (
-                              <tr>
-                                <td className="px-3 py-3 text-sm text-slate-500" colSpan={5}>
-                                  Nenhum produto no carrinho ainda. Adicione pelo catálogo ao lado.
-                                </td>
-                              </tr>
-                            ) : null}
-                          </tbody>
-                        </table>
+  return (
+    <>
+      <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="absolute inset-0 z-0" onClick={onClose} aria-hidden />
+        <div className="relative z-10 flex h-[90vh] w-[min(1200px,95vw)] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <div className="sticky top-0 z-10 flex items-start justify-between border-b bg-white/95 px-6 py-4 backdrop-blur">
+            <div className="space-y-1">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Lead</p>
+              <h2 className="text-2xl font-semibold leading-tight text-slate-900">
+                {lead.razaoSocial ?? lead.nomeFantasia ?? "Sem empresa"}
+              </h2>
+              <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
+                  {stageLabel(lead.status)}
+                </span>
+                <span>{lead.campanha?.nome ?? "Campanha não informada"}</span>
+                {documento ? <span className="text-slate-500">CNPJ/Doc: {documento}</span> : null}
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Fechar
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-5">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+                <p className="text-xs uppercase text-slate-500">Termômetro</p>
+                <p className="text-lg font-semibold text-slate-900">{thermometer.label}</p>
+                <p className="text-xs text-slate-500">Score: {thermometer.score}</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+                <p className="text-xs uppercase text-slate-500">Última atividade</p>
+                <p className="text-sm text-slate-700">{formatDate(lead.lastActivityAt, true)}</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs uppercase text-slate-500">Status & campanha</p>
+                  <p className="text-sm text-slate-600">Atualize o estágio e confirme para salvar.</p>
+                </div>
+                {statusFeedback ? <span className="text-xs text-emerald-600">{statusFeedback}</span> : null}
+              </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-600">Estágio</label>
+                  <select
+                    value={selectedStatus}
+                    onChange={(e) => {
+                      const next = e.target.value as LeadStatusId;
+                      setSelectedStatus(next);
+                      setStatusDirty(next !== lead.status);
+                    }}
+                    className="rounded-lg border px-3 py-2 text-sm"
+                  >
+                    {LEAD_STATUS.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-600">Campanha</label>
+                  <input
+                    value={lead.campanha?.nome ?? "Não informado"}
+                    disabled
+                    className="rounded-lg border bg-slate-50 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="flex items-end justify-end">
+                  <button
+                    onClick={() => {
+                      if (selectedStatus === "PERDIDO" && !lostReason) {
+                        setLostModalOpen(true);
+                        return;
+                      }
+                      handleStageSave(
+                        selectedStatus,
+                        selectedStatus === "PERDIDO" ? { reason: lostReason, comment: lostComment } : undefined,
+                      );
+                    }}
+                    disabled={!statusDirty}
+                    className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    Salvar alterações
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs uppercase text-slate-500">Informações do cliente</p>
+                  <p className="text-sm text-slate-600">Dados básicos do lead.</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-600">Empresa</label>
+                  <input
+                    value={empresaNome}
+                    disabled
+                    className="rounded-lg border bg-slate-50 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-600">Documento</label>
+                  <input value={documento} disabled className="rounded-lg border bg-slate-50 px-3 py-2 text-sm" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-600">Vertical</label>
+                  <input value={vertical} disabled className="rounded-lg border bg-slate-50 px-3 py-2 text-sm" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-600">Cidade / UF</label>
+                  <input value={cidadeUf} disabled className="rounded-lg border bg-slate-50 px-3 py-2 text-sm" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-600">Endereço</label>
+                  <input value={logradouro} disabled className="rounded-lg border bg-slate-50 px-3 py-2 text-sm" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-600">CEP / Número</label>
+                  <input value={cepNumero} disabled className="rounded-lg border bg-slate-50 px-3 py-2 text-sm" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-600">Território</label>
+                  <input value={territorio} disabled className="rounded-lg border bg-slate-50 px-3 py-2 text-sm" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-600">Faturamento presumido</label>
+                  <input value={faturamento} disabled className="rounded-lg border bg-slate-50 px-3 py-2 text-sm" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-600">Oferta / Estratégia</label>
+                  <input
+                    value={`${ofertaMkt} • ${estrategia}`}
+                    disabled
+                    className="rounded-lg border bg-slate-50 px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs uppercase text-slate-500">Contatos & canais</p>
+                  <p className="text-sm text-slate-600">Atualize telefones, e-mail e site.</p>
+                </div>
+                <button
+                  onClick={saveContactFields}
+                  className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                >
+                  Salvar contatos
+                </button>
+              </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-600">Site</label>
+                  <input
+                    value={siteValue}
+                    onChange={(e) => setSiteValue(e.target.value)}
+                    className="rounded-lg border px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-600">E-mail</label>
+                  <input
+                    value={emailValue}
+                    onChange={(e) => setEmailValue(e.target.value)}
+                    className="rounded-lg border px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-600">Contato principal</label>
+                  <input
+                    value={contactName}
+                    onChange={(e) => setContactName(e.target.value)}
+                    className="rounded-lg border px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs uppercase text-slate-500">Telefones</p>
+                <div className="flex flex-col gap-2">
+                  {additionalPhones.map((phone, idx) => (
+                    <div key={`${phone.valor}-${idx}`} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm">
+                      <div>
+                        <p className="font-semibold text-slate-900">{phone.valor}</p>
+                        <p className="text-xs text-slate-500">{phone.rotulo}</p>
                       </div>
                     </div>
+                  ))}
+                  {additionalPhones.length === 0 ? (
+                    <p className="text-sm text-slate-500">Nenhum telefone cadastrado.</p>
+                  ) : null}
+                </div>
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                  <input
+                    value={newPhone.rotulo}
+                    onChange={(e) => setNewPhone((prev) => ({ ...prev, rotulo: e.target.value }))}
+                    placeholder="Rótulo (ex: Comercial)"
+                    className="rounded-lg border px-3 py-2 text-sm"
+                  />
+                  <input
+                    value={newPhone.valor}
+                    onChange={(e) => setNewPhone((prev) => ({ ...prev, valor: e.target.value }))}
+                    placeholder="Telefone"
+                    className="rounded-lg border px-3 py-2 text-sm"
+                  />
+                  <button
+                    onClick={addPhone}
+                    disabled={!newPhone.rotulo || !newPhone.valor || savingPhone}
+                    className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    {savingPhone ? "Salvando..." : "Adicionar telefone"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs uppercase text-slate-500">Enriquecimento online</p>
+                  <p className="text-sm text-slate-600">Sugestões automáticas a partir do CNPJ.</p>
+                </div>
+                <button
+                  onClick={fetchSuggestions}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold hover:bg-slate-50"
+                >
+                  {suggestionsLoading ? "Buscando..." : "Buscar dados"}
+                </button>
+              </div>
+              {suggestionsError ? <p className="text-sm text-red-600">{suggestionsError}</p> : null}
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {suggestions
+                  .filter((s) => !s.ignored)
+                  .map((s) => (
+                    <div key={s.id} className="rounded-lg border border-slate-200 p-3 shadow-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">{s.label}</p>
+                          <p className="text-xs text-slate-500">
+                            {s.type} • Fonte: {s.source}
+                          </p>
+                        </div>
+                        {s.applied ? (
+                          <span className="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-700">
+                            Aplicado
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-2 text-sm text-slate-700 break-words">{renderSuggestionValue(s)}</p>
+                      <div className="mt-3 flex items-center gap-2">
+                        <button
+                          onClick={() => acceptSuggestion(s)}
+                          disabled={s.applied}
+                          className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                        >
+                          Manter
+                        </button>
+                        <button
+                          onClick={() => rejectSuggestion(s)}
+                          className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          Ignorar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                {!suggestionsLoading && suggestions.filter((s) => !s.applied && !s.ignored).length === 0 ? (
+                  <p className="text-sm text-slate-500">Nenhuma sugestão pendente.</p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.2fr_1fr]">
+              <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs uppercase text-slate-500">Catálogo de produtos Vivo</p>
+                    <p className="text-sm text-slate-600">Filtre e adicione ao carrinho do lead.</p>
                   </div>
+                </div>
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                  <select
+                    value={productFilters.tower}
+                    onChange={(e) => setProductFilters((prev) => ({ ...prev, tower: e.target.value }))}
+                    className="rounded-lg border px-3 py-2 text-sm"
+                  >
+                    <option value="">Todas as torres</option>
+                    {TOWER_OPTIONS.map((tower) => (
+                      <option key={tower} value={tower}>
+                        {tower}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={productFilters.category}
+                    onChange={(e) => setProductFilters((prev) => ({ ...prev, category: e.target.value }))}
+                    className="rounded-lg border px-3 py-2 text-sm"
+                  >
+                    <option value="">Todas as categorias</option>
+                    {categoryOptions.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    value={productFilters.search}
+                    onChange={(e) => setProductFilters((prev) => ({ ...prev, search: e.target.value }))}
+                    placeholder="Buscar produto"
+                    className="rounded-lg border px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+                  {filteredCatalog.map((product) => (
+                    <div
+                      key={product.id}
+                      className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    >
+                      <div>
+                        <p className="font-semibold text-slate-900">{product.name}</p>
+                        <p className="text-xs text-slate-500">
+                          {product.tower} • {product.category}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => addProductToLead(product)}
+                        className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        Adicionar
+                      </button>
+                    </div>
+                  ))}
+                  {filteredCatalog.length === 0 ? (
+                    <p className="text-sm text-slate-500">Nenhum produto encontrado.</p>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs uppercase text-slate-500">Carrinho do lead</p>
+                    <p className="text-sm text-slate-600">Produtos planejados para este CNPJ.</p>
+                  </div>
+                  <button
+                    onClick={() => persistProducts(leadProducts)}
+                    disabled={!cartDirty || productsSaving}
+                    className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    {productsSaving ? "Salvando..." : "Salvar carrinho"}
+                  </button>
+                </div>
+                <div className="overflow-hidden rounded-lg border border-slate-200">
+                  <table className="min-w-full divide-y divide-slate-200 text-sm">
+                    <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+                      <tr>
+                        <th className="px-3 py-2">Produto</th>
+                        <th className="px-3 py-2">Qtd</th>
+                        <th className="px-3 py-2">Valor (R$)</th>
+                        <th className="px-3 py-2">Obs.</th>
+                        <th className="px-3 py-2" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {leadProducts.map((item) => (
+                        <tr key={item.productId}>
+                          <td className="px-3 py-2 align-top">
+                            <p className="font-semibold text-slate-900">{item.name}</p>
+                            <p className="text-xs text-slate-500">
+                              {item.tower} • {item.category}
+                            </p>
+                          </td>
+                          <td className="px-3 py-2 align-top">
+                            <input
+                              type="number"
+                              min={1}
+                              value={item.quantity}
+                              onChange={(e) =>
+                                updateProductField(item.productId, "quantity", Number(e.target.value) || 1)
+                              }
+                              className="w-16 rounded-lg border px-2 py-1 text-sm"
+                            />
+                          </td>
+                          <td className="px-3 py-2 align-top">
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={item.monthlyValue ?? ""}
+                              onChange={(e) =>
+                                updateProductField(
+                                  item.productId,
+                                  "monthlyValue",
+                                  e.target.value ? Number(e.target.value) : null,
+                                )
+                              }
+                              className="w-28 rounded-lg border px-2 py-1 text-sm"
+                              placeholder="Opcional"
+                            />
+                          </td>
+                          <td className="px-3 py-2 align-top">
+                            <input
+                              value={item.note ?? ""}
+                              onChange={(e) => updateProductField(item.productId, "note", e.target.value)}
+                              className="w-full rounded-lg border px-2 py-1 text-sm"
+                              placeholder="Observação"
+                            />
+                          </td>
+                          <td className="px-3 py-2 align-top">
+                            <button
+                              onClick={() => removeProduct(item.productId)}
+                              className="text-xs font-semibold text-red-600 hover:text-red-700"
+                            >
+                              Remover
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {leadProducts.length === 0 ? (
+                        <tr>
+                          <td className="px-3 py-3 text-sm text-slate-500" colSpan={5}>
+                            Nenhum produto no carrinho ainda. Adicione pelo catálogo ao lado.
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="space-y-2 rounded-lg border border-dashed border-slate-200 p-3">
+                  <p className="text-xs uppercase text-slate-500">Produto customizado</p>
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+                    <input
+                      value={customProduct.name}
+                      onChange={(e) => setCustomProduct((prev) => ({ ...prev, name: e.target.value }))}
+                      placeholder="Nome"
+                      className="rounded-lg border px-3 py-2 text-sm"
+                    />
+                    <input
+                      type="number"
+                      min={1}
+                      value={customProduct.qty}
+                      onChange={(e) => setCustomProduct((prev) => ({ ...prev, qty: Number(e.target.value) || 1 }))}
+                      placeholder="Qtd"
+                      className="rounded-lg border px-3 py-2 text-sm"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={customProduct.value}
+                      onChange={(e) => setCustomProduct((prev) => ({ ...prev, value: e.target.value }))}
+                      placeholder="Valor (R$)"
+                      className="rounded-lg border px-3 py-2 text-sm"
+                    />
+                    <input
+                      value={customProduct.note}
+                      onChange={(e) => setCustomProduct((prev) => ({ ...prev, note: e.target.value }))}
+                      placeholder="Observação"
+                      className="rounded-lg border px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <button
+                    onClick={addCustomProduct}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Adicionar customizado
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs uppercase text-slate-500">Atividades / Notas</p>
+                  <p className="text-sm text-slate-600">Registre interações e visualize a linha do tempo.</p>
+                </div>
+              </div>
+              <form onSubmit={submitActivity} className="space-y-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-slate-600">Tipo</label>
+                    <select
+                      name="activityType"
+                      value={form.activityType}
+                      onChange={handleFormChange}
+                      className="rounded-lg border px-3 py-2 text-sm"
+                    >
+                      {ACTIVITY_TYPES.map((type) => (
+                        <option key={type} value={type}>
+                          {type}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-slate-600">Canal</label>
+                    <select
+                      name="channel"
+                      value={form.channel}
+                      onChange={handleFormChange}
+                      className="rounded-lg border px-3 py-2 text-sm"
+                    >
+                      {CHANNEL_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-slate-600">Resultado</label>
+                    <select
+                      name="outcomeCode"
+                      value={form.outcomeCode}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          outcomeCode: e.target.value,
+                          outcomeLabel: OUTCOME_OPTIONS.find((o) => o.code === e.target.value)?.label ?? "",
+                        }))
+                      }
+                      className="rounded-lg border px-3 py-2 text-sm"
+                    >
+                      <option value="">Selecione</option>
+                      {OUTCOME_OPTIONS.map((opt) => (
+                        <option key={opt.code} value={opt.code}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-slate-600">Próximo contato</label>
+                    <input
+                      type="datetime-local"
+                      name="nextFollowUpAt"
+                      value={form.nextFollowUpAt}
+                      onChange={handleFormChange}
+                      className="rounded-lg border px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-slate-600">Estágio após atividade</label>
+                    <select
+                      name="newStage"
+                      value={form.newStage}
+                      onChange={(e) => setForm((prev) => ({ ...prev, newStage: e.target.value as LeadStatusId }))}
+                      className="rounded-lg border px-3 py-2 text-sm"
+                    >
+                      {LEAD_STATUS.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-slate-600">Próximo passo</label>
+                    <input
+                      name="nextStepNote"
+                      value={form.nextStepNote}
+                      onChange={handleFormChange}
+                      className="rounded-lg border px-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-600">Observação</label>
+                  <textarea
+                    name="note"
+                    value={form.note}
+                    onChange={handleFormChange}
+                    rows={3}
+                    className="rounded-lg border px-3 py-2 text-sm"
+                    placeholder="Resumo da interação"
+                  />
+                </div>
+                {error ? <p className="text-sm text-red-600">{error}</p> : null}
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    {saving ? "Salvando..." : "Salvar atividade"}
+                  </button>
+                </div>
+              </form>
+
+              <div className="space-y-2">
+                <p className="text-xs uppercase text-slate-500">Timeline</p>
+                <div className="space-y-2 rounded-lg border border-slate-100 p-3">
+                  {activitiesLoading || eventsLoading ? (
+                    <p className="text-sm text-slate-500">Carregando...</p>
+                  ) : null}
+                  {timelineItems.map((item) => (
+                    <div key={item.id} className="flex items-start gap-3 rounded-lg border border-slate-100 bg-white p-3">
+                      <div className="mt-1 h-2 w-2 rounded-full bg-slate-400" aria-hidden />
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-700">
+                            {item.type}
+                          </span>
+                          <span>{formatDate(item.createdAt, true)}</span>
+                          {item.userId ? <span>por {item.userId}</span> : null}
+                        </div>
+                        <p className="text-sm text-slate-800">
+                          {typeof item.payload === "object" && item.payload && "note" in item.payload
+                            ? (item.payload as { note?: string }).note ?? ""
+                            : "Registro de evento"}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                  {timelineItems.length === 0 ? (
+                    <p className="text-sm text-slate-500">Nenhuma atividade registrada.</p>
+                  ) : null}
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+
       {lostModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="w-[min(480px,90vw)] rounded-2xl bg-white p-6 shadow-2xl">
@@ -934,6 +1472,7 @@ function LeadDrawer({
           </div>
         </div>
       ) : null}
+    </>
   );
 }
 
@@ -1309,17 +1848,3 @@ export default function BoardPage() {
     </div>
   );
 }
-  const addCustomProduct = useCallback(() => {
-    if (!customProduct.name.trim()) return;
-    const product: LeadProduct = {
-      productId: `custom-${Date.now()}`,
-      tower: "Custom",
-      category: "Custom",
-      name: customProduct.name.trim(),
-      quantity: customProduct.qty || 1,
-      monthlyValue: customProduct.value ? Number(customProduct.value) : null,
-      note: customProduct.note || null,
-    };
-    queueProductSave([...leadProducts, product]);
-    setCustomProduct({ name: "", value: "", note: "", qty: 1 });
-  }, [customProduct, leadProducts, queueProductSave]);

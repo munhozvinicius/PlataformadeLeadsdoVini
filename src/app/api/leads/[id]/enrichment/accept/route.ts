@@ -18,7 +18,22 @@ type Params = { params: { id: string } };
 async function ensurePermission(leadId: string, userId: string, role: Role) {
   const lead = await prisma.lead.findUnique({
     where: { id: leadId },
-    select: { consultorId: true, ownerId: true, officeId: true, telefones: true },
+    select: {
+      consultorId: true,
+      ownerId: true,
+      officeId: true,
+      telefones: true,
+      emails: true,
+      endereco: true,
+      logradouro: true,
+      cidade: true,
+      estado: true,
+      cep: true,
+      cnae: true,
+      vertical: true,
+      externalData: true,
+      contatoPrincipal: true,
+    },
   });
   if (!lead) return { error: NextResponse.json({ message: "Lead não encontrado" }, { status: 404 }), lead: null };
 
@@ -144,10 +159,24 @@ export async function POST(req: NextRequest, { params }: Params) {
     } catch {
       resp = { nome: suggestion.value };
     }
+    const contatoPayload: { nome?: string | null; cargo?: string | null } = {
+      nome:
+        typeof resp.nome === "string"
+          ? resp.nome
+          : (lead.contatoPrincipal as Record<string, unknown> | null)?.nome
+            ? String((lead.contatoPrincipal as Record<string, unknown> | null)?.nome)
+            : null,
+      cargo:
+        typeof resp.cargo === "string"
+          ? resp.cargo
+          : (lead.contatoPrincipal as Record<string, unknown> | null)?.cargo
+            ? String((lead.contatoPrincipal as Record<string, unknown> | null)?.cargo)
+            : null,
+    };
     await prisma.lead.update({
       where: { id: params.id },
       data: {
-        contatoPrincipal: { nome: (resp.nome as string) ?? lead.contatoPrincipal?.nome, cargo: resp.cargo },
+        contatoPrincipal: contatoPayload,
       },
     });
   }
