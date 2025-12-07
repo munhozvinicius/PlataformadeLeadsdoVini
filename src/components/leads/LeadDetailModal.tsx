@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { LeadCardProps } from "./LeadCard";
-import { Users, DollarSign, Activity, Globe, Linkedin, Instagram, Newspaper, Phone, Mail, Briefcase, UserPlus, Save, Clock, CheckCircle } from "lucide-react";
+import { Activity, Clock } from "lucide-react";
 
 type LeadDetail = LeadCardProps["lead"] & {
   emails?: string[];
@@ -57,13 +57,7 @@ type ValidContact = {
   createdAt: string;
 };
 
-type LeadLoss = {
-  id: string;
-  motivo: string;
-  justificativa: string;
-  createdAt: string;
-  user?: { name?: string; email?: string };
-};
+
 
 const ACTIVITY_TYPES = [
   "Contato inicial",
@@ -132,7 +126,7 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
 
   // Valid Contacts State
   const [contacts, setContacts] = useState<ValidContact[]>(
-    (lead.externalData as any)?.validContacts || []
+    (lead.externalData as { validContacts?: ValidContact[] })?.validContacts || []
   );
   const [newContact, setNewContact] = useState({ name: "", role: "", phone: "", email: "" });
   const [savingContact, setSavingContact] = useState(false);
@@ -143,10 +137,10 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [savingProducts, setSavingProducts] = useState(false);
 
-  const [losses, setLosses] = useState<LeadLoss[]>([]);
+  /* Removed unused losses state - unified into activity feed via ActivityType? If needed, restore and display. */
   const [lossMotivo, setLossMotivo] = useState<string>(lossMotivos[0]);
   const [lossJust, setLossJust] = useState("");
-  const [savingLoss, setSavingLoss] = useState(false);
+  // const [savingLoss, setSavingLoss] = useState(false); // Unused in UI
   const [externalLoading, setExternalLoading] = useState(false);
   const [externalData, setExternalData] = useState<Record<string, unknown> | null>(lead.externalData ?? null);
 
@@ -184,16 +178,10 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
     if (res.ok) setProducts(await res.json());
   }, [lead.id]);
 
-  const loadLosses = useCallback(async () => {
-    const res = await fetch(`/api/lead-losses?leadId=${lead.id}`, { cache: "no-store" });
-    if (res.ok) setLosses(await res.json());
-  }, [lead.id]);
-
   useEffect(() => {
     loadActivities();
     loadProducts();
-    loadLosses();
-  }, [lead.id, loadLosses, loadActivities, loadProducts]);
+  }, [lead.id, loadActivities, loadProducts]);
 
   async function saveActivity() {
     if (!activityForm.note.trim()) return;
@@ -262,15 +250,15 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
 
   async function saveLoss() {
     if (!lossJust.trim()) return;
-    setSavingLoss(true);
+    // setSavingLoss(true);
     await fetch("/api/lead-losses", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ leadId: lead.id, motivo: lossMotivo, justificativa: lossJust }),
     });
-    setSavingLoss(false);
+    // setSavingLoss(false);
     setLossJust("");
-    await loadLosses();
+    // await loadLosses();
     await onRefresh();
   }
 

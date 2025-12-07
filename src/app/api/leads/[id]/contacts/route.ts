@@ -21,7 +21,7 @@ export async function POST(
 
         if (!lead) return new NextResponse("Lead not found", { status: 404 });
 
-        const currentExternal = (lead.externalData as Record<string, any>) || {};
+        const currentExternal = (lead.externalData as Record<string, unknown>) || {};
 
         const updated = await prisma.lead.update({
             where: { id: params.id },
