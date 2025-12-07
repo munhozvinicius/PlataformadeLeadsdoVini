@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { LeadCardProps } from "./LeadCard";
 
 type LeadDetail = LeadCardProps["lead"] & {
   emails?: string[];
-  telefones?: { rotulo: string; valor: string }[];
+  telefones?: { rotulo: string; valor: string; feedback?: "like" | "dislike" | null }[];
   vertical?: string | null;
   cidade?: string | null;
   estado?: string | null;
@@ -16,6 +16,8 @@ type LeadDetail = LeadCardProps["lead"] & {
 
 import { LeadStatusId, LEAD_STATUS } from "@/constants/leadStatus";
 import { PRODUCT_CATALOG } from "@/lib/productCatalog";
+import { PhoneItem } from "./PhoneItem";
+import { CompanyEnrichmentCard } from "./CompanyEnrichmentCard";
 
 type LeadProduct = {
   productId: string;
@@ -129,15 +131,14 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
   const [selectedStatus, setSelectedStatus] = useState(lead.status);
   const [statusDirty, setStatusDirty] = useState(false);
 
-  const phones = useMemo(
-    () =>
-      [
-        ...(lead.telefones ?? []),
-        ...[lead.telefone1, lead.telefone2, lead.telefone3]
-          .filter(Boolean)
-          .map((p) => ({ rotulo: "Telefone", valor: p as string })),
-      ].filter(Boolean),
-    [lead.telefones, lead.telefone1, lead.telefone2, lead.telefone3],
+  const [phonesState, setPhonesState] = useState(
+    [
+      ...(lead.telefones ?? []),
+      ...[lead.telefone1, lead.telefone2, lead.telefone3]
+        .filter(Boolean)
+        .map((p) => ({ rotulo: "Telefone", valor: p as string })),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ].map(p => ({ ...p, feedback: (p as any).feedback ?? null }))
   );
 
   const loadActivities = useCallback(async () => {
@@ -225,13 +226,25 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
 
   async function runEnrichment() {
     setExternalLoading(true);
-    const res = await fetch(`/api/leads/enrich?id=${lead.id}`, { method: "POST" });
+    const res = await fetch(`/api/leads/enrich?cnpj=${lead.cnpj ?? ""}&id=${lead.id}`, { method: "POST" });
     setExternalLoading(false);
     if (res.ok) {
       const data = await res.json();
       setExternalData(data);
-      await onRefresh();
+      // No full refresh needed, usually
     }
+  }
+
+  async function handlePhoneFeedback(valor: string, feedback: "like" | "dislike" | null) {
+    const newPhones = phonesState.map(p => p.valor === valor ? { ...p, feedback } : p);
+    setPhonesState(newPhones);
+
+    // Save immediately
+    await fetch(`/api/leads/${lead.id}/telefones`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ telefones: newPhones })
+    });
   }
 
   return (
@@ -317,7 +330,6 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
               { id: "atividades", label: "Atividades & Timeline" },
               { id: "produtos", label: "Planta Vivo" },
               { id: "perda", label: "Registrar Perda" },
-              { id: "externo", label: "Dados Externos" }
             ].map((t) => (
               <button
                 key={t.id}
@@ -355,12 +367,33 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] uppercase text-slate-500 tracking-widest">Telefones</label>
-                    <div className="bg-black border border-slate-800 p-3 text-white font-mono text-sm leading-relaxed">
-                      {phones.length ? phones.map(p => `${p.valor} `) : "Sem telefone"}
+                    <label className="text-[10px] uppercase text-slate-500 tracking-widest mb-2 block">Telefones & Feedback</label>
+                    <div className="space-y-2">
+                      {phonesState.length > 0 ? (
+                        phonesState.map((p, i) => (
+                          <PhoneItem
+                            key={i}
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            phone={p as any}
+                            onFeedback={handlePhoneFeedback}
+                          />
+                        ))
+                      ) : (
+                        <p className="text-slate-600 text-xs italic">Sem telefones cadastrados.</p>
+                      )}
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Enrichment Section */}
+              <div className="border-l-4 border-neon-blue pl-4 pt-2">
+                <CompanyEnrichmentCard
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  data={externalData as any}
+                  loading={externalLoading}
+                  onEnrich={runEnrichment}
+                />
               </div>
             </div>
           )}
@@ -576,25 +609,7 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
             </div>
           )}
 
-          {tab === "externo" && (
-            <div className="py-4 space-y-4">
-              <div className="bg-pic-card border border-dashed border-neon-green/30 p-4">
-                <p className="text-sm text-slate-400 font-mono mb-4">
-                  Beta: coleta leve de dados públicos via internet.
-                </p>
-                <button
-                  onClick={runEnrichment}
-                  disabled={externalLoading}
-                  className="w-full border-2 border-neon-green text-neon-green px-4 py-2 text-sm font-bold uppercase hover:bg-neon-green hover:text-black transition-colors disabled:opacity-50"
-                >
-                  {externalLoading ? "Buscando..." : "Buscar informações na Internet (Beta)"}
-                </button>
-              </div>
-              <pre className="bg-black border border-slate-800 p-4 text-xs text-neon-green font-mono whitespace-pre-wrap overflow-auto max-h-[300px]">
-                {externalData ? JSON.stringify(externalData, null, 2) : "Nenhum dado coletado ainda."}
-              </pre>
-            </div>
-          )}
+
         </div>
       </div>
     </div>

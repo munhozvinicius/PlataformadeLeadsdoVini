@@ -1,65 +1,65 @@
-export const dynamic = "force-dynamic";
-
-import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { Role } from "@prisma/client";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 
-// Beta: coleta leve simulada; em produção, substituir por chamadas reais de APIs públicas.
-async function fakeEnrichment(documento?: string | null) {
-  const now = new Date().toISOString();
-  return {
-    fonte: "beta-enrichment",
-    coletadoEm: now,
-    website: "https://empresa-exemplo.com",
-    telefoneGoogle: "+55 11 4002-8922",
-    whatsapp: "+55 11 98888-7777",
-    funcionariosLinkedIn: 120,
-    socios: documento ? [{ nome: "Sócio Exemplo", documento }] : [],
-    emailsPublicos: ["contato@empresa-exemplo.com"],
-    redesSociais: ["https://linkedin.com/company/empresa-exemplo"],
-  };
-}
-
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  if (!session) return new NextResponse("Unauthorized", { status: 401 });
 
-  const leadId = req.nextUrl.searchParams.get("id");
-  if (!leadId) return NextResponse.json({ message: "id é obrigatório" }, { status: 400 });
+  const { searchParams } = new URL(req.url);
+  const leadId = searchParams.get("id");
+  const cnpjRaw = searchParams.get("cnpj");
 
-  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
-  if (!lead) return NextResponse.json({ message: "Lead não encontrado" }, { status: 404 });
+  if (!leadId) return new NextResponse("Missing lead ID", { status: 400 });
 
-  // Permissão básica
-  if (session.user.role === Role.CONSULTOR && lead.consultorId !== session.user.id) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  // Limpar CNPJ
+  const cnpj = cnpjRaw?.replace(/\D/g, "");
+
+  if (!cnpj) {
+    return new NextResponse("CNPJ inválido ou não informado", { status: 400 });
   }
 
-  const enriched = await fakeEnrichment(lead.documento ?? lead.cnpj);
+  try {
+    // 1. Fetch data from BrasilAPI
+    const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
 
-  await prisma.lead.update({
-    where: { id: leadId },
-    data: {
-      externalData: enriched,
-      site: enriched.website ?? lead.site ?? undefined,
-      lastActivityAt: new Date(),
-      lastInteractionAt: new Date(),
-    },
-  });
+    if (!res.ok) {
+      return new NextResponse(`Erro ao consultar BrasilAPI: ${res.statusText}`, { status: res.status });
+    }
 
-  await prisma.leadActivity.create({
-    data: {
-      leadId,
-      userId: session.user.id,
-      campaignId: lead.campanhaId,
-      activityType: "DADOS_ENRIQUECIDOS",
-      note: `Dados enriquecidos (beta): ${JSON.stringify(enriched)}`,
-      stageBefore: lead.status,
-      stageAfter: lead.status,
-    },
-  });
+    const data = await res.json();
 
-  return NextResponse.json(enriched, { status: 200 });
+    // 2. Map fields to our needs
+    const enrichedData = {
+      razao_social: data.razao_social,
+      nome_fantasia: data.nome_fantasia,
+      cnpj: data.cnpj,
+      cnae_fiscal_descricao: data.cnae_fiscal_descricao,
+      capital_social: data.capital_social,
+      qsa: data.qsa // Quadro de Sócios e Administradores
+    };
+
+    // 3. Update Lead
+    // We merge with existing externalData if any, or overwrite
+    // We also update core fields if they are empty
+
+    const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+
+    await prisma.lead.update({
+      where: { id: leadId },
+      data: {
+        externalData: enrichedData,
+        // Opcional: atualizar campos principais se estiverem vazios
+        razaoSocial: lead?.razaoSocial ? undefined : data.razao_social,
+        nomeFantasia: lead?.nomeFantasia ? undefined : data.nome_fantasia,
+        cnae: lead?.cnae ? undefined : data.cnae_fiscal_descricao
+      }
+    });
+
+    return NextResponse.json(enrichedData);
+  } catch (error) {
+    console.error("Enrichment error:", error);
+    return new NextResponse("Internal Error", { status: 500 });
+  }
 }
