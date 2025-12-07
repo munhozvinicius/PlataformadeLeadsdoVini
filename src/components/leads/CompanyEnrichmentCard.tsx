@@ -1,5 +1,5 @@
 import React from "react";
-import { Users, DollarSign, Activity, Globe } from "lucide-react";
+import { Users, DollarSign, Activity, Globe, Linkedin, Instagram, Newspaper } from "lucide-react";
 
 type CompanyData = {
     razao_social?: string;
@@ -26,6 +26,8 @@ export function CompanyEnrichmentCard({ data, loading, onEnrich, companyName, ci
         val ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val) : '-';
 
     const mapsQuery = encodeURIComponent(`${companyName || ""} ${city || ""}`.trim() || "Empresa");
+    const linkedInQuery = encodeURIComponent(`site:linkedin.com/company "${companyName || "Empresa"}"`);
+    const newsQuery = encodeURIComponent(`"${companyName || "Empresa"}" notícias`);
 
     return (
         <div className="border border-neon-blue/30 bg-pic-card p-0 overflow-hidden shadow-[0_0_20px_rgba(0,240,255,0.1)] transition-all hover:border-neon-blue">
@@ -40,6 +42,37 @@ export function CompanyEnrichmentCard({ data, loading, onEnrich, companyName, ci
                     </h3>
                 </div>
                 <div className="flex items-center gap-2">
+                    {/* Social Search Shortcuts */}
+                    <div className="flex mr-2 border-r border-slate-700 pr-2 gap-1">
+                        <a
+                            href={`https://www.google.com/search?q=${linkedInQuery}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 hover:bg-pic-zinc rounded text-slate-400 hover:text-[#0077b5] transition-colors"
+                            title="Buscar no LinkedIn"
+                        >
+                            <Linkedin size={14} />
+                        </a>
+                        <a
+                            href={`https://www.instagram.com/explore/tags/${(companyName || "").replace(/\s+/g, '')}/`} // Basic hashtag search or direct user search might be harder without exact handle
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 hover:bg-pic-zinc rounded text-slate-400 hover:text-[#E1306C] transition-colors"
+                            title="Buscar no Instagram"
+                        >
+                            <Instagram size={14} />
+                        </a>
+                        <a
+                            href={`https://www.google.com/search?q=${newsQuery}&tbm=nws`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 hover:bg-pic-zinc rounded text-slate-400 hover:text-green-400 transition-colors"
+                            title="Buscar Notícias"
+                        >
+                            <Newspaper size={14} />
+                        </a>
+                    </div>
+
                     <a
                         href={`https://www.google.com/maps/search/?api=1&query=${mapsQuery}`}
                         target="_blank"

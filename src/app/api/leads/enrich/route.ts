@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { fetchCompanyData } from "@/services/enrichment";
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -21,39 +22,30 @@ export async function POST(req: Request) {
   }
 
   try {
-    // 1. Fetch data from BrasilAPI
-    const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+    // 1. Fetch data using our robust service
+    const enrichedData = await fetchCompanyData(cnpj);
 
-    if (!res.ok) {
-      return new NextResponse(`Erro ao consultar BrasilAPI: ${res.statusText}`, { status: res.status });
+    if (!enrichedData) {
+      return new NextResponse("Não foi possível obter dados de nenhuma fonte externa.", { status: 404 });
     }
-
-    const data = await res.json();
-
-    // 2. Map fields to our needs
-    const enrichedData = {
-      razao_social: data.razao_social,
-      nome_fantasia: data.nome_fantasia,
-      cnpj: data.cnpj,
-      cnae_fiscal_descricao: data.cnae_fiscal_descricao,
-      capital_social: data.capital_social,
-      qsa: data.qsa // Quadro de Sócios e Administradores
-    };
-
-    // 3. Update Lead
-    // We merge with existing externalData if any, or overwrite
-    // We also update core fields if they are empty
 
     const lead = await prisma.lead.findUnique({ where: { id: leadId } });
 
+    // 2. Update Lead
     await prisma.lead.update({
       where: { id: leadId },
       data: {
-        externalData: enrichedData,
-        // Opcional: atualizar campos principais se estiverem vazios
-        razaoSocial: lead?.razaoSocial ? undefined : data.razao_social,
-        nomeFantasia: lead?.nomeFantasia ? undefined : data.nome_fantasia,
-        cnae: lead?.cnae ? undefined : data.cnae_fiscal_descricao
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        externalData: enrichedData as any, // Json type in Prisma
+        // Update core fields if empty
+        razaoSocial: lead?.razaoSocial ? undefined : enrichedData.razao_social,
+        nomeFantasia: lead?.nomeFantasia ? undefined : enrichedData.nome_fantasia,
+        cnae: lead?.cnae ? undefined : enrichedData.cnae_fiscal_descricao,
+        // Also update address if available and empty
+        logradouro: lead?.logradouro ? undefined : enrichedData.logradouro,
+        numero: lead?.numero ? undefined : enrichedData.numero,
+        cidade: lead?.cidade ? undefined : enrichedData.municipio,
+        estado: lead?.estado ? undefined : enrichedData.uf,
       }
     });
 
