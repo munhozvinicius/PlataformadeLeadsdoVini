@@ -10,7 +10,7 @@ export async function GET() {
     const session = await getServerSession(authOptions);
     const allowedRoles: string[] = [Role.MASTER, Role.GERENTE_SENIOR, Role.GERENTE_NEGOCIOS];
 
-    if (!session?.user || !allowedRoles.includes(session.user.role)) {
+    if (!session?.user || !allowedRoles.includes(session.user.role || "")) {
         return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
     const allowedRoles: string[] = [Role.MASTER, Role.GERENTE_SENIOR, Role.GERENTE_NEGOCIOS];
 
-    if (!session?.user || !allowedRoles.includes(session.user.role)) {
+    if (!session?.user || !allowedRoles.includes(session.user.role || "")) {
         return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
