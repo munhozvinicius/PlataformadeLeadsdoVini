@@ -21,7 +21,8 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     redirect("/login");
   }
 
-  const links = session.user.role === "MASTER" ? masterLinks : userLinks;
+  const userProfile = session.user.profile ?? session.user.role;
+  const links = userProfile === "MASTER" ? masterLinks : userLinks;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -33,7 +34,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               <p className="text-lg font-semibold">Leads Industriais</p>
               <p className="text-sm font-semibold text-slate-900">{session.user.name ?? "Consultor"}</p>
               <p className="text-sm text-slate-500">{session.user.email}</p>
-              <p className="text-xs text-slate-400 mt-1">Perfil: {session.user.role}</p>
+              <p className="text-xs text-slate-400 mt-1">Perfil: {userProfile}</p>
             </div>
 
             <nav className="flex flex-col gap-2">

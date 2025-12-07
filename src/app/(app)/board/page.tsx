@@ -11,10 +11,10 @@ import React, {
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { LEAD_STATUS, LeadStatusId } from "@/constants/leadStatus";
-import { Role } from "@prisma/client";
+import { Role, Profile } from "@prisma/client";
 import { PRODUCT_CATALOG, ProductCatalogItem, TOWER_OPTIONS } from "@/lib/productCatalog";
 
-type ViewerRole = Role;
+type ViewerRole = Role | Profile;
 
 type LeadProduct = {
   productId: string;
@@ -1745,17 +1745,18 @@ export default function BoardPage() {
     if (status === "unauthenticated") {
       router.replace("/login");
     }
-    if (status === "authenticated" && session?.user.role === "CONSULTOR") {
+    const sessionProfile = session?.user.profile ?? session?.user.role;
+    if (status === "authenticated" && sessionProfile === "CONSULTOR") {
       setSelectedConsultant(session.user.id);
     }
   }, [status, session, router]);
 
   useEffect(() => {
     if (status !== "authenticated" || !session?.user) return;
-    if (session.user.role === "CONSULTOR") return;
-    const sessionRole = session.user.role ?? "";
+    const sessionProfile = session.user.profile ?? session.user.role ?? "";
+    if (sessionProfile === "CONSULTOR") return;
     const canSelectOtherConsultant = ["MASTER", "GERENTE_SENIOR", "GERENTE_NEGOCIOS"].includes(
-      sessionRole,
+      sessionProfile,
     );
     const consultantFromQuery = searchParams.get("consultantId");
     const campaignFromQuery = searchParams.get("campaignId");
@@ -1789,7 +1790,7 @@ export default function BoardPage() {
     return <div>Carregando...</div>;
   }
 
-  const viewerRole = session.user.role as ViewerRole;
+  const viewerRole = (session.user.profile ?? session.user.role) as ViewerRole;
 
   return (
     <div className="relative space-y-4">
@@ -1798,7 +1799,8 @@ export default function BoardPage() {
           <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Board</p>
           <h1 className="text-2xl font-semibold">Esteira de leads</h1>
           <p className="text-sm text-slate-500">
-            {session.user.name ?? session.user.email} • Perfil: {session.user.role}
+            {session.user.name ?? session.user.email} • Perfil:{" "}
+            {session.user.profile ?? session.user.role}
           </p>
         </div>
         <div className="flex flex-wrap gap-3 items-center">
