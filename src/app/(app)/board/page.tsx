@@ -305,17 +305,9 @@ export default function BoardPage() {
         <div className="p-4 flex flex-col md:flex-row gap-4 items-center justify-between max-w-[1920px] mx-auto w-full">
 
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-neon-pink flex items-center justify-center font-black text-black text-xl shadow-[0_0_15px_rgba(255,0,153,0.5)]">
-              LP
-            </div>
-            <div>
-              <h1 className="text-xl font-black text-white uppercase tracking-tighter">
-                Leads <span className="text-neon-pink">Platform</span>
-              </h1>
-              <p className="text-[10px] text-slate-500 uppercase tracking-widest">
-                CRM & Performance Dashboard
-              </p>
-            </div>
+            <h1 className="text-xl font-black text-white uppercase tracking-tighter">
+              Área de <span className="text-neon-pink">Trabalho</span>
+            </h1>
           </div>
 
           <div className="flex items-center gap-3">

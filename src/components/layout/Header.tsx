@@ -11,6 +11,14 @@ export function Header({ userName, userRole, onOpenProfile }: HeaderProps) {
     return (
         <header className="bg-pic-card border-b border-pic-zinc h-20 px-8 flex items-center justify-between sticky top-0 z-40 shadow-lg">
             <div className="flex items-center gap-6">
+                {/* Logo Area */}
+                <div className="flex items-center gap-2 mr-4">
+                    <span className="text-neon-pink font-black text-3xl tracking-tighter drop-shadow-[0_0_5px_rgba(255,0,153,0.5)]">PIC</span>
+                    <span className="text-white text-[10px] font-bold leading-tight max-w-[100px] uppercase">
+                        Plataforma de Inteligência Comercial
+                    </span>
+                </div>
+
                 {(userRole === "MASTER" || userRole === "GERENTE_SENIOR" || userRole === "PROPRIETARIO") && (
                     <nav className="hidden md:flex items-center gap-4 text-sm font-medium">
                         <a href="/admin/dashboard" className="text-slate-400 hover:text-white transition-colors">Home</a>

@@ -4,7 +4,7 @@ export function Footer() {
     return (
         <footer className="bg-pic-dark border-t border-pic-zinc py-6 px-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs font-mono text-slate-500 uppercase tracking-widest">
             <div>
-                <span className="text-neon-pink">PIC &copy; 2024</span> • Desenvolvido por <span className="text-white font-bold">Vinicius Munhoz</span>
+                <span className="text-neon-pink">PIC &copy;</span> • Desenvolvido por <span className="text-white font-bold">Vinicius Munhoz</span>
             </div>
 
             <a
