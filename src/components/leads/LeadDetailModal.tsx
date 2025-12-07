@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { LeadCardProps } from "./LeadCard";
+import { Users, DollarSign, Activity, Globe, Linkedin, Instagram, Newspaper, Phone, Mail, Briefcase, UserPlus, Save, Clock, CheckCircle } from "lucide-react";
 
 type LeadDetail = LeadCardProps["lead"] & {
   emails?: string[];
@@ -46,6 +47,14 @@ type LeadActivity = {
   nextStepNote?: string | null;
   createdAt: string;
   user?: { id: string; name?: string | null; email?: string | null };
+};
+
+type ValidContact = {
+  name: string;
+  role: string;
+  phone: string;
+  email: string;
+  createdAt: string;
 };
 
 type LeadLoss = {
@@ -107,8 +116,9 @@ const lossMotivos = [
 ] as const;
 
 export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
-  const [tab, setTab] = useState<"dados" | "atividades" | "produtos" | "perda" | "externo">("dados");
-  // Activity / Notes State
+  const [tab, setTab] = useState<"home" | "tratativa" | "produtos">("home");
+
+  // Activity / Notes State with Unified Status
   const [activities, setActivities] = useState<LeadActivity[]>([]);
   const [activityForm, setActivityForm] = useState({
     type: ACTIVITY_TYPES[0] as string,
@@ -116,8 +126,17 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
     outcome: "",
     note: "",
     nextFollowUp: "",
+    stage: lead.status // Unified Stage Change
   });
   const [savingActivity, setSavingActivity] = useState(false);
+
+  // Valid Contacts State
+  const [contacts, setContacts] = useState<ValidContact[]>(
+    (lead.externalData as any)?.validContacts || []
+  );
+  const [newContact, setNewContact] = useState({ name: "", role: "", phone: "", email: "" });
+  const [savingContact, setSavingContact] = useState(false);
+  const [showContactForm, setShowContactForm] = useState(false);
 
   // Products State
   const [products, setProducts] = useState<LeadProduct[]>([]);
@@ -131,10 +150,6 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
   const [externalLoading, setExternalLoading] = useState(false);
   const [externalData, setExternalData] = useState<Record<string, unknown> | null>(lead.externalData ?? null);
 
-  // Status Editing
-  const [selectedStatus, setSelectedStatus] = useState(lead.status);
-  const [statusDirty, setStatusDirty] = useState(false);
-
   const [phonesState, setPhonesState] = useState(
     [
       ...(lead.telefones ?? []),
@@ -144,6 +159,20 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ].map(p => ({ ...p, feedback: (p as any).feedback ?? null }))
   );
+
+  // Status Management (Missing in original?)
+  const [selectedStatus, setSelectedStatus] = useState<LeadStatusId>(lead.status as LeadStatusId);
+  const [statusDirty, setStatusDirty] = useState(false);
+
+  async function handleStatusSave() {
+    await fetch(`/api/leads/${lead.id}/status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: selectedStatus }),
+    });
+    setStatusDirty(false);
+    await onRefresh();
+  }
 
   const loadActivities = useCallback(async () => {
     const res = await fetch(`/api/activities?leadId=${lead.id}`, { cache: "no-store" });
@@ -169,6 +198,8 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
   async function saveActivity() {
     if (!activityForm.note.trim()) return;
     setSavingActivity(true);
+
+    // 1. Save Activity
     await fetch("/api/activities", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -182,6 +213,17 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
         nextFollowUpAt: activityForm.nextFollowUp ? new Date(activityForm.nextFollowUp).toISOString() : null,
       }),
     });
+
+    // 2. Update Status if changed from original lead status
+    // Note: We compare with current payload stage vs lead.status
+    if (activityForm.stage && activityForm.stage !== lead.status) {
+      await fetch(`/api/leads/${lead.id}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: activityForm.stage }),
+      });
+    }
+
     setActivityForm(prev => ({ ...prev, note: "", outcome: "" }));
     setSavingActivity(false);
     await loadActivities();
@@ -200,17 +242,21 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
     await onRefresh();
   }
 
-  async function handleStatusSave() {
-    if (selectedStatus === "PERDIDO" && !lossMotivo) {
-      setTab("perda");
-      return;
-    }
-    await fetch(`/api/leads/${lead.id}/status`, {
-      method: "POST",
+  async function saveContact() {
+    if (!newContact.name || !newContact.phone) return;
+    setSavingContact(true);
+    const updatedContacts = [...contacts, { ...newContact, createdAt: new Date().toISOString() }];
+
+    await fetch(`/api/leads/${lead.id}/contacts`, {
+      method: 'POST',
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: selectedStatus }),
+      body: JSON.stringify({ contacts: updatedContacts })
     });
-    setStatusDirty(false);
+
+    setContacts(updatedContacts);
+    setNewContact({ name: "", role: "", phone: "", email: "" });
+    setShowContactForm(false);
+    setSavingContact(false);
     await onRefresh();
   }
 
@@ -333,14 +379,13 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
           {/* Custom Tab Navigation that looks brutalist */}
           <div className="flex flex-wrap gap-4 mb-6 border-b border-slate-800 pb-1">
             {[
-              { id: "dados", label: "Dados Básicos" },
-              { id: "atividades", label: "Atividades & Timeline" },
+              { id: "home", label: "Home" },
+              { id: "tratativa", label: "Tratativa" },
               { id: "produtos", label: "Planta Vivo" },
-              { id: "perda", label: "Registrar Perda" },
             ].map((t) => (
               <button
                 key={t.id}
-                onClick={() => setTab(t.id as "dados" | "atividades" | "produtos" | "perda" | "externo")}
+                onClick={() => setTab(t.id as "home" | "tratativa" | "produtos")}
                 className={`uppercase tracking-widest font-bold text-sm pb-2 border-b-2 transition-colors ${tab === t.id ? "text-neon-green border-neon-green" : "text-slate-600 border-transparent hover:text-slate-400"
                   }`}
               >
@@ -350,31 +395,85 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
           </div>
 
           {/* Tab Content Styled Brutalist */}
-          {tab === "dados" && (
+          {tab === "home" && (
             <div className="space-y-6">
-              <div className="border-l-4 border-neon-green pl-4">
-                <h3 className="text-xl font-bold text-white uppercase tracking-wider mb-4">Dados da Empresa</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase text-slate-500 tracking-widest">Razão Social</label>
-                    <div className="bg-black border border-slate-800 p-3 text-white font-mono text-sm">
-                      {lead.razaoSocial ?? "-"}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                {/* Left Column: Basic Info & Contacts */}
+                <div className="space-y-6">
+                  <div className="border-l-4 border-neon-green pl-4">
+                    <h3 className="text-xl font-bold text-white uppercase tracking-wider mb-4">Dados da Empresa</h3>
+                    <div className="space-y-4">
+                      <div className="space-y-1">
+                        <label className="text-[10px] uppercase text-slate-500 tracking-widest">Razão Social</label>
+                        <div className="bg-black border border-slate-800 p-3 text-white font-mono text-sm">
+                          {lead.razaoSocial ?? "-"}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase text-slate-500 tracking-widest">Documento</label>
+                          <div className="bg-black border border-slate-800 p-3 text-white font-mono text-sm">
+                            {lead.cnpj ?? "-"}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase text-slate-500 tracking-widest">Cidade / UF</label>
+                          <div className="bg-black border border-slate-800 p-3 text-white font-mono text-sm">
+                            {lead.cidade ?? "-"} / {lead.estado ?? "-"}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase text-slate-500 tracking-widest">Documento</label>
-                    <div className="bg-black border border-slate-800 p-3 text-white font-mono text-sm">
-                      {lead.cnpj ?? "-"}
+
+                  <div className="border-l-4 border-neon-blue pl-4">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-xl font-bold text-white uppercase tracking-wider">Contatos Válidos</h3>
+                      <button
+                        onClick={() => setShowContactForm(!showContactForm)}
+                        className="bg-neon-blue text-black text-[10px] uppercase font-black px-3 py-1 hover:bg-white"
+                      >
+                        + Adicionar
+                      </button>
+                    </div>
+
+                    {showContactForm && (
+                      <div className="bg-slate-900/50 p-4 border border-slate-700 mb-4 animate-in fade-in slide-in-from-top-2">
+                        <div className="grid grid-cols-2 gap-2 mb-2">
+                          <input placeholder="Nome" value={newContact.name} onChange={e => setNewContact({ ...newContact, name: e.target.value })} className="bg-black border border-slate-600 text-white text-xs p-2" />
+                          <input placeholder="Cargo/Papel" value={newContact.role} onChange={e => setNewContact({ ...newContact, role: e.target.value })} className="bg-black border border-slate-600 text-white text-xs p-2" />
+                          <input placeholder="Telefone" value={newContact.phone} onChange={e => setNewContact({ ...newContact, phone: e.target.value })} className="bg-black border border-slate-600 text-white text-xs p-2" />
+                          <input placeholder="Email" value={newContact.email} onChange={e => setNewContact({ ...newContact, email: e.target.value })} className="bg-black border border-slate-600 text-white text-xs p-2" />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <button onClick={() => setShowContactForm(false)} className="text-xs text-slate-500 uppercase">Cancelar</button>
+                          <button onClick={saveContact} disabled={savingContact} className="text-xs bg-neon-green text-black px-4 py-1 font-bold uppercase hover:bg-white">
+                            {savingContact ? "Salvando..." : "Salvar Contato"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+                      {contacts.map((c, i) => (
+                        <div key={i} className="flex justify-between items-center bg-pic-card border border-slate-800 p-2 hover:border-slate-600">
+                          <div>
+                            <p className="text-sm font-bold text-white">{c.name}</p>
+                            <p className="text-[10px] text-slate-500 uppercase">{c.role}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs text-neon-blue font-mono">{c.phone}</p>
+                            <p className="text-[10px] text-slate-600">{c.email}</p>
+                          </div>
+                        </div>
+                      ))}
+                      {contacts.length === 0 && <p className="text-xs text-slate-600 italic">Nenhum contato qualificado.</p>}
                     </div>
                   </div>
+
                   <div className="space-y-1">
-                    <label className="text-[10px] uppercase text-slate-500 tracking-widest">Cidade / UF</label>
-                    <div className="bg-black border border-slate-800 p-3 text-white font-mono text-sm">
-                      {lead.cidade ?? "-"} / {lead.estado ?? "-"}
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase text-slate-500 tracking-widest mb-2 block">Telefones & Feedback</label>
+                    <label className="text-[10px] uppercase text-slate-500 tracking-widest mb-2 block">Telefones (Geral)</label>
                     <div className="space-y-2">
                       {phonesState.length > 0 ? (
                         phonesState.map((p, i) => (
@@ -391,95 +490,161 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Enrichment Section */}
-              <div className="border-l-4 border-neon-blue pl-4 pt-2">
-                <CompanyEnrichmentCard
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  data={externalData as any}
-                  loading={externalLoading}
-                  onEnrich={runEnrichment}
-                  companyName={lead.razaoSocial ?? lead.nomeFantasia ?? ""}
-                  city={lead.cidade ?? ""}
-                />
+                {/* Right Column: Enrichment */}
+                <div className="border-l-4 border-neon-pink pl-0 md:pl-0 pt-0">
+                  <CompanyEnrichmentCard
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    data={externalData as any}
+                    loading={externalLoading}
+                    onEnrich={runEnrichment}
+                    companyName={lead.razaoSocial ?? lead.nomeFantasia ?? ""}
+                    city={lead.cidade ?? ""}
+                  />
+                </div>
               </div>
             </div>
           )}
 
-          {tab === "atividades" && (
+          {tab === "tratativa" && (
             <div className="space-y-6">
-              {/* Activity Form */}
-              <div className="bg-pic-card border border-2 border-slate-700 p-5 shadow-lg">
-                <p className="text-xs font-bold uppercase text-slate-400 tracking-widest mb-4">Nova Atividade</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <select
-                    value={activityForm.type}
-                    onChange={e => setActivityForm(p => ({ ...p, type: e.target.value }))}
-                    className="bg-black border border-slate-600 text-white text-sm p-3 focus:border-neon-pink outline-none"
-                  >
-                    {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                  <select
-                    value={activityForm.channel}
-                    onChange={e => setActivityForm(p => ({ ...p, channel: e.target.value }))}
-                    className="bg-black border border-slate-600 text-white text-sm p-3 focus:border-neon-pink outline-none"
-                  >
-                    {CHANNEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                  <select
-                    value={activityForm.outcome}
-                    onChange={e => setActivityForm(p => ({ ...p, outcome: e.target.value }))}
-                    className="bg-black border border-slate-600 text-white text-sm p-3 focus:border-neon-pink outline-none"
-                  >
-                    <option value="">Selecione Resultado...</option>
-                    {OUTCOME_OPTIONS.map(o => <option key={o.code} value={o.code}>{o.label}</option>)}
-                  </select>
-                  <input
-                    type="datetime-local"
-                    value={activityForm.nextFollowUp}
-                    onChange={e => setActivityForm(p => ({ ...p, nextFollowUp: e.target.value }))}
-                    className="bg-black border border-slate-600 text-white text-sm p-3 focus:border-neon-pink outline-none placeholder-slate-500"
-                  />
+              {/* Unified Activity & Status Form */}
+              <div className="bg-pic-card border-2 border-slate-700 p-5 shadow-lg relative overflow-hidden">
+                <div className="columns-1">
+                  <p className="text-xs font-bold uppercase text-slate-400 tracking-widest mb-4 flex items-center gap-2">
+                    <Activity size={14} className="text-neon-pink" />
+                    Nova Interação / Movimentação
+                  </p>
                 </div>
-                <textarea
-                  value={activityForm.note}
-                  onChange={e => setActivityForm(p => ({ ...p, note: e.target.value }))}
-                  className="w-full bg-black border border-slate-600 text-white text-sm p-3 font-mono focus:border-neon-pink outline-none mb-4"
-                  rows={3}
-                  placeholder="Descreva a interação..."
-                />
-                <div className="flex justify-end">
-                  <button
-                    onClick={saveActivity}
-                    disabled={savingActivity}
-                    className="bg-white text-black font-black uppercase text-xs px-6 py-3 hover:bg-neon-pink hover:text-white transition-colors"
-                  >
-                    {savingActivity ? "Salvando..." : "Registrar Atividade"}
-                  </button>
+
+                <div className="space-y-4">
+                  {/* Linha 1: Tipo, Canal, Resultado */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <select
+                      value={activityForm.type}
+                      onChange={e => setActivityForm(p => ({ ...p, type: e.target.value }))}
+                      className="bg-black border border-slate-600 text-white text-sm p-3 focus:border-neon-pink outline-none"
+                    >
+                      {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <select
+                      value={activityForm.channel}
+                      onChange={e => setActivityForm(p => ({ ...p, channel: e.target.value }))}
+                      className="bg-black border border-slate-600 text-white text-sm p-3 focus:border-neon-pink outline-none"
+                    >
+                      {CHANNEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                    <input
+                      type="datetime-local"
+                      value={activityForm.nextFollowUp}
+                      onChange={e => setActivityForm(p => ({ ...p, nextFollowUp: e.target.value }))}
+                      className="bg-black border border-slate-600 text-white text-sm p-3 focus:border-neon-pink outline-none placeholder-slate-500"
+                    />
+                  </div>
+
+                  {/* Linha 2: Texto e Resultado */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <select
+                      value={activityForm.outcome}
+                      onChange={e => setActivityForm(p => ({ ...p, outcome: e.target.value }))}
+                      className="bg-black border border-slate-600 text-white text-sm p-3 focus:border-neon-pink outline-none"
+                    >
+                      <option value="">Selecione Resultado...</option>
+                      {OUTCOME_OPTIONS.map(o => <option key={o.code} value={o.code}>{o.label}</option>)}
+                    </select>
+
+                    {/* Stage Change within Activity */}
+                    <div className="relative">
+                      <select
+                        className="w-full bg-pic-dark border border-cyan-500 text-white px-3 py-3 appearance-none font-bold uppercase text-xs tracking-wider focus:shadow-[0_0_15px_rgba(0,240,255,0.3)] transition-shadow outline-none"
+                        value={activityForm.stage ?? ""}
+                        onChange={(e) => setActivityForm(p => ({ ...p, stage: e.target.value }))}
+                      >
+                        {LEAD_STATUS.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                      </select>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-cyan-500 pointer-events-none text-xs">▼</div>
+                    </div>
+                  </div>
+
+                  {/* Loss Reason Fields (Conditional) */}
+                  {(activityForm.stage === "lost" || activityForm.stage === "perda" || activityForm.stage === "desqualificado") && ( // Adjust ID based on constants
+                    <div className="bg-red-900/20 border border-red-500/50 p-4 animate-in slide-in-from-top-2">
+                      <p className="text-red-400 text-xs font-bold uppercase mb-2">Motivo da Perda (Palitagem)</p>
+                      <select
+                        value={lossMotivo}
+                        onChange={(e) => setLossMotivo(e.target.value)}
+                        className="w-full bg-black text-white border border-red-500/50 p-2 text-sm mb-2"
+                      >
+                        {lossMotivos.map((m) => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                      <textarea
+                        value={lossJust}
+                        onChange={(e) => setLossJust(e.target.value)}
+                        className="w-full bg-black text-white border border-red-500/50 p-2 text-sm"
+                        placeholder="Detalhes da perda..."
+                        rows={2}
+                      />
+                    </div>
+                  )}
+
+                  <textarea
+                    value={activityForm.note}
+                    onChange={e => setActivityForm(p => ({ ...p, note: e.target.value }))}
+                    className="w-full bg-black border border-slate-600 text-white text-sm p-3 font-mono focus:border-neon-pink outline-none"
+                    rows={3}
+                    placeholder="Descreva a interação..."
+                  />
+
+                  <div className="flex justify-end">
+                    <button
+                      onClick={async () => {
+                        // Save Loss if applicable
+                        if ((activityForm.stage === "lost" || activityForm.stage === "perda") && lossJust) {
+                          await saveLoss();
+                        }
+                        await saveActivity();
+                      }}
+                      disabled={savingActivity}
+                      className="bg-white text-black font-black uppercase text-xs px-6 py-3 hover:bg-neon-pink hover:text-white transition-colors"
+                    >
+                      {savingActivity ? "Salvando..." : "Registrar & Atualizar"}
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              {/* Timeline */}
-              <div className="space-y-4 max-h-[400px] overflow-auto pr-2 custom-scrollbar">
-                {activities.map(a => (
-                  <div key={a.id} className="relative border-l-2 border-slate-700 bg-pic-card/50 p-4 ml-2 hover:border-neon-pink transition-colors">
-                    <div className="absolute -left-[9px] top-4 w-4 h-4 rounded-full bg-pic-dark border-2 border-slate-500"></div>
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <span className="text-neon-green font-bold text-xs uppercase tracking-wider mr-2">{a.activityType}</span>
-                        <span className="text-slate-500 text-[10px] uppercase tracking-widest">{new Date(a.createdAt).toLocaleString()}</span>
+              {/* Timeline (Feed) */}
+              <div className="relative">
+                <div className="absolute left-[19px] top-0 bottom-0 w-[2px] bg-slate-800"></div>
+                <div className="space-y-6 pl-2">
+                  {activities.map((a, idx) => (
+                    <div key={a.id} className="relative flex gap-4 group">
+                      <div className="z-10 bg-black border-2 border-slate-600 group-hover:border-neon-green w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-colors">
+                        <span className="text-[10px] font-bold text-slate-400 group-hover:text-neon-green">
+                          {idx + 1}
+                        </span>
                       </div>
-                      {a.user && <span className="text-xs text-slate-600 uppercase">{a.user.name}</span>}
+                      <div className="flex-1 bg-pic-card border border-slate-800 p-4 hover:border-slate-600 transition-colors relative">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <p className="text-neon-blue font-bold text-xs uppercase tracking-wider">{a.activityType}</p>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-widest">{new Date(a.createdAt).toLocaleString()} • {a.user?.name ?? "Sistema"}</p>
+                          </div>
+                          {a.outcomeLabel && <span className="bg-slate-800 text-slate-300 text-[10px] px-2 py-1 rounded-full uppercase">{a.outcomeLabel}</span>}
+                        </div>
+                        <p className="text-slate-300 font-mono text-sm leading-relaxed whitespace-pre-wrap">{a.note}</p>
+
+                        {a.nextFollowUpAt && (
+                          <div className="mt-3 inline-flex items-center gap-2 bg-amber-900/20 border border-amber-900/50 px-3 py-1 rounded">
+                            <Clock size={12} className="text-amber-500" />
+                            <span className="text-xs text-amber-500 font-bold uppercase">Follow-up: {new Date(a.nextFollowUpAt).toLocaleString()}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-slate-300 font-mono text-sm leading-relaxed">{a.note}</p>
-                    {a.nextFollowUpAt && (
-                      <div className="mt-2 inline-flex items-center gap-2 bg-slate-800/50 px-2 py-1 rounded">
-                        <span className="text-xs text-amber-500">📅 Follow-up: {new Date(a.nextFollowUpAt).toLocaleString()}</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  ))}
+                  {activities.length === 0 && <p className="text-center text-slate-600 text-sm py-4">Nenhuma atividade registrada.</p>}
+                </div>
               </div>
             </div>
           )}
@@ -568,55 +733,7 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
             </div>
           )}
 
-          {/* Implement other tabs similarly for full completeness if needed, but 'dados' was the main request visually */}
-          {tab === "perda" && (
-            <div className="py-4 space-y-4">
-              <div className="bg-pic-card border border-slate-700 p-4 space-y-4">
-                <p className="text-xs uppercase text-slate-500 tracking-widest">Registrar perda</p>
-                <select
-                  value={lossMotivo}
-                  onChange={(e) => setLossMotivo(e.target.value)}
-                  className="w-full bg-black text-white border border-slate-700 p-3 text-sm font-mono focus:border-red-500 outline-none"
-                >
-                  {lossMotivos.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-                <textarea
-                  value={lossJust}
-                  onChange={(e) => setLossJust(e.target.value)}
-                  className="w-full bg-black text-white border border-slate-700 p-3 text-sm font-mono focus:border-red-500 outline-none"
-                  rows={3}
-                  placeholder="Justifique a perda"
-                  required
-                />
-                <button
-                  onClick={saveLoss}
-                  disabled={savingLoss}
-                  className="w-full bg-red-600 text-white px-4 py-2 text-sm font-black uppercase hover:bg-red-500 disabled:opacity-60 tracking-wider shadow-[4px_4px_0px_0px_rgba(255,0,0,0.3)]"
-                >
-                  {savingLoss ? "Salvando..." : "Marcar como perdido"}
-                </button>
-              </div>
-              <div className="space-y-3">
-                {losses.map((l) => (
-                  <div key={l.id} className="border-l-4 border-red-600 bg-pic-card p-3 shadow-sm">
-                    <div className="flex justify-between text-[10px] uppercase text-slate-500 mb-1">
-                      <span>{l.motivo}</span>
-                      <span>
-                        {l.user?.name ?? l.user?.email ?? "Usuário"} •{" "}
-                        {new Date(l.createdAt).toLocaleString("pt-BR")}
-                      </span>
-                    </div>
-                    <p className="text-sm text-slate-300 mt-1 font-mono whitespace-pre-wrap">{l.justificativa}</p>
-                  </div>
-                ))}
-                {losses.length === 0 ? <p className="text-sm text-slate-600 font-mono">Nenhum registro de perda.</p> : null}
-              </div>
-            </div>
-          )}
+
 
 
         </div>

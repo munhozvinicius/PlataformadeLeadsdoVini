@@ -4,11 +4,16 @@ export type EnrichedCompanyData = {
     cnpj?: string;
     cnae_fiscal_descricao?: string;
     capital_social?: number;
-    qsa?: Array<{ nome: string; qual: string }>;
+    qsa?: Array<{ nome_socio: string; qualificacao_socio: string }>;
     logradouro?: string;
     numero?: string;
     municipio?: string;
     uf?: string;
+    porte?: string;
+    main_phone?: string;
+    secondary_phone?: string;
+    // Employee count estimation (often not directly available publicly but Porte can be a proxy)
+    employee_count_estimate?: string;
 };
 
 // Normalizes data from different providers to our schema
@@ -21,15 +26,18 @@ function normalizeData(data: any, provider: "minhareceita" | "brasilapi" | "rece
                 nome_fantasia: data.nome_fantasia,
                 cnpj: data.cnpj,
                 cnae_fiscal_descricao: data.cnae_fiscal_descricao,
-                capital_social: data.capital_social, // Might need parsing if string
+                capital_social: typeof data.capital_social === 'string' ? parseFloat(data.capital_social) : data.capital_social,
                 qsa: data.qsa?.map((q: { nome_socio: string; qualificacao_socio: string }) => ({
-                    nome: q.nome_socio,
-                    qual: q.qualificacao_socio
+                    nome_socio: q.nome_socio,
+                    qualificacao_socio: q.qualificacao_socio
                 })),
                 logradouro: data.descricao_tipo_de_logradouro ? `${data.descricao_tipo_de_logradouro} ${data.logradouro}` : data.logradouro,
                 numero: data.numero,
                 municipio: data.municipio,
-                uf: data.uf
+                uf: data.uf,
+                porte: data.porte,
+                main_phone: data.ddd_telefone_1,
+                secondary_phone: data.ddd_telefone_2,
             };
         case "brasilapi":
             return {
@@ -39,9 +47,17 @@ function normalizeData(data: any, provider: "minhareceita" | "brasilapi" | "rece
                 cnae_fiscal_descricao: data.cnae_fiscal_descricao,
                 capital_social: data.capital_social,
                 qsa: data.qsa?.map((q: { nome_socio: string; qualificacao_socio: string }) => ({
-                    nome: q.nome_socio,
-                    qual: q.qualificacao_socio // BrasilAPI returns this field directly usually
-                }))
+                    nome_socio: q.nome_socio,
+                    qualificacao_socio: q.qualificacao_socio
+                })),
+                logradouro: data.logradouro,
+                numero: data.numero,
+                municipio: data.municipio,
+                uf: data.uf,
+                porte: data.descricao_porte ?? data.porte, // BrasilAPI often returns 'descricao_porte' or just matches standard
+                main_phone: data.ddd_telefone_1,
+                secondary_phone: data.ddd_telefone_2,
+                // BrasilAPI doesn't typically provide employee count, we can maybe infer from porte later or stick to null
             };
         case "receitaws":
             return {
@@ -49,15 +65,17 @@ function normalizeData(data: any, provider: "minhareceita" | "brasilapi" | "rece
                 nome_fantasia: data.fantasia,
                 cnpj: data.cnpj?.replace(/\D/g, ""),
                 cnae_fiscal_descricao: data.atividade_principal?.[0]?.text,
-                capital_social: parseFloat(data.capital_social),
+                capital_social: typeof data.capital_social === 'string' ? parseFloat(data.capital_social) : data.capital_social,
                 qsa: data.qsa?.map((q: { nome: string; qual: string }) => ({
-                    nome: q.nome,
-                    qual: q.qual
+                    nome_socio: q.nome,
+                    qualificacao_socio: q.qual
                 })),
                 logradouro: data.logradouro,
                 numero: data.numero,
                 municipio: data.municipio,
-                uf: data.uf
+                uf: data.uf,
+                porte: data.porte,
+                main_phone: data.telefone, // ReceitaWS usually returns a single 'telefone' string
             };
         default:
             return {};
@@ -67,20 +85,7 @@ function normalizeData(data: any, provider: "minhareceita" | "brasilapi" | "rece
 export async function fetchCompanyData(cnpj: string): Promise<EnrichedCompanyData | null> {
     const cleanCnpj = cnpj.replace(/\D/g, "");
 
-    // 1. Try MinhaReceita (Very stable, open source database)
-    try {
-        // MinhaReceita often prefers POST or direct GET
-        // Actually minhareceita.org public API is GET usually but let's try standard fetch
-        const resGet = await fetch(`https://minhareceita.org/${cleanCnpj}`);
-        if (resGet.ok) {
-            const data = await resGet.json();
-            return normalizeData(data, "minhareceita");
-        }
-    } catch (e) {
-        console.warn("MinhaReceita failed", e);
-    }
-
-    // 2. Try BrasilAPI (Good but rate limited sometimes)
+    // 1. Try BrasilAPI (Most reliable for QSA and Basic Data currently)
     try {
         const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCnpj}`);
         if (res.ok) {
@@ -91,7 +96,18 @@ export async function fetchCompanyData(cnpj: string): Promise<EnrichedCompanyDat
         console.warn("BrasilAPI failed", e);
     }
 
-    // 3. Try ReceitaWS (Free tier limits to 3 requests/min, good fallback)
+    // 2. Try MinhaReceita (Fallback)
+    try {
+        const resGet = await fetch(`https://minhareceita.org/${cleanCnpj}`);
+        if (resGet.ok) {
+            const data = await resGet.json();
+            return normalizeData(data, "minhareceita");
+        }
+    } catch (e) {
+        console.warn("MinhaReceita failed", e);
+    }
+
+    // 3. Try ReceitaWS (Fallback)
     try {
         const res = await fetch(`https://www.receitaws.com.br/v1/cnpj/${cleanCnpj}`);
         if (res.ok) {
