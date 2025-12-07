@@ -45,7 +45,7 @@ export async function GET() {
   const session = await getServerSession(authOptions);
 
   // Autorização: MASTER, GERENTE_SENIOR, GERENTE_NEGOCIOS, PROPRIETARIO
-  const allowedRoles = [Role.MASTER, Role.GERENTE_SENIOR, Role.GERENTE_NEGOCIOS, Role.PROPRIETARIO];
+  const allowedRoles: Role[] = [Role.MASTER, Role.GERENTE_SENIOR, Role.GERENTE_NEGOCIOS, Role.PROPRIETARIO];
   if (!session?.user || !allowedRoles.includes(session.user.role as Role)) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
