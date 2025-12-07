@@ -82,6 +82,7 @@ model User {
   campanhasGN                Campanha[]        @relation("CampanhaGN")
   campanhasGS                Campanha[]        @relation("CampanhaGS")
   campanhasOwner             Campanha[]        @relation("CampanhaOwner")
+  createdAnnouncements       Announcement[]    @relation("CreatedAnnouncements")
 }
 
 model Campanha {
@@ -368,4 +369,27 @@ model LeadLoss {
 
   @@index([leadId])
   @@index([userId])
+}
+
+model Announcement {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  message     String
+  imageUrl    String?
+  active      Boolean  @default(true)
+  createdById String   @db.ObjectId
+  createdBy   User     @relation("CreatedAnnouncements", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  readers     AnnouncementRead[]
+}
+
+model AnnouncementRead {
+  id             String       @id @default(auto()) @map("_id") @db.ObjectId
+  announcementId String       @db.ObjectId
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  userId         String       @db.ObjectId
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt         DateTime     @default(now())
+
+  @@unique([announcementId, userId])
 }
