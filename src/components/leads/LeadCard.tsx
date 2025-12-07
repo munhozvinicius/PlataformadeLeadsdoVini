@@ -19,16 +19,10 @@ export type LeadCardProps = {
   onOpen: (leadId: string) => void;
 };
 
-const statusLabel: Record<LeadStatusId, string> = {
-  NOVO: "Novo",
-  EM_CONTATO: "Em contato",
-  EM_NEGOCIACAO: "Em negociação",
-  FECHADO: "Fechado",
-  PERDIDO: "Perdido",
-};
+// Status label map removed as unused
 
 export function LeadCard({ lead, onOpen }: LeadCardProps) {
-  const phone = lead.telefone1 || lead.telefone2 || lead.telefone3 || "Telefone não informado";
+
 
   // Format currency if present (assuming internal value or placeholder)
   const value = "R$ 110.000,00"; // Placeholder as requested in image reference, or derive from lead data if available

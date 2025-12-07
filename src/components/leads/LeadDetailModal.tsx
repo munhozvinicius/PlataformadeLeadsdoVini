@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { LEAD_STATUS } from "@/constants/leadStatus";
 import { LeadCardProps } from "./LeadCard";
 
 type LeadDetail = LeadCardProps["lead"] & {
@@ -15,15 +14,30 @@ type LeadDetail = LeadCardProps["lead"] & {
   externalData?: Record<string, unknown> | null;
 };
 
-type LeadNote = {
-  id: string;
-  tipo: string;
-  conteudo: string;
-  createdAt: string;
-  user?: { name?: string; email?: string };
-};
-
-import { PRODUCT_CATALOG, ProductCatalogItem, TOWER_OPTIONS } from "@/lib/productCatalog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+// Removed unused imports: LeadNote
+import { LeadStatusId, LEAD_STATUS } from "@/constants/leadStatus";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { CalendarIcon, Plus, Save, Trash2, ShoppingCart, Activity } from "lucide-react";
+import { PRODUCT_CATALOG } from "@/lib/productCatalog"; // Removed unused ProductCatalogItem, TOWER_OPTIONS
 
 type LeadProduct = {
   productId: string;
@@ -294,7 +308,7 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
                   className="w-full bg-pic-dark border-2 border-cyan-400 text-white px-4 py-3 appearance-none font-bold uppercase tracking-wider focus:shadow-[0_0_15px_rgba(0,240,255,0.3)] transition-shadow outline-none"
                   value={selectedStatus}
                   onChange={(e) => {
-                    setSelectedStatus(e.target.value as any);
+                    setSelectedStatus(e.target.value as LeadStatusId);
                     setStatusDirty(e.target.value !== lead.status);
                   }}
                 >
@@ -308,8 +322,8 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
               onClick={handleStatusSave}
               disabled={!statusDirty}
               className={`w-full font-black uppercase py-3.5 tracking-widest transition-all shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] ${statusDirty
-                  ? "bg-neon-pink text-white hover:bg-pink-600 hover:shadow-[4px_4px_0px_0px_rgba(255,0,153,0.5)]"
-                  : "bg-slate-700 text-slate-400 cursor-not-allowed"
+                ? "bg-neon-pink text-white hover:bg-pink-600 hover:shadow-[4px_4px_0px_0px_rgba(255,0,153,0.5)]"
+                : "bg-slate-700 text-slate-400 cursor-not-allowed"
                 }`}
             >
               {statusDirty ? "Salvar Alterações" : "Sem Alterações"}
@@ -330,7 +344,7 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
             ].map((t) => (
               <button
                 key={t.id}
-                onClick={() => setTab(t.id as any)}
+                onClick={() => setTab(t.id as "dados" | "atividades" | "produtos" | "perda" | "externo")}
                 className={`uppercase tracking-widest font-bold text-sm pb-2 border-b-2 transition-colors ${tab === t.id ? "text-neon-green border-neon-green" : "text-slate-600 border-transparent hover:text-slate-400"
                   }`}
               >

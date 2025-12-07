@@ -6,7 +6,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { LEAD_STATUS, LeadStatusId } from "@/constants/leadStatus";
 import { Role, Profile } from "@prisma/client";
@@ -159,15 +159,7 @@ function ConsultantBoard({
     return map;
   }, [leads]);
 
-  const summary = useMemo(
-    () =>
-      LEAD_STATUS.map((stage) => ({
-        id: stage.id,
-        title: stage.title,
-        count: grouped[stage.id]?.length ?? 0,
-      })),
-    [grouped],
-  );
+  // summary removed as unused
 
   const selectedLead = useMemo(() => leads.find((l) => l.id === selectedLeadId), [leads, selectedLeadId]);
 
@@ -231,6 +223,7 @@ function ConsultantBoard({
               {(grouped[stage.id] || []).map((lead) => (
                 <LeadCard
                   key={lead.id}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   lead={lead as any}
                   onOpen={() => setSelectedLeadId(lead.id)}
                 />
@@ -247,6 +240,7 @@ function ConsultantBoard({
 
       {selectedLead && (
         <LeadDetailModal
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           lead={selectedLead as any}
           onClose={() => setSelectedLeadId(null)}
           onRefresh={async () => {
@@ -262,7 +256,6 @@ function ConsultantBoard({
 export default function BoardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [consultants, setConsultants] = useState<{ id: string; name: string; email: string; role: string }[]>([]);
   const [selectedConsultant, setSelectedConsultant] = useState<string>("");
   const [refreshSignal, setRefreshSignal] = useState(0);
