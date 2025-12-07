@@ -10,8 +10,16 @@ type HeaderProps = {
 export function Header({ userName, userRole, onOpenProfile }: HeaderProps) {
     return (
         <header className="bg-pic-card border-b border-pic-zinc h-20 px-8 flex items-center justify-between sticky top-0 z-40 shadow-lg">
-            <div className="flex items-center gap-4">
-                {/* Logo Area REMOVED as requested */}
+            <div className="flex items-center gap-6">
+                {(userRole === "MASTER" || userRole === "GERENTE_SENIOR" || userRole === "PROPRIETARIO") && (
+                    <nav className="hidden md:flex items-center gap-4 text-sm font-medium">
+                        <a href="/admin/distribuicao" className="text-slate-400 hover:text-neon-pink transition-colors">Distribuir</a>
+                        <a href="/admin/users" className="text-slate-400 hover:text-neon-blue transition-colors">Usuários</a>
+                        <a href="/admin/offices" className="text-slate-400 hover:text-neon-green transition-colors">Escritórios</a>
+                        <a href="/board" className="text-slate-400 hover:text-neon-yellow transition-colors">Board</a>
+                        <a href="/admin/dashboard" className="text-slate-400 hover:text-white transition-colors">Dashboard</a>
+                    </nav>
+                )}
             </div>
 
             <div className="flex items-center gap-6">

@@ -3,6 +3,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import {
+  TrendingUp,
+  Users,
+  AlertTriangle,
+  Clock,
+  Target,
+  BarChart3,
+  Search,
+  Activity,
+  Phone,
+  Building2
+} from "lucide-react";
+
+// --- Types ---
 
 type KPI = {
   totalLeads: number;
@@ -65,6 +79,8 @@ type DashboardPayload = {
   atividadesRecentes: Atividade[];
 };
 
+// --- Helpers ---
+
 function fmtPerc(value: number) {
   if (!Number.isFinite(value)) return "0%";
   return `${Math.round(value * 100)}%`;
@@ -77,11 +93,65 @@ function fmtHours(ms: number) {
 }
 
 function cardColor(value: number, invert?: boolean) {
-  if (!Number.isFinite(value)) return "bg-slate-50";
+  if (!Number.isFinite(value)) return "bg-slate-800 text-slate-400";
   const val = invert ? 1 - value : value;
-  if (val >= 0.5) return "bg-emerald-50 border-emerald-100";
-  if (val >= 0.25) return "bg-amber-50 border-amber-100";
-  return "bg-red-50 border-red-100";
+  // Using Neon/Dark logic
+  if (val >= 0.5) return "bg-neon-green/10 text-neon-green border-neon-green/30";
+  if (val >= 0.25) return "bg-neon-yellow/10 text-neon-yellow border-neon-yellow/30";
+  return "bg-neon-pink/10 text-neon-pink border-neon-pink/30";
+}
+
+// --- Components ---
+
+function NeonCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`bg-pic-card border border-pic-zinc shadow-lg rounded-xl overflow-hidden ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+function KpiCard({
+  title,
+  value,
+  subvalue,
+  icon: Icon,
+  variant = "blue",
+}: {
+  title: string;
+  value: string | number;
+  subvalue?: string;
+  icon: React.ElementType;
+  variant?: "blue" | "green" | "pink" | "red" | "yellow";
+}) {
+  const colors: Record<string, string> = {
+    blue: "text-neon-blue border-neon-blue shadow-neon-blue",
+    green: "text-neon-green border-neon-green shadow-neon-green",
+    pink: "text-neon-pink border-neon-pink shadow-neon-pink",
+    red: "text-red-500 border-red-500 shadow-red-500",
+    yellow: "text-neon-yellow border-neon-yellow shadow-neon-yellow",
+  };
+
+  const colorClass = colors[variant] || colors.blue;
+
+  return (
+    <NeonCard className="p-5 flex flex-col justify-between h-full relative group hover:border-pic-border-highlight transition-all">
+      <div className="flex justify-between items-start mb-2">
+        <h3 className="text-slate-400 text-xs uppercase tracking-widest font-semibold">{title}</h3>
+        <div className={`p-2 rounded-lg border bg-opacity-10 ${colorClass.split(' ')[0]} bg-${variant}-500/10 ${colorClass.split(' ')[1]}`}>
+          <Icon className={`w-5 h-5`} />
+        </div>
+      </div>
+      <div>
+        <div className={`text-3xl font-bold font-mono tracking-tighter ${colorClass.split(' ')[0]} drop-shadow-sm`}>
+          {value}
+        </div>
+        {subvalue && <p className="text-xs text-slate-500 mt-1 font-medium">{subvalue}</p>}
+      </div>
+      {/* Decorative Glow */}
+      <div className={`absolute -bottom-4 -right-4 w-24 h-24 bg-${variant}-500/5 rounded-full blur-2xl group-hover:bg-${variant}-500/10 transition-all`} />
+    </NeonCard>
+  );
 }
 
 export default function AdminDashboardPage() {
@@ -91,13 +161,13 @@ export default function AdminDashboardPage() {
   const [data, setData] = useState<DashboardPayload | null>(null);
 
   useEffect(() => {
-    if (status === "authenticated" && session?.user.role !== "MASTER") {
+    if (status === "authenticated" && session?.user.role !== "MASTER" && session?.user.role !== "GERENTE_SENIOR" && session?.user.role !== "PROPRIETARIO") {
       router.replace("/board");
     }
   }, [status, session, router]);
 
   useEffect(() => {
-    if (status === "authenticated" && session?.user.role === "MASTER") {
+    if (status === "authenticated") {
       fetchData();
     }
   }, [status, session]);
@@ -111,257 +181,247 @@ export default function AdminDashboardPage() {
     setLoading(false);
   }
 
+  // --- Computed Metrics Strategy ---
+  // "Agilidade de Contato" Global Average (weighted by 'trabalhados' to exclude inactive)
+  const averageFirstContactTime = useMemo(() => {
+    if (!data?.performanceConsultores) return 0;
+    const consultants = data.performanceConsultores.filter(c => c.tempoMedioPrimeiroContato > 0);
+    if (consultants.length === 0) return 0;
+    const total = consultants.reduce((acc, curr) => acc + curr.tempoMedioPrimeiroContato, 0);
+    return total / consultants.length;
+  }, [data]);
+
+  // "Leads Parados > 72h" Total
+  const totalStalledLeads = useMemo(() => {
+    if (!data?.performanceConsultores) return 0;
+    return data.performanceConsultores.reduce((acc, curr) => acc + curr.leadsParados72h, 0);
+  }, [data]);
+
   const funnel = useMemo(() => {
     if (!data) return [];
     return [
-      { label: "Novo", value: data.kpis.leadsAtivos - data.kpis.leadsEmTratativa + data.kpis.leadsEmTratativa },
-      { label: "Em contato", value: data.kpis.leadsEmTratativa },
-      { label: "Em negociação", value: data.kpis.leadsEmTratativa },
-      { label: "Fechado ganho", value: data.kpis.leadsGanhos },
-      { label: "Fechado perdido", value: data.kpis.leadsPerdidos },
+      { label: "BANCADA (NOVO)", value: data.kpis.leadsAtivos - data.kpis.leadsEmTratativa + data.kpis.leadsEmTratativa, color: "text-white" },
+      { label: "EM TRATATIVA", value: data.kpis.leadsEmTratativa, color: "text-neon-blue" },
+      { label: "NEGOCIAÇÃO", value: data.kpis.leadsEmTratativa, color: "text-neon-yellow" },
+      { label: "GANHO", value: data.kpis.leadsGanhos, color: "text-neon-green" },
+      { label: "PERDIDO", value: data.kpis.leadsPerdidos, color: "text-neon-pink" },
     ];
   }, [data]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Master</p>
-          <h1 className="text-2xl font-semibold text-slate-900">Dashboard Master</h1>
-          <p className="text-sm text-slate-500">Visão consolidada de campanhas e consultores.</p>
+    <div className="min-h-screen bg-pic-dark -m-6 p-6">
+      <div className="max-w-7xl mx-auto space-y-8">
+
+        {/* Header Section */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-pic-zinc pb-6">
+          <div>
+            <h1 className="text-3xl font-black text-white uppercase tracking-tighter mb-1">
+              Dashboard <span className="text-neon-pink">Estratégico</span>
+            </h1>
+            <p className="text-slate-400 text-sm">Visão consolidada de performance, agilidade e resultados.</p>
+          </div>
+          <button
+            onClick={fetchData}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-pic-card border border-pic-zinc hover:border-neon-blue text-white rounded-lg transition-all text-xs font-bold uppercase tracking-wider"
+          >
+            <Activity className="w-4 h-4 text-neon-blue" />
+            {loading ? "Atualizando..." : "Atualizar Dados"}
+          </button>
         </div>
-        <button
-          onClick={fetchData}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold hover:bg-slate-100"
-        >
-          Atualizar
-        </button>
-      </div>
 
-      {loading && <div className="text-sm text-slate-600">Carregando...</div>}
-
-      {data ? (
-        <div className="space-y-6">
-          {/* KPI Header */}
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-            <KpiCard title="Total de Leads" value={data.kpis.totalLeads} />
-            <KpiCard title="Leads Ativos" value={data.kpis.leadsAtivos} />
-            <KpiCard title="Em Tratativa" value={data.kpis.leadsEmTratativa} />
-            <KpiCard title="Ganhos" value={data.kpis.leadsGanhos} positive />
-            <KpiCard title="Perdidos" value={data.kpis.leadsPerdidos} negative />
-            <KpiCard title="Taxa de Conversão" value={fmtPerc(data.kpis.taxaConversaoGeral)} />
-          </div>
-
-          {/* Funnel */}
-          <div className="rounded-xl border bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-slate-900">Funil</h2>
-              <p className="text-xs text-slate-500">
-                Importados hoje: {data.kpis.leadsImportadosHoje} • Na semana: {data.kpis.leadsImportadosSemana}
-              </p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
-              {funnel.map((step) => (
-                <div key={step.label} className="rounded-lg border bg-slate-50 p-3">
-                  <p className="text-xs text-slate-500">{step.label}</p>
-                  <p className="text-xl font-semibold text-slate-900">{step.value}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Ranking consultores */}
-          <div className="rounded-xl border bg-white p-4 shadow-sm overflow-x-auto">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-slate-900">Ranking de Consultores</h2>
-            </div>
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500 border-b">
-                  <th className="py-2 pr-3">Consultor</th>
-                  <th className="py-2 pr-3">Escritório</th>
-                  <th className="py-2 pr-3">Recebidos</th>
-                  <th className="py-2 pr-3">Trabalhados</th>
-                  <th className="py-2 pr-3">Ganhos</th>
-                  <th className="py-2 pr-3">Perdidos</th>
-                  <th className="py-2 pr-3">Conversão</th>
-                  <th className="py-2 pr-3">Parados 72h</th>
-                  <th className="py-2 pr-3">T. 1º contato</th>
-                  <th className="py-2 pr-3">T. Conclusão</th>
-                  <th className="py-2 pr-3">Ação</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.performanceConsultores.map((c) => (
-                  <tr key={`${c.email}-${c.nome}`} className="border-b last:border-b-0">
-                    <td className="py-2 pr-3">{c.nome ?? c.email ?? "Consultor"}</td>
-                    <td className="py-2 pr-3 text-slate-500">{c.escritorio ?? "-"}</td>
-                    <td className="py-2 pr-3">{c.recebidos}</td>
-                    <td className="py-2 pr-3">{c.trabalhados}</td>
-                    <td className="py-2 pr-3 text-emerald-700 font-semibold">{c.ganhos}</td>
-                    <td className="py-2 pr-3 text-red-600">{c.perdidos}</td>
-                    <td className="py-2 pr-3">{fmtPerc(c.taxaConversao)}</td>
-                    <td className="py-2 pr-3">{c.leadsParados72h}</td>
-                    <td className="py-2 pr-3">{fmtHours(c.tempoMedioPrimeiroContato)}</td>
-                    <td className="py-2 pr-3">{fmtHours(c.tempoMedioConclusao)}</td>
-                    <td className="py-2 pr-3">
-                      <a
-                        className="text-xs text-blue-600 underline"
-                        href={`/board?consultantId=${encodeURIComponent(c.id)}`}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          router.push(`/board?consultantId=${encodeURIComponent(c.id)}`);
-                        }}
-                      >
-                        Ver board
-                      </a>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {data.performanceConsultores.length === 0 ? (
-              <p className="text-sm text-slate-500 mt-2">Sem dados de consultores.</p>
-            ) : null}
-          </div>
-
-          {/* Campanhas */}
-          <div className="space-y-3">
-            <h2 className="text-lg font-semibold text-slate-900">Campanhas</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {data.campanhas.map((camp) => (
-                <div key={camp.id} className="rounded-xl border bg-white p-4 shadow-sm space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{camp.nome ?? "Campanha"}</p>
-                      <p className="text-xs text-slate-500">
-                        Base: {camp.totalBase} • Distribuídos: {camp.atribuidos} • Estoque: {camp.estoque}
-                      </p>
-                    </div>
-                    <div className={`rounded-lg px-2 py-1 text-xs font-semibold ${cardColor(camp.taxaConversao)}`}>
-                      {fmtPerc(camp.taxaConversao)}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
-                    <p>Trabalhados: {camp.trabalhados}</p>
-                    <p>Ganhos: {camp.ganhos}</p>
-                    <p>Perdidos: {camp.perdidos}</p>
-                    <p>1º contato: {fmtHours(camp.tempoMedio1Contato)}</p>
-                    <p>Conclusão: {fmtHours(camp.tempoMedioConclusao)}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs uppercase text-slate-500">Top motivos de perda</p>
-                    {camp.topMotivosPerda.length === 0 ? (
-                      <p className="text-xs text-slate-500">Sem dados.</p>
-                    ) : (
-                      camp.topMotivosPerda.map((m) => (
-                        <div key={`${camp.id}-${m.motivo}`} className="flex justify-between text-sm">
-                          <span>{m.motivo ?? "Outro"}</span>
-                          <span className="text-slate-500">{m.count}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-            {data.campanhas.length === 0 ? (
-              <p className="text-sm text-slate-500">Nenhuma campanha encontrada.</p>
-            ) : null}
-          </div>
-
-          {/* Heatmap e Saúde */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <div className="rounded-xl border bg-white p-4 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-900 mb-2">Motivos de perda (Top 5)</h2>
-              {data.heatmap.top5Globais.length === 0 ? (
-                <p className="text-sm text-slate-500">Sem dados.</p>
-              ) : (
-                <div className="space-y-2">
-                  {data.heatmap.top5Globais.map((m) => (
-                    <div key={m.motivo ?? "motivo"} className="flex items-center justify-between">
-                      <span className="text-sm">{m.motivo ?? "Outro"}</span>
-                      <span className="text-sm text-slate-500">{m.count}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+        {data ? (
+          <>
+            {/* Strategic KPIs - Top Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <KpiCard
+                title="Agilidade (1º Contato)"
+                value={fmtHours(averageFirstContactTime)}
+                subvalue="Média da Equipe"
+                icon={Clock}
+                variant="blue"
+              />
+              <KpiCard
+                title="Risco (Parados > 72h)"
+                value={totalStalledLeads}
+                subvalue="Leads sem interação"
+                icon={AlertTriangle}
+                variant={totalStalledLeads > 0 ? "red" : "green"}
+              />
+              <KpiCard
+                title="Conversão Global"
+                value={fmtPerc(data.kpis.taxaConversaoGeral)}
+                subvalue={`${data.kpis.leadsGanhos} fechamentos`}
+                icon={TrendingUp}
+                variant="green"
+              />
+              <KpiCard
+                title="Pipeline Ativo"
+                value={data.kpis.leadsAtivos}
+                subvalue="Leads na esteira"
+                icon={Target}
+                variant="yellow"
+              />
             </div>
 
-            <div className="rounded-xl border bg-white p-4 shadow-sm space-y-3">
-              <h2 className="text-lg font-semibold text-slate-900">Saúde da base</h2>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="rounded-lg border bg-slate-50 p-3">
-                  <p className="text-xs text-slate-500">% Telefones válidos</p>
-                  <p className="text-lg font-semibold">{fmtPerc(data.saude.percentPhonesValid)}</p>
-                </div>
-                <div className="rounded-lg border bg-slate-50 p-3">
-                  <p className="text-xs text-slate-500">% Duplicidades</p>
-                  <p className="text-lg font-semibold">{fmtPerc(data.saude.percentDuplicidades)}</p>
-                </div>
-                <div className="rounded-lg border bg-slate-50 p-3">
-                  <p className="text-xs text-slate-500">UF com melhor conversão</p>
-                  <p className="text-sm font-semibold">
-                    {data.saude.ufMelhorConversao[0]?.uf ?? "-"} ({fmtPerc(data.saude.ufMelhorConversao[0]?.taxa ?? 0)})
-                  </p>
-                </div>
-                <div className="rounded-lg border bg-slate-50 p-3">
-                  <p className="text-xs text-slate-500">UF com mais leads</p>
-                  <p className="text-sm font-semibold">{data.saude.ufMaisLeads[0]?.uf ?? "-"}</p>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs uppercase text-slate-500">Cidades mais comuns</p>
-                <div className="text-xs text-slate-600 flex flex-wrap gap-2">
-                  {data.saude.cidadesMaisComuns.map((c) => (
-                    <span key={c.cidade} className="rounded-full bg-slate-100 px-2 py-1">
-                      {c.cidade} ({c.count})
+            {/* Main Content Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+              {/* Left Column: Funnel & Rankings (2/3 width) */}
+              <div className="lg:col-span-2 space-y-6">
+
+                {/* Funnel Section */}
+                <NeonCard className="p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5 text-neon-pink" />
+                      Funil de Vendas
+                    </h2>
+                    <span className="text-xs text-slate-500 font-mono">
+                      HOJE: +{data.kpis.leadsImportadosHoje} LEADS
                     </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    {funnel.map((step, idx) => (
+                      <div key={idx} className="flex flex-col items-center justify-center p-4 bg-pic-dark rounded-lg border border-pic-zinc relative overflow-hidden">
+                        <span className="text-[10px] uppercase font-bold text-slate-500 mb-1 z-10">{step.label}</span>
+                        <span className={`text-2xl font-black font-mono ${step.color} z-10`}>{step.value}</span>
+                        <div className={`absolute bottom-0 left-0 w-full h-1 ${step.color.replace('text-', 'bg-')}`} />
+                      </div>
+                    ))}
+                  </div>
+                </NeonCard>
 
-          {/* Atividade recente */}
-          <div className="rounded-xl border bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-slate-900">Atividade recente</h2>
-            </div>
-            <div className="space-y-2">
-              {data.atividadesRecentes.length === 0 ? (
-                <p className="text-sm text-slate-500">Sem atividades recentes.</p>
-              ) : (
-                data.atividadesRecentes.map((a) => (
-                  <div key={`${a.leadId}-${a.createdAt}`} className="flex items-center justify-between text-sm">
-                    <div>
-                      <p className="font-semibold text-slate-800">
-                        {a.usuario} <span className="text-slate-500 font-normal">fez</span> {a.acao ?? "atividade"}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        Lead: {a.empresa} • {new Date(a.createdAt).toLocaleString("pt-BR")}
-                      </p>
+                {/* Consultants Ranking Table */}
+                <NeonCard className="overflow-hidden">
+                  <div className="p-6 border-b border-pic-zinc flex justify-between items-center">
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                      <Users className="w-5 h-5 text-neon-blue" />
+                      Performance por Consultor
+                    </h2>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                      <thead className="text-[10px] uppercase tracking-wider text-slate-500 bg-pic-dark">
+                        <tr>
+                          <th className="px-6 py-4 font-bold">Consultor</th>
+                          <th className="px-6 py-4 font-bold text-right">Recebidos</th>
+                          <th className="px-6 py-4 font-bold text-right">Ganhos</th>
+                          <th className="px-6 py-4 font-bold text-right">Conversão</th>
+                          <th className="px-6 py-4 font-bold text-right text-red-500">Parados 72h</th>
+                          <th className="px-6 py-4 font-bold text-right">Agilidade</th>
+                          <th className="px-6 py-4 font-bold text-center">Ação</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-pic-zinc">
+                        {data.performanceConsultores.map((c) => (
+                          <tr key={c.id} className="hover:bg-pic-dark/50 transition-colors group">
+                            <td className="px-6 py-4 font-medium text-white flex flex-col">
+                              <span>{c.nome || c.email}</span>
+                              <span className="text-xs text-slate-500">{c.escritorio || "-"}</span>
+                            </td>
+                            <td className="px-6 py-4 text-slate-300 text-right font-mono">{c.recebidos}</td>
+                            <td className="px-6 py-4 text-neon-green font-bold text-right font-mono">{c.ganhos}</td>
+                            <td className="px-6 py-4 text-white text-right font-mono">{fmtPerc(c.taxaConversao)}</td>
+                            <td className={`px-6 py-4 font-bold text-right font-mono ${c.leadsParados72h > 0 ? 'text-red-500' : 'text-slate-500'}`}>
+                              {c.leadsParados72h}
+                            </td>
+                            <td className="px-6 py-4 text-slate-300 text-right font-mono">{fmtHours(c.tempoMedioPrimeiroContato)}</td>
+                            <td className="px-6 py-4 text-center">
+                              <button
+                                onClick={() => router.push(`/board?consultantId=${c.id}`)}
+                                className="text-white hover:text-neon-blue p-2 rounded hover:bg-neon-blue/10 transition-colors"
+                                title="Ver Board"
+                              >
+                                <Search className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {data.performanceConsultores.length === 0 && (
+                    <div className="p-8 text-center text-slate-500">Nenhum dado disponível.</div>
+                  )}
+                </NeonCard>
+
+              </div>
+
+              {/* Right Column: Health & Campaigns (1/3 width) */}
+              <div className="space-y-6">
+
+                {/* Campaigns List */}
+                <NeonCard className="p-6">
+                  <h2 className="text-sm font-bold text-white uppercase tracking-wider mb-4 border-b border-pic-zinc pb-2">Campanhas Ativas</h2>
+                  <div className="space-y-4">
+                    {data.campanhas.map((camp) => (
+                      <div key={camp.id} className="group">
+                        <div className="flex justify-between items-start mb-1">
+                          <p className="text-white font-medium text-sm group-hover:text-neon-pink transition-colors">{camp.nome}</p>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded border ${cardColor(camp.taxaConversao)}`}>
+                            {fmtPerc(camp.taxaConversao)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-xs text-slate-500 mb-2">
+                          <span>Base: {camp.totalBase}</span>
+                          <span>Ganhos: {camp.ganhos}</span>
+                        </div>
+                        {/* Mini Progress Bar */}
+                        <div className="w-full bg-pic-zinc h-1 rounded-full overflow-hidden">
+                          <div
+                            className="bg-neon-pink h-full"
+                            style={{ width: `${(camp.trabalhados / (camp.totalBase || 1)) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    {data.campanhas.length === 0 && <p className="text-slate-500 text-sm">Sem campanhas.</p>}
+                  </div>
+                </NeonCard>
+
+                {/* Health Stats */}
+                <NeonCard className="p-6 bg-gradient-to-br from-pic-card to-pic-dark">
+                  <h2 className="text-sm font-bold text-white uppercase tracking-wider mb-4 border-b border-pic-zinc pb-2 flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-neon-green" />
+                    Saúde da Base
+                  </h2>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-400 flex items-center gap-2">
+                        <Phone className="w-4 h-4" /> Telefones Válidos
+                      </span>
+                      <span className="text-white font-mono font-bold">{fmtPerc(data.saude.percentPhonesValid)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-400 flex items-center gap-2">
+                        <Building2 className="w-4 h-4" /> Duplicidades
+                      </span>
+                      <span className="text-white font-mono font-bold">{fmtPerc(data.saude.percentDuplicidades)}</span>
+                    </div>
+
+                    <div className="pt-4 border-t border-pic-zinc">
+                      <p className="text-xs text-slate-500 mb-2 uppercase">Melhor Conversão (UF)</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-neon-yellow font-bold text-lg">{data.saude.ufMelhorConversao[0]?.uf || "-"}</span>
+                        <span className="text-slate-300 font-mono">{fmtPerc(data.saude.ufMelhorConversao[0]?.taxa || 0)}</span>
+                      </div>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
+                </NeonCard>
 
-function KpiCard({ title, value, positive, negative }: { title: string; value: number | string; positive?: boolean; negative?: boolean }) {
-  return (
-    <div
-      className={`rounded-xl border p-4 shadow-sm ${
-        positive ? "border-emerald-100 bg-emerald-50" : negative ? "border-red-100 bg-red-50" : "bg-white"
-      }`}
-    >
-      <p className="text-xs text-slate-500">{title}</p>
-      <p className="text-2xl font-semibold text-slate-900">{typeof value === "number" ? value : value}</p>
+              </div>
+
+            </div>
+          </>
+        ) : (
+          <div className="text-center py-20">
+            <div className="animate-spin w-10 h-10 border-4 border-neon-blue border-t-transparent rounded-full mx-auto mb-4"></div>
+            <p className="text-slate-400 animate-pulse">Carregando inteligência...</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
