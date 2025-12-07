@@ -86,7 +86,6 @@ export default function AdminUsersPage() {
   }, []);
 
   const loadOffices = useCallback(async () => {
-    setOfficesLoading(true);
     try {
       const res = await fetch("/api/offices", { cache: "no-store" });
       if (!res.ok) {
