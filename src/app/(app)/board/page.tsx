@@ -175,6 +175,7 @@ type EnrichmentSuggestionType =
 type EnrichmentSuggestionCard = {
   id: string;
   type: EnrichmentSuggestionType;
+  field?: string;
   label: string;
   value: unknown;
   source: string;
@@ -266,7 +267,14 @@ function LeadDrawer({
   const [events, setEvents] = useState<LeadEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<EnrichmentSuggestionCard[]>([]);
-  type EnrichmentStatus = "idle" | "loading" | "success" | "empty" | "error";
+  type EnrichmentStatus =
+    | "idle"
+    | "fetching_base"
+    | "merging_data"
+    | "preparing_suggestions"
+    | "success"
+    | "empty"
+    | "error";
   const [enrichmentStatus, setEnrichmentStatus] = useState<EnrichmentStatus>("idle");
   const [enrichmentError, setEnrichmentError] = useState<string | null>(null);
   const [enrichmentReason, setEnrichmentReason] = useState<string | null>(null);
@@ -540,12 +548,21 @@ function LeadDrawer({
   }, []);
 
   const fetchSuggestions = useCallback(async () => {
-    setEnrichmentStatus("loading");
+    setEnrichmentStatus("fetching_base");
     setEnrichmentError(null);
     setEnrichmentReason(null);
     setSuggestions([]);
     try {
-      const res = await fetch(`/api/leads/${lead.id}/enrich`, { method: "POST" });
+      const document =
+        (lead.documento ?? lead.cnpj ?? "")
+          .toString()
+          .replace(/\D+/g, "");
+      if (!document) {
+        setEnrichmentError("Documento inválido para enriquecimento");
+        setEnrichmentStatus("error");
+        return;
+      }
+      const res = await fetch(`/api/enrichment/${document}`, { method: "GET", cache: "no-store" });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
         setEnrichmentError(data?.message || "Erro ao buscar sugestões");
@@ -553,20 +570,23 @@ function LeadDrawer({
         return;
       }
       const payload = await res.json();
-      const list = Array.isArray(payload) ? payload : (payload.suggestions as LeadEnrichmentSuggestion[] | undefined) ?? [];
-      const reason = !Array.isArray(payload) ? (payload.reason as string | undefined) : undefined;
+      const list = (payload.suggestions as LeadEnrichmentSuggestion[] | undefined) ?? [];
+      const reason = payload.reason as string | undefined;
       setEnrichmentReason(reason ?? null);
+      setEnrichmentStatus("merging_data");
       const normalized: EnrichmentSuggestionCard[] = list
         .filter((s) => s.status === "PENDING")
         .map((s) => ({
           id: s.id,
           type: s.type,
+          field: (s as unknown as { field?: string }).field,
           label: (s as unknown as { label?: string }).label ?? s.type,
           value: s.value,
           source: s.source,
           applied: s.status === "ACCEPTED",
           ignored: s.status === "REJECTED",
         }));
+      setEnrichmentStatus("preparing_suggestions");
       setSuggestions(normalized);
       setEnrichmentStatus(normalized.length === 0 ? "empty" : "success");
     } catch (err) {
@@ -576,7 +596,7 @@ function LeadDrawer({
     } finally {
       // status already set above
     }
-  }, [lead.id]);
+  }, [lead.cnpj, lead.documento]);
 
   const acceptSuggestion = useCallback(
     async (suggestion: EnrichmentSuggestionCard) => {
@@ -623,9 +643,14 @@ function LeadDrawer({
         payload: { suggestionId: suggestion.id, type: suggestion.type, source: suggestion.source },
       });
       loadEvents();
+      createEvent("ENRICHMENT_APPLIED", {
+        suggestionId: suggestion.id,
+        type: suggestion.type,
+        source: suggestion.source,
+      });
       setStatusFeedback("Enriquecimento aplicado");
     },
-    [lead.id, loadEvents],
+    [lead.id, loadEvents, createEvent],
   );
 
   const rejectSuggestion = useCallback(
@@ -820,6 +845,11 @@ function LeadDrawer({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [onClose, lostModalOpen, lead.status]);
+
+  const isEnriching =
+    enrichmentStatus === "fetching_base" ||
+    enrichmentStatus === "merging_data" ||
+    enrichmentStatus === "preparing_suggestions";
 
   return (
     <>
@@ -1092,17 +1122,18 @@ function LeadDrawer({
                 <button
                   onClick={fetchSuggestions}
                   className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold hover:bg-slate-50"
-                  disabled={enrichmentStatus === "loading"}
+                  disabled={isEnriching}
                 >
-                  {enrichmentStatus === "loading" ? "Buscando..." : "Buscar dados"}
+                  {isEnriching ? "Buscando..." : "🔍 Enriquecer dados do CNPJ"}
                 </button>
               </div>
+              <EnrichmentStatusBar status={enrichmentStatus} hasSuggestions={suggestions.length > 0} />
               {enrichmentStatus === "idle" ? (
                 <p className="text-sm text-slate-500">
                   Clique em “Buscar dados” para tentar enriquecer este CNPJ.
                 </p>
               ) : null}
-              {enrichmentStatus === "loading" ? (
+              {enrichmentStatus === "fetching_base" || enrichmentStatus === "merging_data" || enrichmentStatus === "preparing_suggestions" ? (
                 <p className="text-sm text-slate-500">Buscando dados de Receita / BrasilAPI…</p>
               ) : null}
               {enrichmentStatus === "error" && enrichmentError ? (
@@ -1970,4 +2001,41 @@ export default function BoardPage() {
       />
     </div>
   );
+}
+function EnrichmentStatusBar({ status, hasSuggestions }: { status: string; hasSuggestions: boolean }) {
+  const baseClasses = "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold";
+  const byStatus: Record<string, { text: string; className: string }> = {
+    idle: {
+      text: "🔍 Pronto pra investigar este CNPJ. Clique em “Enriquecer dados do CNPJ”.",
+      className: "bg-slate-100 text-slate-700",
+    },
+    fetching_base: {
+      text: "🔍 Puxando dados públicos da empresa… segura aí que já vem coisa boa.",
+      className: "bg-blue-50 text-blue-700",
+    },
+    merging_data: {
+      text: "🔍 Cruzando informações e limpando o que veio torto… quase lá.",
+      className: "bg-blue-50 text-blue-700",
+    },
+    preparing_suggestions: {
+      text: "🔍 Montando sugestões pra você decidir o que vale manter.",
+      className: "bg-blue-50 text-blue-700",
+    },
+    success: {
+      text: hasSuggestions
+        ? "✅ Enriquecimento pronto. Revise os cards e clique em “Manter”."
+        : "ℹ️ Não achamos nada novo, mas o CNPJ parece ok.",
+      className: "bg-emerald-50 text-emerald-700",
+    },
+    empty: {
+      text: "ℹ️ Não achamos nada novo, mas o CNPJ parece ok.",
+      className: "bg-slate-100 text-slate-700",
+    },
+    error: {
+      text: "⚠️ Não deu pra enriquecer agora (API pública falhou). Tenta de novo mais tarde.",
+      className: "bg-red-50 text-red-700",
+    },
+  };
+  const current = byStatus[status] ?? byStatus.idle;
+  return <div className={`${baseClasses} ${current.className}`}>{current.text}</div>;
 }
