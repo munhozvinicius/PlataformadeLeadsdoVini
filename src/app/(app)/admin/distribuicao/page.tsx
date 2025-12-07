@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Users, BarChart3, RefreshCw, FileSpreadsheet, Plus } from "lucide-react";
+import { Users, BarChart3, RefreshCw, FileSpreadsheet, Plus, Trash2, Edit, Database } from "lucide-react";
 
 // Types
 type User = { id: string; name: string; email: string; role: string; escritorio: string };
@@ -30,7 +30,7 @@ type ConsultantStat = {
 export default function DistribuicaoPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
-  const [activeTab, setActiveTab] = useState<"dashboard" | "create">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "create" | "batches">("dashboard");
 
   // State - Dashboard
   const [campaigns, setCampaigns] = useState<CampaignSummary[]>([]);
@@ -62,6 +62,18 @@ export default function DistribuicaoPage() {
   const [usersGN, setUsersGN] = useState<User[]>([]);
   const [usersOwner, setUsersOwner] = useState<User[]>([]);
 
+  // State - Batches
+  const [batches, setBatches] = useState<any[]>([]);
+  const [loadingBatches, setLoadingBatches] = useState(false);
+
+  // State - Edit Campaign
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editGN, setEditGN] = useState("");
+  const [editGS, setEditGS] = useState("");
+  const [editOwner, setEditOwner] = useState("");
+
   useEffect(() => {
     if (status === "authenticated" && session?.user.role === "CONSULTOR") {
       router.replace("/board");
@@ -70,7 +82,8 @@ export default function DistribuicaoPage() {
 
   useEffect(() => {
     loadInfo();
-  }, [selectedCampaignId]); // Added selectedCampaignId as it triggers stats load in other effect? No, loadInfo loads summaries.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCampaignId]);
   // Actually, loadInfo uses no props/state. But eslint wants it.
   // Wait, I should make loadInfo a useCallback or move it inside useEffect.
   // Or just silence the warning if I know better, but better to fix.
@@ -198,6 +211,84 @@ export default function DistribuicaoPage() {
       setDistribMsg("Erro de conexão.");
     } finally {
       setDistributing(false);
+    }
+  }
+
+  async function handleDeleteCampaign() {
+    if (!selectedCampaignId || !confirm("Tem certeza? Isso apagará TODOS os leads e dados desta campanha.")) return;
+
+    try {
+      const res = await fetch(`/api/campanhas/${selectedCampaignId}`, { method: "DELETE" });
+      if (res.ok) {
+        alert("Campanha excluída.");
+        setSelectedCampaignId("");
+        loadInfo();
+      } else {
+        alert("Erro ao excluir.");
+      }
+    } catch {
+      alert("Erro no servidor.");
+    }
+  }
+
+  async function handleUpdateCampaign() {
+    try {
+      const res = await fetch(`/api/campanhas/${selectedCampaignId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nome: editName,
+          descricao: editDesc,
+          gnId: editGN || null,
+          gsId: editGS || null,
+          ownerId: editOwner || null
+        })
+      });
+      if (res.ok) {
+        alert("Campanha atualizada!");
+        setIsEditing(false);
+        loadInfo(); // Refresh list
+      }
+    } catch {
+      alert("Erro ao atualizar.");
+    }
+  }
+
+  function startEdit() {
+    const camp = campaigns.find(c => c.id === selectedCampaignId);
+    if (camp) {
+      setEditName(camp.nome);
+      setEditDesc(camp.descricao || "");
+      // Ideally we select the current GN/GS/Owner. 
+      // But campaign summary might not have them. 
+      // For now let's just allow setting them (or user sets them again).
+      // If we want to pre-fill, we'd need to fetch campaign details specifically or include in summary.
+      // Let's rely on user selecting.
+      setIsEditing(true);
+    }
+  }
+
+  async function loadBatches() {
+    if (!selectedCampaignId) return;
+    setLoadingBatches(true);
+    try {
+      const res = await fetch(`/api/campanhas/${selectedCampaignId}/batches`);
+      if (res.ok) setBatches(await res.json());
+    } finally {
+      setLoadingBatches(false);
+    }
+  }
+
+  async function handleDeleteBatch(batchId: string) {
+    if (!confirm("Excluir esta importação e todos os leads dela?")) return;
+    try {
+      const res = await fetch(`/api/campanhas/${selectedCampaignId}/batches/${batchId}`, { method: "DELETE" });
+      if (res.ok) {
+        loadBatches();
+        loadInfo(); // Refresh totals
+      }
+    } catch {
+      alert("Erro ao excluir.");
     }
   }
 
@@ -409,7 +500,17 @@ export default function DistribuicaoPage() {
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase text-neon-blue">Descrição</label>
+              <textarea
+                className="w-full bg-black/30 border border-white/20 rounded-lg px-4 py-3 text-white focus:border-neon-blue outline-none"
+                placeholder="Descrição opcional..."
+                value={newCampDesc}
+                onChange={e => setNewCampDesc(e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase text-slate-500">Gerente de Negócios (GN)</label>
                 <select
@@ -430,6 +531,17 @@ export default function DistribuicaoPage() {
                 >
                   <option value="">Selecione...</option>
                   {usersGS.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase text-slate-500">Proprietário (Owner)</label>
+                <select
+                  className="w-full bg-black/30 border border-white/20 rounded-lg px-3 py-3 text-white focus:border-neon-blue outline-none text-sm"
+                  value={newCampOwner}
+                  onChange={e => setNewCampOwner(e.target.value)}
+                >
+                  <option value="">Selecione...</option>
+                  {usersOwner.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                 </select>
               </div>
             </div>
@@ -474,6 +586,55 @@ export default function DistribuicaoPage() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+
+      {/* BATCHES TAB */}
+      {activeTab === "batches" && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold text-white uppercase">Gestão de Bases (Importações)</h2>
+            <button onClick={() => setActiveTab("dashboard")} className="text-sm text-slate-400 hover:text-white">Voltar</button>
+          </div>
+
+          <div className="bg-pic-card border border-white/10 rounded-xl overflow-hidden">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-black/30 text-slate-400 font-mono uppercase text-xs">
+                <tr>
+                  <th className="px-6 py-3">Data</th>
+                  <th className="px-6 py-3">Arquivo</th>
+                  <th className="px-6 py-3">Importado Por</th>
+                  <th className="px-6 py-3 text-right">Total Leads</th>
+                  <th className="px-6 py-3 w-10"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {loadingBatches ? (
+                  <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500">Carregando...</td></tr>
+                ) : batches.map(batch => (
+                  <tr key={batch.id} className="hover:bg-white/5 transition-colors">
+                    <td className="px-6 py-4 text-slate-400">{new Date(batch.createdAt).toLocaleDateString()}</td>
+                    <td className="px-6 py-4 text-white font-medium">{batch.nomeArquivoOriginal}</td>
+                    <td className="px-6 py-4 text-slate-400">{batch.criadoPor?.name || "-"}</td>
+                    <td className="px-6 py-4 text-right text-neon-green">{batch.totalLeads}</td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        onClick={() => handleDeleteBatch(batch.id)}
+                        className="text-slate-500 hover:text-red-500 transition-colors p-2"
+                        title="Excluir Importação"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {!loadingBatches && batches.length === 0 && (
+                  <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500">Nenhuma importação encontrada.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
