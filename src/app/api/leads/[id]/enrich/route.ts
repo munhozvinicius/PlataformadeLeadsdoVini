@@ -43,6 +43,10 @@ export async function POST(_req: NextRequest, { params }: Params) {
   const lead = await prisma.lead.findUnique({ where: { id: params.id } });
   if (!lead) return NextResponse.json({ message: "Lead não encontrado" }, { status: 404 });
 
+  const doc = (lead.cnpj || (lead as Record<string, unknown>)?.documento || "") as string;
+  const normalizedDoc = typeof doc === "string" ? doc.replace(/\D+/g, "") : "";
+  console.log("[ENRICHMENT_REQUEST]", { doc: normalizedDoc, leadId: lead.id });
+
   try {
     const suggestions = await fetchExternalEnrichmentForLead(lead);
     // persist as pending (dedupe by type/value)
@@ -80,13 +84,20 @@ export async function POST(_req: NextRequest, { params }: Params) {
       applied: p.status === "ACCEPTED",
       ignored: p.status === "REJECTED",
     }));
-    return NextResponse.json(normalized);
+    console.log("[ENRICHMENT_RESPONSE]", { doc: normalizedDoc, suggestionsCount: normalized.length });
+    if (normalized.length === 0) {
+      return NextResponse.json({ success: true, suggestions: [], reason: "NOT_FOUND" });
+    }
+    return NextResponse.json({ success: true, suggestions: normalized });
   } catch (err: unknown) {
     const error = err as { code?: string };
     if (error?.code === "ENRICHMENT_NOT_CONFIGURED") {
       return NextResponse.json({ message: "Enriquecimento não configurado" }, { status: 400 });
     }
-    console.error("[ENRICH_ERROR]", err);
-    return NextResponse.json({ message: "Erro ao buscar enriquecimento" }, { status: 500 });
+    console.error("[ENRICHMENT_ERROR]", err);
+    return NextResponse.json(
+      { success: false, message: "Falha ao consultar serviços de enriquecimento" },
+      { status: 500 },
+    );
   }
 }

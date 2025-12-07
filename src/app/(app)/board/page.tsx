@@ -266,8 +266,10 @@ function LeadDrawer({
   const [events, setEvents] = useState<LeadEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<EnrichmentSuggestionCard[]>([]);
-  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
-  const [suggestionsError, setSuggestionsError] = useState<string>("");
+  type EnrichmentStatus = "idle" | "loading" | "success" | "empty" | "error";
+  const [enrichmentStatus, setEnrichmentStatus] = useState<EnrichmentStatus>("idle");
+  const [enrichmentError, setEnrichmentError] = useState<string | null>(null);
+  const [enrichmentReason, setEnrichmentReason] = useState<string | null>(null);
   const [additionalPhones, setAdditionalPhones] = useState<{ rotulo: string; valor: string }[]>([]);
   const [cartDirty, setCartDirty] = useState(false);
   const [customProduct, setCustomProduct] = useState({ name: "", value: "", note: "", qty: 1 });
@@ -538,17 +540,23 @@ function LeadDrawer({
   }, []);
 
   const fetchSuggestions = useCallback(async () => {
-    setSuggestionsLoading(true);
-    setSuggestionsError("");
+    setEnrichmentStatus("loading");
+    setEnrichmentError(null);
+    setEnrichmentReason(null);
+    setSuggestions([]);
     try {
       const res = await fetch(`/api/leads/${lead.id}/enrich`, { method: "POST" });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        setSuggestionsError(data?.message || "Erro ao buscar sugestões");
+        setEnrichmentError(data?.message || "Erro ao buscar sugestões");
+        setEnrichmentStatus("error");
         return;
       }
-      const data = (await res.json()) as LeadEnrichmentSuggestion[];
-      const normalized: EnrichmentSuggestionCard[] = data
+      const payload = await res.json();
+      const list = Array.isArray(payload) ? payload : (payload.suggestions as LeadEnrichmentSuggestion[] | undefined) ?? [];
+      const reason = !Array.isArray(payload) ? (payload.reason as string | undefined) : undefined;
+      setEnrichmentReason(reason ?? null);
+      const normalized: EnrichmentSuggestionCard[] = list
         .filter((s) => s.status === "PENDING")
         .map((s) => ({
           id: s.id,
@@ -560,11 +568,13 @@ function LeadDrawer({
           ignored: s.status === "REJECTED",
         }));
       setSuggestions(normalized);
+      setEnrichmentStatus(normalized.length === 0 ? "empty" : "success");
     } catch (err) {
       console.error(err);
-      setSuggestionsError("Falha de conexão ao buscar sugestões");
+      setEnrichmentError("Falha de conexão ao buscar sugestões");
+      setEnrichmentStatus("error");
     } finally {
-      setSuggestionsLoading(false);
+      // status already set above
     }
   }, [lead.id]);
 
@@ -1082,11 +1092,41 @@ function LeadDrawer({
                 <button
                   onClick={fetchSuggestions}
                   className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold hover:bg-slate-50"
+                  disabled={enrichmentStatus === "loading"}
                 >
-                  {suggestionsLoading ? "Buscando..." : "Buscar dados"}
+                  {enrichmentStatus === "loading" ? "Buscando..." : "Buscar dados"}
                 </button>
               </div>
-              {suggestionsError ? <p className="text-sm text-red-600">{suggestionsError}</p> : null}
+              {enrichmentStatus === "idle" ? (
+                <p className="text-sm text-slate-500">
+                  Clique em “Buscar dados” para tentar enriquecer este CNPJ.
+                </p>
+              ) : null}
+              {enrichmentStatus === "loading" ? (
+                <p className="text-sm text-slate-500">Buscando dados de Receita / BrasilAPI…</p>
+              ) : null}
+              {enrichmentStatus === "error" && enrichmentError ? (
+                <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  <span>Não foi possível buscar dados de enriquecimento agora.</span>
+                  <button
+                    onClick={fetchSuggestions}
+                    className="rounded-lg border border-red-200 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
+                  >
+                    Tentar novamente
+                  </button>
+                </div>
+              ) : null}
+              {enrichmentStatus === "empty" ? (
+                <p className="text-sm text-slate-500">
+                  Nenhum dado novo encontrado para este CNPJ nos serviços de enriquecimento.
+                  {enrichmentReason === "NOT_FOUND" ? " CNPJ não encontrado na Receita / BrasilAPI." : ""}
+                </p>
+              ) : null}
+              {enrichmentStatus === "success" && suggestions.filter((s) => !s.ignored).length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  Nenhuma sugestão pendente. Já aplicou ou ignorou todos os dados deste CNPJ.
+                </p>
+              ) : null}
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 {suggestions
                   .filter((s) => !s.ignored)
@@ -1123,7 +1163,8 @@ function LeadDrawer({
                       </div>
                     </div>
                   ))}
-                {!suggestionsLoading && suggestions.filter((s) => !s.applied && !s.ignored).length === 0 ? (
+                {enrichmentStatus === "success" &&
+                suggestions.filter((s) => !s.applied && !s.ignored).length === 0 ? (
                   <p className="text-sm text-slate-500">Nenhuma sugestão pendente.</p>
                 ) : null}
               </div>
