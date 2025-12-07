@@ -83,6 +83,7 @@ model User {
   campanhasGS                Campanha[]        @relation("CampanhaGS")
   campanhasOwner             Campanha[]        @relation("CampanhaOwner")
   createdAnnouncements       Announcement[]    @relation("CreatedAnnouncements")
+  readAnnouncements          AnnouncementRead[]
 }
 
 model Campanha {

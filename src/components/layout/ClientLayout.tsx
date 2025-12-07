@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ProfileModal } from "@/components/profile/ProfileModal";
+import { AnnouncementPopup } from "@/components/AnnouncementPopup";
 
 type ClientLayoutProps = {
     children: React.ReactNode;
@@ -35,6 +36,7 @@ export function ClientLayout({ children, user }: ClientLayoutProps) {
                 isOpen={isProfileOpen}
                 onClose={() => setIsProfileOpen(false)}
             />
+            <AnnouncementPopup />
         </div>
     );
 }
