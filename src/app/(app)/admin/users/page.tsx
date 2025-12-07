@@ -196,8 +196,8 @@ export default function AdminUsersPage() {
     <div className="max-w-7xl mx-auto space-y-6">
       <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-500 font-bold">Administração</p>
-          <h1 className="text-3xl font-bold text-slate-900 mt-1">Gestão de Usuários</h1>
+          <p className="text-xs uppercase tracking-[0.2em] text-neon-blue font-bold">Administração</p>
+          <h1 className="text-3xl font-black text-white mt-1 uppercase tracking-tighter">Gestão de Usuários</h1>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -211,13 +211,13 @@ export default function AdminUsersPage() {
       </header>
 
       {/* Filtros e Controles */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-pic-dark p-4 rounded-xl border border-pic-zinc shadow-sm">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-slate-600">Filtrar por:</span>
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Filtrar por:</span>
           <select
             value={profileFilter}
             onChange={(e) => setProfileFilter(e.target.value as Role | "ALL")}
-            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200"
+            className="rounded-lg border border-slate-700 bg-black px-3 py-1.5 text-sm text-white focus:outline-none focus:border-neon-blue transition-colors uppercase tracking-wide font-medium"
           >
             <option value="ALL">Todos os perfis</option>
             <option value={Role.MASTER}>Master</option>
@@ -230,29 +230,29 @@ export default function AdminUsersPage() {
 
         <button
           onClick={loadUsers}
-          className="text-sm font-semibold text-slate-500 hover:text-slate-900 transition-colors"
+          className="text-xs font-bold text-slate-500 hover:text-white uppercase tracking-wider transition-colors"
         >
           Atualizar Lista
         </button>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-xl border border-pic-zinc bg-pic-dark shadow-sm overflow-hidden">
         {usersLoading ? (
           <div className="p-12 text-center">
-            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite] text-slate-400" role="status"></div>
-            <p className="mt-4 text-sm text-slate-500 font-medium">Carregando equipe...</p>
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite] text-neon-blue" role="status"></div>
+            <p className="mt-4 text-sm text-slate-400 font-medium uppercase tracking-wider">Carregando equipe...</p>
           </div>
         ) : usersError ? (
           <div className="p-8 text-center">
-            <p className="text-red-600 mb-2 font-medium">Erro ao carregar</p>
+            <p className="text-red-500 mb-2 font-bold uppercase tracking-wider">Erro ao carregar</p>
             <p className="text-sm text-slate-500">{usersError}</p>
-            <button onClick={loadUsers} className="mt-4 text-xs font-bold text-slate-900 underline">Tentar novamente</button>
+            <button onClick={loadUsers} className="mt-4 text-xs font-bold text-white underline hover:text-neon-blue">Tentar novamente</button>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
+                <tr className="bg-black/40 border-b border-pic-zinc text-left text-xs font-bold text-slate-500 uppercase tracking-widest">
                   <th className="px-6 py-4">Usuário</th>
                   <th className="px-6 py-4">Perfil</th>
                   <th className="px-6 py-4">Escritório</th>
@@ -261,13 +261,13 @@ export default function AdminUsersPage() {
                   <th className="px-6 py-4 text-right">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-pic-zinc">
                 {filteredUsers.map((user) => (
-                  <tr key={user.id} className="hover:bg-slate-50 transition-colors group">
+                  <tr key={user.id} className="hover:bg-slate-800/50 transition-colors group">
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
-                        <span className="font-semibold text-slate-900 text-base">{user.name}</span>
-                        <span className="text-slate-500">{user.email}</span>
+                        <span className="font-bold text-white text-base">{user.name}</span>
+                        <span className="text-slate-500 text-xs">{user.email}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -277,23 +277,23 @@ export default function AdminUsersPage() {
                         {profileLabels[user.role]}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-slate-700">
+                    <td className="px-6 py-4 text-slate-300">
                       {user.officeRecord ? (
                         <div className="flex flex-col">
-                          <span className="font-semibold text-slate-900">{user.officeRecord.name}</span>
-                          <span className="text-xs font-mono text-slate-400">{user.officeRecord.code}</span>
+                          <span className="font-bold text-white">{user.officeRecord.name}</span>
+                          <span className="text-xs font-mono text-slate-500">{user.officeRecord.code}</span>
                         </div>
                       ) : (
-                        <span className="text-slate-400 italic">Global / Nenhum</span>
+                        <span className="text-slate-600 italic">Global / Nenhum</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-slate-700">
+                    <td className="px-6 py-4 text-slate-300">
                       {user.owner ? (
                         <div className="flex flex-col">
-                          <span className="text-slate-900 font-medium">{user.owner.name}</span>
+                          <span className="text-white font-bold">{user.owner.name}</span>
                         </div>
                       ) : (
-                        <span className="text-slate-400">-</span>
+                        <span className="text-slate-600">-</span>
                       )}
                     </td>
                     <td className="px-6 py-4">
@@ -305,7 +305,7 @@ export default function AdminUsersPage() {
                     <td className="px-6 py-4 text-right">
                       <button
                         onClick={() => openEditDrawer(user)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity rounded-lg border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-900 hover:text-white hover:border-slate-900 active:scale-95"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity rounded-lg border border-slate-700 px-4 py-2 text-xs font-bold text-slate-400 hover:bg-neon-blue hover:text-black hover:border-neon-blue active:scale-95 uppercase tracking-wider"
                       >
                         Gerenciar
                       </button>
@@ -314,7 +314,7 @@ export default function AdminUsersPage() {
                 ))}
                 {!filteredUsers.length && (
                   <tr>
-                    <td className="px-6 py-12 text-center text-slate-500" colSpan={6}>
+                    <td className="px-6 py-12 text-center text-slate-500 font-medium uppercase tracking-wider" colSpan={6}>
                       Nenhum usuário encontrado com os filtros atuais.
                     </td>
                   </tr>

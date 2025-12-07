@@ -3,7 +3,7 @@
 import { Office, Role } from "@prisma/client";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { isProprietario } from "@/lib/authRoles";
-import { Lock, Unlock, RefreshCw } from "lucide-react";
+import { Lock, Unlock, RefreshCw, User, Plus } from "lucide-react";
 
 export type OwnerOption = {
   id: string;
@@ -262,209 +262,213 @@ export default function UserDrawer({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex justify-end bg-slate-900/60 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-200"
       onMouseDown={onClose}
     >
       <div
         ref={panelRef}
-        className="h-full w-full max-w-md bg-white p-6 shadow-2xl overflow-y-auto border-l border-slate-200"
+        className="w-full max-w-md bg-pic-dark border-2 border-neon-blue shadow-[0_0_50px_rgba(0,0,0,0.8)] relative flex flex-col max-h-[90vh] overflow-y-auto custom-scrollbar rounded-xl"
         onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6 border-b border-slate-100 pb-4">
-          <h3 className="text-xl font-bold text-slate-900">{heading}</h3>
+        <div className="p-6 border-b border-pic-zinc flex justify-between items-center bg-[url('/grid.svg')]">
+          <h3 className="text-xl font-bold text-white uppercase tracking-wider flex items-center gap-2">
+            {mode === "create" ? <Plus className="text-neon-green" /> : <User className="text-neon-blue" />}
+            {heading}
+          </h3>
           <button
             type="button"
-            className="text-slate-400 hover:text-slate-900 transition-colors"
+            className="text-slate-400 hover:text-white transition-colors"
             onClick={onClose}
           >
             ✕
           </button>
         </div>
 
-        <form className="space-y-5" onSubmit={handleSubmit}>
-          {error ? <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg">{error}</div> : null}
+        <div className="p-6">
 
-          <div className="grid gap-4">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Nome</label>
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-neon-blue focus:ring-1 focus:ring-neon-blue outline-none transition-all"
-                required
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-neon-blue focus:ring-1 focus:ring-neon-blue outline-none transition-all"
-                required
-              />
-            </div>
-          </div>
+          <form className="space-y-5" onSubmit={handleSubmit}>
+            {error ? <div className="p-3 bg-red-900/20 border border-red-500 text-red-400 text-sm rounded-lg">{error}</div> : null}
 
-          {mode === "create" && (
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Senha Inicial</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-neon-blue focus:ring-1 focus:ring-neon-blue outline-none transition-all"
-                required
-              />
-            </div>
-          )}
-
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Perfil</label>
-            <select
-              value={role}
-              onChange={(event) => setRole(event.target.value as Role)}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-neon-blue focus:ring-1 focus:ring-neon-blue outline-none transition-all"
-            >
-              {availableRoles.map((value) => (
-                <option key={value} value={value}>
-                  {roleLabels[value]}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {currentUserIsOwner ? (
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Escritório</label>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 font-medium">
-                {officeLabel || "Sem escritório"}
+            <div className="grid gap-4">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Nome</label>
+                <input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  className="w-full bg-black border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-neon-blue focus:ring-1 focus:ring-neon-blue outline-none transition-all placeholder:text-slate-600"
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  className="w-full bg-black border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-neon-blue focus:ring-1 focus:ring-neon-blue outline-none transition-all placeholder:text-slate-600"
+                  required
+                />
               </div>
             </div>
-          ) : showMultiOffice ? (
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Escritórios</label>
-              <select
-                multiple
-                value={selectedOffices}
-                onChange={(event) => {
-                  const values = Array.from(event.target.selectedOptions).map(
-                    (option) => option.value as Office
-                  );
-                  setSelectedOffices(values);
-                }}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-neon-blue focus:ring-1 focus:ring-neon-blue outline-none transition-all"
-              >
-                {officeOptions.map((officeCode) => (
-                  <option key={officeCode} value={officeCode}>
-                    {officeCode}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : showSingleOffice ? (
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Escritório</label>
-              <select
-                value={selectedOfficeId ?? ""}
-                onChange={(event) => {
-                  setSelectedOfficeId(event.target.value);
-                  const officeOption = offices.find((office) => office.id === event.target.value);
-                  setSingleOffice(mapOfficeCodeToEnum(officeOption?.code) ?? "");
-                }}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-neon-blue focus:ring-1 focus:ring-neon-blue outline-none transition-all"
-              >
-                <option value="">Selecione</option>
-                {offices.map((officeOption) => (
-                  <option key={officeOption.id} value={officeOption.id}>
-                    {officeOption.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : null}
 
-          {showOwnerSelect ? (
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Proprietário</label>
-              <select
-                value={ownerId}
-                onChange={(event) => setOwnerId(event.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-neon-blue focus:ring-1 focus:ring-neon-blue outline-none transition-all"
-              >
-                <option value="">Selecione</option>
-                {ownersForOffice.map((ownerOption) => (
-                  <option key={ownerOption.id} value={ownerOption.id}>
-                    {ownerOption.name} ({ownerOption.email})
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : null}
-
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white px-4 py-3 text-sm font-bold uppercase tracking-wider shadow-lg shadow-emerald-500/20 transition-all transform hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100"
-          >
-            {isSubmitting ? "Salvando..." : submitLabel}
-          </button>
-        </form>
-
-        {mode === "edit" && (
-          <div className="mt-8 pt-6 border-t border-slate-100 space-y-4">
-            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Ações de Segurança</h4>
-
-            {/* Block / Unlock */}
-            <div className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-slate-50">
-              <div className="flex items-center gap-3">
-                {active ? <Unlock className="w-4 h-4 text-emerald-500" /> : <Lock className="w-4 h-4 text-red-500" />}
-                <div>
-                  <p className="text-sm font-medium text-slate-900">{active ? "Acesso Permitido" : "Acesso Bloqueado"}</p>
-                  <p className="text-xs text-slate-500">{active ? "O usuário pode fazer login" : "O usuário não pode acessar"}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleToggleBlock}
-                className={`px-3 py-1.5 text-xs font-bold rounded border ${active ? 'border-red-200 text-red-600 hover:bg-red-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'}`}
-              >
-                {active ? "Bloquear" : "Desbloquear"}
-              </button>
-            </div>
-
-            {/* Reset Password */}
-            {onResetPassword && (
-              <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-3">
-                    <RefreshCw className="w-4 h-4 text-blue-500" />
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">Resetar Senha</p>
-                      <p className="text-xs text-slate-500">Gera uma nova senha aleatória</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleResetPassword}
-                    disabled={isResetting}
-                    className="px-3 py-1.5 text-xs font-bold rounded border border-blue-200 text-blue-600 hover:bg-blue-50 disabled:opacity-50"
-                  >
-                    {isResetting ? "..." : "Resetar"}
-                  </button>
-                </div>
-                {resetMessage && (
-                  <div className="mt-2 p-2 bg-emerald-100 text-emerald-800 text-xs font-mono rounded text-center border border-emerald-200 select-all">
-                    {resetMessage}
-                  </div>
-                )}
+            {mode === "create" && (
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Senha Inicial</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="w-full bg-black border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-neon-blue focus:ring-1 focus:ring-neon-blue outline-none transition-all placeholder:text-slate-600"
+                  required
+                />
               </div>
             )}
-          </div>
-        )}
 
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Perfil</label>
+              <select
+                value={role}
+                onChange={(event) => setRole(event.target.value as Role)}
+                className="w-full bg-black border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-neon-blue focus:ring-1 focus:ring-neon-blue outline-none transition-all"
+              >
+                {availableRoles.map((value) => (
+                  <option key={value} value={value} className="bg-slate-900 text-white">
+                    {roleLabels[value]}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {currentUserIsOwner ? (
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Escritório</label>
+                <div className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-300 font-medium">
+                  {officeLabel || "Sem escritório"}
+                </div>
+              </div>
+            ) : showMultiOffice ? (
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Escritórios</label>
+                <select
+                  multiple
+                  value={selectedOffices}
+                  onChange={(event) => {
+                    const values = Array.from(event.target.selectedOptions).map(
+                      (option) => option.value as Office
+                    );
+                    setSelectedOffices(values);
+                  }}
+                  className="w-full bg-black border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-neon-blue focus:ring-1 focus:ring-neon-blue outline-none transition-all"
+                >
+                  {officeOptions.map((officeCode) => (
+                    <option key={officeCode} value={officeCode} className="bg-slate-900 text-white">
+                      {officeCode}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : showSingleOffice ? (
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Escritório</label>
+                <select
+                  value={selectedOfficeId ?? ""}
+                  onChange={(event) => {
+                    setSelectedOfficeId(event.target.value);
+                    const officeOption = offices.find((office) => office.id === event.target.value);
+                    setSingleOffice(mapOfficeCodeToEnum(officeOption?.code) ?? "");
+                  }}
+                  className="w-full bg-black border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-neon-blue focus:ring-1 focus:ring-neon-blue outline-none transition-all"
+                >
+                  <option value="" className="bg-slate-900">Selecione</option>
+                  {offices.map((officeOption) => (
+                    <option key={officeOption.id} value={officeOption.id} className="bg-slate-900 text-white">
+                      {officeOption.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+
+            {showOwnerSelect ? (
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Proprietário</label>
+                <select
+                  value={ownerId}
+                  onChange={(event) => setOwnerId(event.target.value)}
+                  className="w-full bg-black border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-neon-blue focus:ring-1 focus:ring-neon-blue outline-none transition-all"
+                >
+                  <option value="" className="bg-slate-900">Selecione</option>
+                  {ownersForOffice.map((ownerOption) => (
+                    <option key={ownerOption.id} value={ownerOption.id} className="bg-slate-900 text-white">
+                      {ownerOption.name} ({ownerOption.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full rounded-lg bg-neon-green text-black hover:bg-emerald-400 px-4 py-3 text-sm font-black uppercase tracking-wider shadow-[0_0_20px_rgba(34,197,94,0.3)] transition-all transform hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100"
+            >
+              {isSubmitting ? "Salvando..." : submitLabel}
+            </button>
+          </form>
+
+          {mode === "edit" && (
+            <div className="mt-8 pt-6 border-t border-slate-800 space-y-4">
+              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Ações de Segurança</h4>
+
+              {/* Block / Unlock */}
+              <div className="flex items-center justify-between p-3 rounded-lg border border-slate-800 bg-slate-900/50">
+                <div className="flex items-center gap-3">
+                  {active ? <Unlock className="w-4 h-4 text-emerald-500" /> : <Lock className="w-4 h-4 text-red-500" />}
+                  <div>
+                    <p className="text-sm font-bold text-white">{active ? "Acesso Permitido" : "Acesso Bloqueado"}</p>
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider">{active ? "O usuário pode fazer login" : "O usuário não pode acessar"}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleToggleBlock}
+                  className={`px-3 py-1.5 text-xs font-bold rounded uppercase tracking-wider border ${active ? 'border-red-900 text-red-500 hover:bg-red-900/20' : 'border-emerald-900 text-emerald-500 hover:bg-emerald-900/20'}`}
+                >
+                  {active ? "Bloquear" : "Desbloquear"}
+                </button>
+              </div>
+
+              {/* Reset Password */}
+              {onResetPassword && (
+                <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-3">
+                      <RefreshCw className="w-4 h-4 text-neon-blue" />
+                      <div>
+                        <p className="text-sm font-bold text-white">Resetar Senha</p>
+                        <p className="text-[10px] text-slate-500 uppercase tracking-wider">Gera uma nova senha aleatória</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleResetPassword}
+                      disabled={isResetting}
+                      className="px-3 py-1.5 text-xs font-bold rounded uppercase tracking-wider border border-blue-900 text-blue-500 hover:bg-blue-900/20 disabled:opacity-50"
+                    >
+                      {isResetting ? "..." : "Resetar"}
+                    </button>
+                  </div>
+                  {resetMessage && (
+                    <div className="mt-2 p-2 bg-emerald-900/20 text-emerald-400 text-xs font-mono rounded text-center border border-emerald-900/50 select-all">
+                      {resetMessage}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
-  );
 }
