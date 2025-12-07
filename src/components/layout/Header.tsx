@@ -19,7 +19,7 @@ export function Header({ userName, userRole, onOpenProfile }: HeaderProps) {
                     </span>
                 </div>
 
-                {(userRole === "MASTER" || userRole === "GERENTE_SENIOR" || userRole === "PROPRIETARIO") && (
+                {(userRole === "MASTER" || userRole === "GERENTE_SENIOR" || userRole === "PROPRIETARIO" || userRole === "GERENTE_NEGOCIOS") && (
                     <nav className="hidden md:flex items-center gap-4 text-sm font-medium">
                         <a href="/admin/dashboard" className="text-slate-400 hover:text-white transition-colors">Home</a>
                         <a href="/admin/distribuicao" className="text-slate-400 hover:text-neon-pink transition-colors">Gestão de Campanhas e Leads</a>
