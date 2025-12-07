@@ -79,6 +79,9 @@ model User {
   consultantDistributionLogs DistributionLog[] @relation("ConsultantDistributionLog")
   leadHistories              LeadHistory[]     @relation("UserLeadHistory")
   leadEvents                 LeadEvent[]       @relation("UserLeadEvents")
+  campanhasGN                Campanha[]        @relation("CampanhaGN")
+  campanhasGS                Campanha[]        @relation("CampanhaGS")
+  campanhasOwner             Campanha[]        @relation("CampanhaOwner")
 }
 
 model Campanha {
@@ -97,6 +100,12 @@ model Campanha {
   periodoFim     DateTime?
   createdAt      DateTime  @default(now())
   createdById    String?   @db.ObjectId
+  gnId           String?   @db.ObjectId
+  gn             User?     @relation("CampanhaGN", fields: [gnId], references: [id])
+  gsId           String?   @db.ObjectId
+  gs             User?     @relation("CampanhaGS", fields: [gsId], references: [id])
+  ownerId        String?   @db.ObjectId
+  owner          User?     @relation("CampanhaOwner", fields: [ownerId], references: [id])
   totalLeads     Int       @default(0)
   assignedLeads  Int       @default(0)
   remainingLeads Int       @default(0)

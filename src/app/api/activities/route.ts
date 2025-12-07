@@ -37,8 +37,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ message: "Not found or unauthorized" }, { status: 404 });
   }
 
+  let whereClause: any = { leadId };
+
+  if (sessionUser.role === "CONSULTOR") {
+    whereClause = {
+      leadId,
+      OR: [
+        { userId: sessionUser.id },
+        { user: { role: { in: ["MASTER", "GERENTE_SENIOR", "GERENTE_NEGOCIOS", "PROPRIETARIO"] } } },
+      ],
+    };
+  }
+
   const activities = await prisma.leadActivity.findMany({
-    where: { leadId },
+    where: whereClause,
     include: { user: { select: { id: true, name: true, email: true, role: true } } },
     orderBy: { createdAt: "desc" },
   });
