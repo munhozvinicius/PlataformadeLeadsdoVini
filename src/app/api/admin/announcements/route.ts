@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 
 // Get All Announcements (Admin View - with stats)
-export async function GET(req: Request) {
+export async function GET() {
     const session = await getServerSession(authOptions);
     const allowedRoles = [Role.MASTER, Role.GERENTE_SENIOR, Role.GERENTE_NEGOCIOS];
 

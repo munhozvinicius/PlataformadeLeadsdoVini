@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Trash2, Plus, Image as ImageIcon, Users, Eye } from "lucide-react";
+import { Trash2, Plus, Image as ImageIcon, Eye } from "lucide-react";
 
 type Announcement = {
     id: string;

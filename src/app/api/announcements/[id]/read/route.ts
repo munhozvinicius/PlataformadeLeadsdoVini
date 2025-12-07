@@ -21,7 +21,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         });
 
         return NextResponse.json({ success: true });
-    } catch (error) {
+    } catch {
         // Ignore unique constraint violation (already read)
         return NextResponse.json({ success: true });
     }

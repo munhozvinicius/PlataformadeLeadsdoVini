@@ -103,8 +103,8 @@ export async function GET() {
       baseLeadWhere = { consultorId: { in: consultoresIds } };
     } else {
       // Fallback: Se não achar escritório gerenciado, vê zero ou apenas leads que ele mesmo atenda (caso houver).
-      baseUserWhere = { id: "none" };
-      baseLeadWhere = { consultorId: "none" };
+      baseUserWhere = { id: { in: [] } };
+      baseLeadWhere = { consultorId: { in: [] } };
     }
   }
 

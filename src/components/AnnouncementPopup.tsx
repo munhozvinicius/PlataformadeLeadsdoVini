@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, Bell } from "lucide-react";
+import { Bell } from "lucide-react";
 import { useSession } from "next-auth/react";
 
 type Announcement = {
