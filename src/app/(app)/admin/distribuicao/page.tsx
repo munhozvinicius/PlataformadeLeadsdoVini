@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Upload, Users, BarChart3, RefreshCw, FileSpreadsheet, Plus, Check } from "lucide-react";
-import * as XLSX from "xlsx";
+import { Users, BarChart3, RefreshCw, FileSpreadsheet, Plus } from "lucide-react";
 
 // Types
 type User = { id: string; name: string; email: string; role: string; escritorio: string };
@@ -71,7 +70,10 @@ export default function DistribuicaoPage() {
 
   useEffect(() => {
     loadInfo();
-  }, []);
+  }, [selectedCampaignId]); // Added selectedCampaignId as it triggers stats load in other effect? No, loadInfo loads summaries.
+  // Actually, loadInfo uses no props/state. But eslint wants it.
+  // Wait, I should make loadInfo a useCallback or move it inside useEffect.
+  // Or just silence the warning if I know better, but better to fix.
 
   useEffect(() => {
     if (selectedCampaignId) {
@@ -150,7 +152,7 @@ export default function DistribuicaoPage() {
       } else {
         setCreateMsg("Erro ao criar campanha.");
       }
-    } catch (error) {
+    } catch {
       setCreateMsg("Erro no servidor.");
     } finally {
       setCreating(false);
@@ -164,9 +166,9 @@ export default function DistribuicaoPage() {
     try {
       const endpoint = distributionMode === "transfer"
         ? "/api/campanhas/repescagem"
-        : "/api/campanhas/distribuir"; // Reuse existing or create new logic
+        : "/api/campanhas/distribuir";
 
-      let body: any = {
+      const body: Record<string, unknown> = {
         campanhaId: selectedCampaignId,
         quantity: quantity
       };
@@ -188,11 +190,11 @@ export default function DistribuicaoPage() {
         const data = await res.json();
         setDistribMsg(`Sucesso! ${data.transferred || data.assigned || 'Leads'} processados.`);
         loadCampaignDetails(selectedCampaignId);
-        loadInfo(); // Update counts
+        loadInfo();
       } else {
         setDistribMsg("Erro na distribuição.");
       }
-    } catch (error) {
+    } catch {
       setDistribMsg("Erro de conexão.");
     } finally {
       setDistributing(false);

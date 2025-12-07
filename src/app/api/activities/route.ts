@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ message: "Not found or unauthorized" }, { status: 404 });
   }
 
-  let whereClause: any = { leadId };
+  let whereClause: Prisma.LeadActivityWhereInput = { leadId };
 
   if (sessionUser.role === "CONSULTOR") {
     whereClause = {

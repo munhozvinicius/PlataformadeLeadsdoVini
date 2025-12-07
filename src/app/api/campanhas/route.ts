@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Role } from "@prisma/client";
+import { Role, Prisma } from "@prisma/client";
 import * as XLSX from "xlsx";
 
 export async function POST(req: Request) {
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
             const workbook = XLSX.read(buffer, { type: "buffer" });
             const firstSheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[firstSheetName];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet) as Record<string, unknown>[];
 
             importedCount = jsonData.length;
 
@@ -71,20 +71,20 @@ export async function POST(req: Request) {
             const leadsToCreate = jsonData.map((row) => ({
                 campanhaId: campanha.id,
                 importBatchId: batch.id,
-                nomeFantasia: row["Nome Fantasia"] || row["Nome"] || row["Cliente"] || "",
-                razaoSocial: row["Razão Social"] || row["Empresa"] || "",
+                nomeFantasia: typeof row["Nome Fantasia"] === 'string' ? row["Nome Fantasia"] : (String(row["Nome"] || row["Cliente"] || "")),
+                razaoSocial: typeof row["Razão Social"] === 'string' ? row["Razão Social"] : (String(row["Empresa"] || "")),
                 cnpj: row["CNPJ"] ? String(row["CNPJ"]) : undefined,
                 telefone: row["Telefone"] ? String(row["Telefone"]) : undefined,
-                email: row["Email"] || row["E-mail"] || undefined,
-                cidade: row["Cidade"] || undefined,
-                estado: row["Estado"] || row["UF"] || undefined,
-                status: "NOVO",
-                externalData: row, // Store original row data as JSON
+                email: (row["Email"] || row["E-mail"]) ? String(row["Email"] || row["E-mail"]) : undefined,
+                cidade: row["Cidade"] ? String(row["Cidade"]) : undefined,
+                estado: (row["Estado"] || row["UF"]) ? String(row["Estado"] || row["UF"]) : undefined,
+                status: "NOVO" as const, // Use const assertion for Enum
+                externalData: row as Prisma.InputJsonValue,
             }));
 
             if (leadsToCreate.length > 0) {
                 await prisma.lead.createMany({
-                    data: leadsToCreate as any, // Type assertion might be needed due to strict prisma types on createMany
+                    data: leadsToCreate,
                 });
             }
 

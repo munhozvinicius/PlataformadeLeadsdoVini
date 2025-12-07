@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Role } from "@prisma/client";
+import { Role, Prisma } from "@prisma/client";
 
 export async function POST(req: Request) {
     try {
@@ -21,10 +21,10 @@ export async function POST(req: Request) {
         // If fromConsultantId is provided, it's a "Repescagem" (Transfer)
         // If not, it's a "Distribution" from stock
 
-        const whereClause: any = {
+        const whereClause: Prisma.LeadWhereInput = {
             campanhaId,
             consultorId: fromConsultantId || null,
-            status: { notIn: ["FECHADO", "PERDIDO"] }, // Don't redistribute closed/lost leads by default? User didn't specify, but safer.
+            status: { notIn: ["FECHADO", "PERDIDO"] },
         };
 
         // Find candidate leads
@@ -61,7 +61,6 @@ export async function POST(req: Request) {
                         // If it's a fresh distribution, status is usually NOVO.
                         // If it's repescagem, arguably we want them to re-work it.
                         assignedToId: toConsultantId,
-                        assignedToAt: new Date(), // If this field existed, but it doesn't in schema overview.
                     }
                 });
             }
