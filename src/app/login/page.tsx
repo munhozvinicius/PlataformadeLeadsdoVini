@@ -39,48 +39,56 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-      <div className="w-full max-w-md bg-white shadow-sm rounded-2xl border p-8 space-y-6">
+    <div className="min-h-screen bg-background flex items-center justify-center p-6">
+      <div className="w-full max-w-md bg-pic-card border-2 border-neon-pink shadow-[8px_8px_0px_0px_rgba(255,0,153,0.5)] p-8 space-y-8">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Mini CRM</p>
-          <h1 className="text-2xl font-semibold text-slate-900">Entrar</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Use o usuário MASTER inicial ou credenciais criadas pelo administrador.
+          <p className="text-xs uppercase tracking-[0.2em] text-neon-green font-bold mb-2">PIC System</p>
+          <h1 className="text-4xl font-black text-white uppercase tracking-tighter leading-none">
+            Acessar<br />Plataforma
+          </h1>
+          <p className="text-sm text-slate-400 mt-4 font-mono border-l-2 border-neon-green pl-3">
+            Identifique-se para acessar o painel de inteligência.
           </p>
         </div>
-        <form className="space-y-4" onSubmit={handleSubmit}>
+        <form className="space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">Email</label>
+            <label className="text-xs font-bold uppercase text-neon-pink tracking-wider">Email</label>
             <input
               type="email"
               autoComplete="email"
-              className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+              className="w-full bg-pic-dark border-2 border-pic-zinc text-white px-4 py-3 text-sm focus:outline-none focus:border-neon-green focus:shadow-[0_0_10px_rgba(204,255,0,0.3)] transition-all font-mono placeholder:text-slate-700"
+              placeholder="seu@email.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">Senha</label>
+            <label className="text-xs font-bold uppercase text-neon-pink tracking-wider">Senha</label>
             <input
               type="password"
               autoComplete="current-password"
-              className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+              className="w-full bg-pic-dark border-2 border-pic-zinc text-white px-4 py-3 text-sm focus:outline-none focus:border-neon-green focus:shadow-[0_0_10px_rgba(204,255,0,0.3)] transition-all font-mono placeholder:text-slate-700"
+              placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
             />
           </div>
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+          {error ? (
+            <div className="bg-red-900/20 border border-red-500/50 p-3">
+              <p className="text-sm text-red-400 font-mono">Erro: {error}</p>
+            </div>
+          ) : null}
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-slate-900 text-white py-2 text-sm font-semibold hover:bg-slate-800 disabled:opacity-50"
+            className="w-full bg-neon-pink text-black py-4 text-base font-black uppercase tracking-widest hover:bg-white hover:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.5)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? "Entrando..." : "Entrar"}
+            {loading ? "Carregando..." : "Entrar No Sistema"}
           </button>
         </form>
-        <div className="text-xs text-slate-400">
+        <div className="text-xs text-slate-600 font-mono text-center border-t border-dashed border-slate-800 pt-4">
           MASTER padrão: munhoz.vinicius@gmail.com / Theforce85!!
         </div>
       </div>

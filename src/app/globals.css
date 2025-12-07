@@ -3,8 +3,10 @@
 @tailwind utilities;
 
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  --background: #050505; /* Deep black for brutalism */
+  --foreground: #f8fafc;
+  --neon-pink: #FF0099;
+  --neon-green: #CCFF00;
 }
 
 body {

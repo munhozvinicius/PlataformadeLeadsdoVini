@@ -15,8 +15,8 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Mini CRM Industrial",
-  description: "Kanban de leads industriais com importação e dashboard",
+  title: "PIC - Plataforma de Inteligência Comercial",
+  description: "Inteligência comercial e gestão de leads",
 };
 
 export default function RootLayout({

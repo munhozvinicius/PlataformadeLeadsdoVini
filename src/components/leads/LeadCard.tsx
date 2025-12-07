@@ -31,33 +31,39 @@ export function LeadCard({ lead, onOpen }: LeadCardProps) {
   const phone = lead.telefone1 || lead.telefone2 || lead.telefone3 || "Telefone não informado";
   return (
     <div
-      className="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm hover:shadow-md transition cursor-pointer"
+      className="rounded-none border-2 border-pic-zinc bg-pic-card px-4 py-4 shadow-none hover:border-neon-pink hover:shadow-[4px_4px_0px_0px_rgba(255,0,153,0.5)] transition-all cursor-pointer group"
       onClick={() => onOpen(lead.id)}
     >
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between mb-3">
         <div>
-          <p className="text-sm font-semibold text-slate-900">
+          <p className="text-sm font-bold text-white uppercase tracking-wide group-hover:text-neon-pink transition-colors">
             {lead.nomeFantasia ?? lead.razaoSocial ?? "Sem empresa"}
           </p>
-          <p className="text-xs text-slate-500">{lead.cnpj ?? "CNPJ não informado"}</p>
+          <p className="text-xs text-slate-400 font-mono mt-1">{lead.cnpj ?? "CNPJ não informado"}</p>
         </div>
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700">
+        <span className="rounded-none border border-neon-green bg-pic-zinc/50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-neon-green">
           {statusLabel[lead.status]}
         </span>
       </div>
-      <div className="mt-2 text-xs text-slate-600 space-y-1">
-        <p>
+      <div className="mt-2 text-xs text-slate-400 space-y-2 font-mono">
+        <p className="flex items-center gap-1">
+          <span className="w-1.5 h-1.5 bg-slate-600 rounded-full"></span>
           {lead.cidade ?? "-"} {lead.estado ? `/ ${lead.estado}` : ""}
         </p>
-        <p>{phone}</p>
+        <p className="flex items-center gap-1">
+          <span className="w-1.5 h-1.5 bg-slate-600 rounded-full"></span>
+          {phone}
+        </p>
         {lead.campanha?.nome ? (
-          <span className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
-            {lead.campanha.nome}
-          </span>
+          <div className="pt-1">
+            <span className="inline-block border border-pic-zinc bg-pic-dark px-2 py-1 text-[10px] text-slate-300 uppercase truncate max-w-full">
+              {lead.campanha.nome}
+            </span>
+          </div>
         ) : null}
         {lead.lastActivityAt ? (
-          <p className="text-[11px] text-slate-500">
-            Última atividade: {new Date(lead.lastActivityAt).toLocaleString("pt-BR")}
+          <p className="text-[10px] text-slate-500 pt-2 border-t border-dashed border-pic-zinc">
+            Última ativ.: {new Date(lead.lastActivityAt).toLocaleString("pt-BR")}
           </p>
         ) : null}
       </div>

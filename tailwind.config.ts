@@ -11,6 +11,11 @@ const config: Config = {
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
+        "neon-pink": "#FF0099",
+        "neon-green": "#CCFF00",
+        "pic-dark": "#0f0518", // Dark purple/black background
+        "pic-card": "#1a1025", // Slightly lighter card background
+        "pic-zinc": "#2a2035", // Border/input background
       },
     },
   },
