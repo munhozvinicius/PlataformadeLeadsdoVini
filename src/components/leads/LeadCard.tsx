@@ -67,8 +67,15 @@ export function LeadCard({ lead, onOpen }: LeadCardProps) {
               {value}
             </p>
           </div>
-          <div className="flex items-center justify-center bg-neon-green text-black font-black text-xs h-6 w-6 rounded-sm">
-            AM
+          <div className="flex flex-col items-end">
+            {lead.campanha?.nome && (
+              <span className="text-[10px] font-bold text-neon-green uppercase tracking-wider mb-1">
+                {lead.campanha.nome}
+              </span>
+            )}
+            <div className="flex items-center justify-center bg-neon-green text-black font-black text-xs h-6 w-6 rounded-sm">
+              AM
+            </div>
           </div>
         </div>
       </div>

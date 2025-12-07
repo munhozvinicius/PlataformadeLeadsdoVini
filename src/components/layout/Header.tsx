@@ -11,13 +11,7 @@ export function Header({ userName, userRole, onOpenProfile }: HeaderProps) {
     return (
         <header className="bg-pic-card border-b border-pic-zinc h-20 px-8 flex items-center justify-between sticky top-0 z-40 shadow-lg">
             <div className="flex items-center gap-4">
-                {/* Logo Area */}
-                <div className="flex flex-col">
-                    <p className="text-xs uppercase tracking-[0.3em] text-neon-pink font-black leading-none mb-1">PIC</p>
-                    <h1 className="text-xl font-bold text-white uppercase leading-none tracking-tight">
-                        Plataforma de <br className="hidden sm:inline" /> Inteligência Comercial
-                    </h1>
-                </div>
+                {/* Logo Area REMOVED as requested */}
             </div>
 
             <div className="flex items-center gap-6">
