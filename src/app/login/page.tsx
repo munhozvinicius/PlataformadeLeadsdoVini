@@ -39,9 +39,16 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-6">
-      <div className="w-full max-w-md bg-pic-card border-2 border-neon-pink shadow-[8px_8px_0px_0px_rgba(255,0,153,0.5)] p-8 space-y-8">
-        <div>
+    <div className="min-h-screen bg-pic-dark bg-[url('/grid.svg')] flex items-center justify-center p-6 relative">
+      {/* Background Effects */}
+      <div className="absolute inset-0 bg-gradient-to-br from-black via-pic-dark/90 to-neon-pink/10 pointer-events-none"></div>
+
+      <div className="w-full max-w-md bg-pic-card border-4 border-neon-pink shadow-[0_0_50px_rgba(255,0,153,0.4)] p-8 space-y-8 relative overflow-hidden backdrop-blur-sm">
+        {/* Vector Element Decor */}
+        <div className="absolute -right-10 -top-10 w-40 h-40 bg-neon-green/20 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute -left-10 -bottom-10 w-40 h-40 bg-neon-blue/20 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div className="relative z-10">
           <p className="text-xs uppercase tracking-[0.2em] text-neon-green font-bold mb-2">PIC System</p>
           <h1 className="text-4xl font-black text-white uppercase tracking-tighter leading-none">
             Acessar<br />Plataforma
@@ -50,13 +57,13 @@ export default function LoginPage() {
             Identifique-se para acessar o painel de inteligência.
           </p>
         </div>
-        <form className="space-y-6" onSubmit={handleSubmit}>
+        <form className="space-y-6 relative z-10" onSubmit={handleSubmit}>
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase text-neon-pink tracking-wider">Email</label>
             <input
               type="email"
               autoComplete="email"
-              className="w-full bg-pic-dark border-2 border-pic-zinc text-white px-4 py-3 text-sm focus:outline-none focus:border-neon-green focus:shadow-[0_0_10px_rgba(204,255,0,0.3)] transition-all font-mono placeholder:text-slate-700"
+              className="w-full bg-black/50 border-2 border-pic-zinc text-white px-4 py-3 text-sm focus:outline-none focus:border-neon-green focus:shadow-[0_0_15px_rgba(204,255,0,0.3)] transition-all font-mono placeholder:text-slate-700"
               placeholder="seu@email.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -68,7 +75,7 @@ export default function LoginPage() {
             <input
               type="password"
               autoComplete="current-password"
-              className="w-full bg-pic-dark border-2 border-pic-zinc text-white px-4 py-3 text-sm focus:outline-none focus:border-neon-green focus:shadow-[0_0_10px_rgba(204,255,0,0.3)] transition-all font-mono placeholder:text-slate-700"
+              className="w-full bg-black/50 border-2 border-pic-zinc text-white px-4 py-3 text-sm focus:outline-none focus:border-neon-green focus:shadow-[0_0_15px_rgba(204,255,0,0.3)] transition-all font-mono placeholder:text-slate-700"
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -83,14 +90,11 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-neon-pink text-black py-4 text-base font-black uppercase tracking-widest hover:bg-white hover:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.5)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-neon-pink text-black py-4 text-base font-black uppercase tracking-widest hover:bg-white hover:shadow-[0_0_30px_rgba(255,255,255,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? "Carregando..." : "Entrar No Sistema"}
           </button>
         </form>
-        <div className="text-xs text-slate-600 font-mono text-center border-t border-dashed border-slate-800 pt-4">
-          MASTER padrão: munhoz.vinicius@gmail.com / Theforce85!!
-        </div>
       </div>
     </div>
   );
