@@ -10,8 +10,12 @@ type LeadDetail = LeadCardProps["lead"] & {
   endereco?: string | null;
   origem?: string | null;
   site?: string | null;
-  contatoPrincipal?: { nome?: string; cargo?: string; telefone?: string; email?: string };
+  contatoPrincipal?: { nome?: string; cargo?: string; telefone?: string; email?: string } | null;
   externalData?: Record<string, unknown> | null;
+  cnpj?: string | null;
+  razaoSocial?: string | null;
+  nomeFantasia?: string | null;
+  vlFatPresumido?: string | null;
 };
 
 import { LeadStatusId, LEAD_STATUS } from "@/constants/leadStatus";
@@ -226,12 +230,15 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
 
   async function runEnrichment() {
     setExternalLoading(true);
+    // Adicionando tratamento de erro básico no catch do fetch wrapper se necessário, mas aqui tratamos no UI
     const res = await fetch(`/api/leads/enrich?cnpj=${lead.cnpj ?? ""}&id=${lead.id}`, { method: "POST" });
     setExternalLoading(false);
     if (res.ok) {
       const data = await res.json();
       setExternalData(data);
-      // No full refresh needed, usually
+    } else {
+      // Opcional: Notificar erro visualmente, hoje o card já trata estado null/loading
+      console.error("Erro enriquecimento", res.status);
     }
   }
 
@@ -393,6 +400,8 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
                   data={externalData as any}
                   loading={externalLoading}
                   onEnrich={runEnrichment}
+                  companyName={lead.razaoSocial ?? lead.nomeFantasia ?? ""}
+                  city={lead.cidade ?? ""}
                 />
               </div>
             </div>

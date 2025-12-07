@@ -8,7 +8,9 @@ export type LeadCardProps = {
     nomeFantasia?: string | null;
     cnpj?: string | null;
     campanha?: { nome?: string | null };
-    status: LeadStatusId;
+    vlFatPresumido?: string | null;
+    status: LeadStatusId | string;
+    externalData?: Record<string, unknown> | null;
     cidade?: string | null;
     estado?: string | null;
     telefone1?: string | null;
@@ -25,7 +27,9 @@ export function LeadCard({ lead, onOpen }: LeadCardProps) {
 
 
   // Format currency if present (assuming internal value or placeholder)
-  const value = "R$ 110.000,00"; // Placeholder as requested in image reference, or derive from lead data if available
+  const value = lead.vlFatPresumido
+    ? (parseFloat(lead.vlFatPresumido) ? parseFloat(lead.vlFatPresumido).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : lead.vlFatPresumido)
+    : "R$ -";
 
   return (
     <div

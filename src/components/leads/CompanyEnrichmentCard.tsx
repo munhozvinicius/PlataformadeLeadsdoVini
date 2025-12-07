@@ -17,11 +17,15 @@ type Props = {
     data: CompanyData | null;
     loading: boolean;
     onEnrich: () => void;
+    companyName?: string;
+    city?: string;
 };
 
-export function CompanyEnrichmentCard({ data, loading, onEnrich }: Props) {
+export function CompanyEnrichmentCard({ data, loading, onEnrich, companyName, city }: Props) {
     const formatCurrency = (val?: number) =>
         val ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val) : '-';
+
+    const mapsQuery = encodeURIComponent(`${companyName || ""} ${city || ""}`.trim() || "Empresa");
 
     return (
         <div className="border border-neon-blue/30 bg-pic-card p-0 overflow-hidden shadow-[0_0_20px_rgba(0,240,255,0.1)] transition-all hover:border-neon-blue">
@@ -35,20 +39,37 @@ export function CompanyEnrichmentCard({ data, loading, onEnrich }: Props) {
                         Inteligência de Dados <span className="text-neon-blue text-[10px] ml-1 border border-neon-blue px-1 rounded-sm">BETA</span>
                     </h3>
                 </div>
-                <button
-                    onClick={onEnrich}
-                    disabled={loading}
-                    className="text-[10px] font-black uppercase tracking-widest bg-neon-blue text-black px-3 py-1.5 hover:bg-cyan-300 disabled:opacity-50 transition-colors"
-                >
-                    {loading ? "Buscando..." : "Atualizar Dados"}
-                </button>
+                <div className="flex items-center gap-2">
+                    <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${mapsQuery}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-white transition-colors flex items-center gap-1 border border-slate-700 px-2 py-1.5"
+                        title="Buscar no Google Maps"
+                    >
+                        Google Maps ↗
+                    </a>
+                    <button
+                        onClick={onEnrich}
+                        disabled={loading}
+                        className="text-[10px] font-black uppercase tracking-widest bg-neon-blue text-black px-3 py-1.5 hover:bg-cyan-300 disabled:opacity-50 transition-colors"
+                    >
+                        {loading ? "Buscando..." : "Atualizar Dados"}
+                    </button>
+                </div>
             </div>
 
             {/* Conteúdo */}
             {!data ? (
-                <div className="p-8 text-center">
-                    <p className="text-slate-500 font-mono text-xs">Nenhum dado enriquecido disponível.</p>
-                    <p className="text-slate-600 text-[10px] mt-1">Clique para buscar dados na Receita Federal.</p>
+                <div className="p-8 text-center bg-stripes-zinc">
+                    {loading ? (
+                        <p className="text-neon-blue text-xs animate-pulse">Consultando Receita Federal...</p>
+                    ) : (
+                        <>
+                            <p className="text-slate-500 font-mono text-xs mb-1">Dados não carregados ou serviço indisponível.</p>
+                            <p className="text-slate-600 text-[10px]">Tente o botão &quot;Google Maps&quot; se a busca automática falhar.</p>
+                        </>
+                    )}
                 </div>
             ) : (
                 <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
