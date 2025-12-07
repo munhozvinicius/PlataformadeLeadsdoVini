@@ -7,9 +7,9 @@ import { Role } from "@prisma/client";
 
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
     const session = await getServerSession(authOptions);
-    const allowedRoles = [Role.MASTER, Role.GERENTE_SENIOR, Role.GERENTE_NEGOCIOS];
+    const allowedRoles: string[] = [Role.MASTER, Role.GERENTE_SENIOR, Role.GERENTE_NEGOCIOS];
 
-    if (!session?.user || !allowedRoles.includes(session.user.role as Role)) {
+    if (!session?.user || !allowedRoles.includes(session.user.role)) {
         return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 

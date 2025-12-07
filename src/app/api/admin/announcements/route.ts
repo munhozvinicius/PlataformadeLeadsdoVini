@@ -8,9 +8,9 @@ import { Role } from "@prisma/client";
 // Get All Announcements (Admin View - with stats)
 export async function GET() {
     const session = await getServerSession(authOptions);
-    const allowedRoles = [Role.MASTER, Role.GERENTE_SENIOR, Role.GERENTE_NEGOCIOS];
+    const allowedRoles: string[] = [Role.MASTER, Role.GERENTE_SENIOR, Role.GERENTE_NEGOCIOS];
 
-    if (!session?.user || !allowedRoles.includes(session.user.role as Role)) {
+    if (!session?.user || !allowedRoles.includes(session.user.role)) {
         return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
@@ -45,9 +45,9 @@ export async function GET() {
 // Create New Announcement
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
-    const allowedRoles = [Role.MASTER, Role.GERENTE_SENIOR, Role.GERENTE_NEGOCIOS];
+    const allowedRoles: string[] = [Role.MASTER, Role.GERENTE_SENIOR, Role.GERENTE_NEGOCIOS];
 
-    if (!session?.user || !allowedRoles.includes(session.user.role as Role)) {
+    if (!session?.user || !allowedRoles.includes(session.user.role)) {
         return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
