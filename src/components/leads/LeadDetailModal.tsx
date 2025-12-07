@@ -201,7 +201,7 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
             ].map((t) => (
               <button
                 key={t.id}
-                onClick={() => setTab(t.id as any)}
+                onClick={() => setTab(t.id as "dados" | "notas" | "perda" | "externo")}
                 className={`uppercase tracking-widest font-bold text-sm pb-2 border-b-2 transition-colors ${tab === t.id ? "text-neon-green border-neon-green" : "text-slate-600 border-transparent hover:text-slate-400"
                   }`}
               >
@@ -279,10 +279,72 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
           )}
 
           {/* Implement other tabs similarly for full completeness if needed, but 'dados' was the main request visually */}
-          {(tab === "perda" || tab === "externo") && (
-            <div className="text-slate-500 font-mono text-sm p-4 border border-dashed border-slate-800 text-center">
-              Funcionalidade mantida. (Visual simplificado para Brutalismo)
-              {tab === "externo" && <button onClick={runEnrichment} className="block mx-auto mt-4 text-neon-green underline">Buscar Dados Externos</button>}
+          {tab === "perda" && (
+            <div className="py-4 space-y-4">
+              <div className="bg-pic-card border border-slate-700 p-4 space-y-4">
+                <p className="text-xs uppercase text-slate-500 tracking-widest">Registrar perda</p>
+                <select
+                  value={lossMotivo}
+                  onChange={(e) => setLossMotivo(e.target.value)}
+                  className="w-full bg-black text-white border border-slate-700 p-3 text-sm font-mono focus:border-red-500 outline-none"
+                >
+                  {lossMotivos.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+                <textarea
+                  value={lossJust}
+                  onChange={(e) => setLossJust(e.target.value)}
+                  className="w-full bg-black text-white border border-slate-700 p-3 text-sm font-mono focus:border-red-500 outline-none"
+                  rows={3}
+                  placeholder="Justifique a perda"
+                  required
+                />
+                <button
+                  onClick={saveLoss}
+                  disabled={savingLoss}
+                  className="w-full bg-red-600 text-white px-4 py-2 text-sm font-black uppercase hover:bg-red-500 disabled:opacity-60 tracking-wider shadow-[4px_4px_0px_0px_rgba(255,0,0,0.3)]"
+                >
+                  {savingLoss ? "Salvando..." : "Marcar como perdido"}
+                </button>
+              </div>
+              <div className="space-y-3">
+                {losses.map((l) => (
+                  <div key={l.id} className="border-l-4 border-red-600 bg-pic-card p-3 shadow-sm">
+                    <div className="flex justify-between text-[10px] uppercase text-slate-500 mb-1">
+                      <span>{l.motivo}</span>
+                      <span>
+                        {l.user?.name ?? l.user?.email ?? "Usuário"} •{" "}
+                        {new Date(l.createdAt).toLocaleString("pt-BR")}
+                      </span>
+                    </div>
+                    <p className="text-sm text-slate-300 mt-1 font-mono whitespace-pre-wrap">{l.justificativa}</p>
+                  </div>
+                ))}
+                {losses.length === 0 ? <p className="text-sm text-slate-600 font-mono">Nenhum registro de perda.</p> : null}
+              </div>
+            </div>
+          )}
+
+          {tab === "externo" && (
+            <div className="py-4 space-y-4">
+              <div className="bg-pic-card border border-dashed border-neon-green/30 p-4">
+                <p className="text-sm text-slate-400 font-mono mb-4">
+                  Beta: coleta leve de dados públicos via internet.
+                </p>
+                <button
+                  onClick={runEnrichment}
+                  disabled={externalLoading}
+                  className="w-full border-2 border-neon-green text-neon-green px-4 py-2 text-sm font-bold uppercase hover:bg-neon-green hover:text-black transition-colors disabled:opacity-50"
+                >
+                  {externalLoading ? "Buscando..." : "Buscar informações na Internet (Beta)"}
+                </button>
+              </div>
+              <pre className="bg-black border border-slate-800 p-4 text-xs text-neon-green font-mono whitespace-pre-wrap overflow-auto max-h-[300px]">
+                {externalData ? JSON.stringify(externalData, null, 2) : "Nenhum dado coletado ainda."}
+              </pre>
             </div>
           )}
         </div>
