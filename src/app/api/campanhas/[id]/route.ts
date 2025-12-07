@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Role, Prisma } from "@prisma/client";
+import { Role } from "@prisma/client";
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   try {
