@@ -471,4 +471,5 @@ export default function UserDrawer({
         </div>
       </div>
     </div>
+  );
 }
