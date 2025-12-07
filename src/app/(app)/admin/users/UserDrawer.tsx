@@ -256,7 +256,6 @@ export default function UserDrawer({
   const officeLabel =
     offices.find((office) => office.id === (currentUserIsOwner ? currentUserOfficeRecordId : selectedOfficeId))
       ?.name ?? "";
-  const ownerLabel = owners.find((owner) => owner.id === currentUserId)?.name ?? "Você mesmo";
 
   const heading = mode === "create" ? "Novo usuário" : "Editar usuário";
   const submitLabel = mode === "create" ? "Criar usuário" : "Salvar alterações";

@@ -44,12 +44,7 @@ const profileColors: Record<Role, string> = {
   CONSULTOR: "bg-emerald-50 text-emerald-700 ring-emerald-200",
 };
 
-function mapOfficeCodeToEnum(code?: string): Office | null {
-  if (!code) return null;
-  const normalized = code.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
-  const values = Object.values(Office) as string[];
-  return values.includes(normalized) ? (normalized as Office) : null;
-}
+
 
 export default function AdminUsersPage() {
   const router = useRouter();
@@ -57,7 +52,6 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [offices, setOffices] = useState<OfficeRecordDto[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
-  const [officesLoading, setOfficesLoading] = useState(true);
   const [usersError, setUsersError] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<DrawerMode>("create");
@@ -103,8 +97,6 @@ export default function AdminUsersPage() {
     } catch (err) {
       console.error(err);
       setOffices([]);
-    } finally {
-      setOfficesLoading(false);
     }
   }, []);
 
@@ -250,6 +242,12 @@ export default function AdminUsersPage() {
           <div className="p-12 text-center">
             <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite] text-slate-400" role="status"></div>
             <p className="mt-4 text-sm text-slate-500 font-medium">Carregando equipe...</p>
+          </div>
+        ) : usersError ? (
+          <div className="p-8 text-center">
+            <p className="text-red-600 mb-2 font-medium">Erro ao carregar</p>
+            <p className="text-sm text-slate-500">{usersError}</p>
+            <button onClick={loadUsers} className="mt-4 text-xs font-bold text-slate-900 underline">Tentar novamente</button>
           </div>
         ) : (
           <div className="overflow-x-auto">

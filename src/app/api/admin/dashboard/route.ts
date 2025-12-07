@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { LeadStatus, Role } from "@prisma/client";
+import { LeadStatus, Role, Prisma } from "@prisma/client";
 
 type ConsultantPerf = {
   id: string;
@@ -46,13 +46,13 @@ export async function GET() {
 
   // Autorização: MASTER, GERENTE_SENIOR, GERENTE_NEGOCIOS, PROPRIETARIO
   const allowedRoles = [Role.MASTER, Role.GERENTE_SENIOR, Role.GERENTE_NEGOCIOS, Role.PROPRIETARIO];
-  if (!session?.user || !allowedRoles.includes(session.user.role)) {
+  if (!session?.user || !allowedRoles.includes(session.user.role as Role)) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
   const user = session.user;
-  let baseLeadWhere: any = {};
-  let baseUserWhere: any = { role: Role.CONSULTOR };
+  let baseLeadWhere: Prisma.LeadWhereInput = {};
+  let baseUserWhere: Prisma.UserWhereInput = { role: Role.CONSULTOR };
 
   // Lógica de Filtragem Hierárquica
   if (user.role === Role.MASTER || user.role === Role.GERENTE_SENIOR) {

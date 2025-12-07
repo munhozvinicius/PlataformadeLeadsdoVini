@@ -78,7 +78,7 @@ export async function POST(req: Request) {
 
   // Se for GN criando, ele automaticamente se torna o businessManager se não especificado (ou força?)
   // Se for Master/GS, pode definir quem quiser.
-  let seniorManagerId = normalizeOptionalString(body.seniorManagerId);
+  const seniorManagerId = normalizeOptionalString(body.seniorManagerId);
   let businessManagerId = normalizeOptionalString(body.businessManagerId);
   const ownerId = normalizeOptionalString(body.ownerId);
 
