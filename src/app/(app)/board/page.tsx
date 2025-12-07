@@ -48,8 +48,10 @@ type Lead = {
   createdAt?: string | null;
   site?: string | null;
   contatoPrincipal?: { nome?: string; cargo?: string; telefone?: string; email?: string };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   productCart?: any[] | null;
   telefones?: { rotulo: string; valor: string }[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   externalData?: any;
 };
 
@@ -91,7 +93,7 @@ function ConsultantBoard({
   const loadLeads = useCallback(async () => {
     setLoading(true);
     setError("");
-    if (viewerRole === "MASTER" && !consultantId) {
+    if (viewerRole === "PROPRIETARIO" && !consultantId) {
       setLeads([]);
       setLoading(false);
       return;
@@ -126,7 +128,7 @@ function ConsultantBoard({
   }, [viewerRole, consultantId, campaignId, onCampaignsUpdate, officeIds]);
 
   const loadMetrics = useCallback(async () => {
-    if (viewerRole === "MASTER" && !consultantId) {
+    if (viewerRole === "PROPRIETARIO" && !consultantId) {
       setMetrics(null);
       return;
     }

@@ -14,30 +14,8 @@ type LeadDetail = LeadCardProps["lead"] & {
   externalData?: Record<string, unknown> | null;
 };
 
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-// Removed unused imports: LeadNote
 import { LeadStatusId, LEAD_STATUS } from "@/constants/leadStatus";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import { CalendarIcon, Plus, Save, Trash2, ShoppingCart, Activity } from "lucide-react";
-import { PRODUCT_CATALOG } from "@/lib/productCatalog"; // Removed unused ProductCatalogItem, TOWER_OPTIONS
+import { PRODUCT_CATALOG } from "@/lib/productCatalog";
 
 type LeadProduct = {
   productId: string;
@@ -138,7 +116,6 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
   // Products State
   const [products, setProducts] = useState<LeadProduct[]>([]);
   const [catalogOpen, setCatalogOpen] = useState(false);
-  const [productFilter, setProductFilter] = useState({ tower: "", category: "", search: "" });
   const [savingProducts, setSavingProducts] = useState(false);
 
   const [losses, setLosses] = useState<LeadLoss[]>([]);
