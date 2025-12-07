@@ -14,7 +14,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     const data = await req.json();
     const { nome, descricao, gnId, gsId, ownerId } = data;
 
-    const updateData: Prisma.CampanhaUpdateInput = {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updateData: any = {};
     if (nome !== undefined) updateData.nome = nome;
     if (descricao !== undefined) updateData.descricao = descricao;
     if (gnId !== undefined) updateData.gn = gnId ? { connect: { id: gnId } } : { disconnect: true };
