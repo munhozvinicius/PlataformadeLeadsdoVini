@@ -283,7 +283,7 @@ export default function BoardPage() {
   }, []);
 
   useEffect(() => {
-    if (session?.user.role === "MASTER" || session?.user.role === "MANAGER") {
+    if (session?.user.role === "PROPRIETARIO" || session?.user.role === "GERENTE_SENIOR" || session?.user.role === "GERENTE_NEGOCIOS") {
       loadConsultants();
       loadOffices();
     }
@@ -291,12 +291,12 @@ export default function BoardPage() {
 
   // Set default consultant if user is consultant
   useEffect(() => {
-    if (session?.user.role === "CONSULTANT" && session.user.id) {
+    if (session?.user.role === "CONSULTOR" && session.user.id) {
       setSelectedConsultant(session.user.id);
     }
   }, [session]);
 
-  const viewerRole = (session?.user.role as ViewerRole) ?? "CONSULTANT";
+  const viewerRole = (session?.user.role as ViewerRole) ?? "CONSULTOR";
 
   return (
     <main className="min-h-screen bg-pic-dark text-slate-200 overflow-hidden flex flex-col">
@@ -320,7 +320,7 @@ export default function BoardPage() {
 
           <div className="flex items-center gap-3">
             {/* Consultant Filter (Admin only) */}
-            {(viewerRole === "MASTER" || viewerRole === "MANAGER") && (
+            {(viewerRole === "PROPRIETARIO" || viewerRole === "GERENTE_SENIOR" || viewerRole === "GERENTE_NEGOCIOS") && (
               <div className="relative group">
                 <select
                   value={selectedConsultant}
