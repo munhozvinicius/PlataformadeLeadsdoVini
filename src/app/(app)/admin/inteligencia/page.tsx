@@ -163,6 +163,7 @@ export default function IntelligencePage() {
                 chunk: async (results, parser) => {
                     parser.pause(); // Pause to handle async upload
 
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     const rows = results.data as any[];
                     let startIndex = 0;
 
@@ -181,9 +182,11 @@ export default function IntelligencePage() {
                     // 2. Process Rows
                     if (headerMap) {
                         for (let i = startIndex; i < rows.length; i++) {
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             const row = rows[i] as any[];
                             if (!row || row.length === 0) continue;
 
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             const obj: any = {};
                             headerMap.forEach((header, idx) => {
                                 if (header) obj[header] = row[idx];
