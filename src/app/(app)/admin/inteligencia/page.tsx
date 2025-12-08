@@ -79,9 +79,10 @@ export default function IntelligencePage() {
                 throw new Error(data.message || "Erro no processamento");
             }
             setUploadStats(data);
-        } catch (err: any) {
+        } catch (err) {
             console.error(err);
-            alert("Erro no upload: " + (err.message || "Erro desconhecido"));
+            const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
+            alert("Erro no upload: " + errorMessage);
         } finally {
             setIsLoading(false);
         }
