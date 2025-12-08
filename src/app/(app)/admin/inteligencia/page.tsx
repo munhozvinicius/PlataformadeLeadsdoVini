@@ -35,8 +35,7 @@ export default function IntelligencePage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [offices, setOffices] = useState<any[]>([]);
 
-    // Campaign Modal State
-    const [isCampaignModalOpen, setIsCampaignModalOpen] = useState(false);
+    // Campaign Config State
     const [campaignConfig, setCampaignConfig] = useState({
         tower: "",
         subTower: "",
@@ -102,7 +101,7 @@ export default function IntelligencePage() {
             const data = await res.json();
             if (data.success) {
                 alert(`Campanha criada com sucesso! Leads: ${data.leadsCreated}`);
-                setIsCampaignModalOpen(false);
+                // Reset or redirect logic can go here
             } else {
                 alert("Erro: " + data.message);
             }
