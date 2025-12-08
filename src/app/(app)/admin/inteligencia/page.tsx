@@ -8,8 +8,19 @@ export default function IntelligencePage() {
     const [isLoading, setIsLoading] = useState(false);
 
     // Upload State
+    interface UploadResponse {
+        success: boolean;
+        stats: {
+            created: number;
+            updated: number;
+            historyCreated: number;
+            errors: number;
+        };
+        message: string;
+    }
+
     const [uploadFile, setUploadFile] = useState<File | null>(null);
-    const [uploadStats, setUploadStats] = useState<unknown>(null);
+    const [uploadStats, setUploadStats] = useState<UploadResponse | null>(null);
 
     // Filter State
     const [filters, setFilters] = useState({
