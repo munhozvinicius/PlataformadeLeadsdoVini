@@ -90,7 +90,7 @@ export default function IntelligencePage() {
             // 2. Upload in Chunks
             const batchId = new Date().toISOString();
             const CHUNK_SIZE = 500;
-            const totalChunks = Math.ceil(jsonData.length / CHUNK_SIZE);
+
 
             const aggregatedStats = {
                 created: 0,
