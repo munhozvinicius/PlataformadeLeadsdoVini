@@ -53,14 +53,37 @@ export async function POST(req: Request) {
             errors: 0
         };
 
-        // Process in chunks or sequentially? Sequentially is safer for logic, but might be slow.
-        // For V1, let's do sequential loop but optimize with transactions if needed.
-        // Given complexity of "History", standard loop is best.
+        // Pre-fetch users to optimize lookup (caching emails -> officeName)
+        // This avoids querying DB for every row
+        const users = await prisma.user.findMany({
+            where: { active: true },
+            select: { email: true, officeRecord: { select: { name: true } } }
+        });
+
+        const consultantOfficeMap = new Map<string, string>();
+        users.forEach(u => {
+            if (u.email && u.officeRecord?.name) {
+                consultantOfficeMap.set(u.email.toLowerCase(), u.officeRecord.name);
+            }
+        });
 
         for (const row of jsonData) {
             try {
                 const cnpj = sanitize(row["NR_CNPJ"]);
                 if (!cnpj) continue; // Skip lines without CNPJ
+
+                const loginConsultor = sanitize(row["LOGINCONSULTOR"]);
+                let officeName = null;
+
+                // Try to resolve office from consultant email
+                if (loginConsultor) {
+                    const mappedOffice = consultantOfficeMap.get(loginConsultor.toLowerCase());
+                    if (mappedOffice) {
+                        officeName = mappedOffice;
+                    }
+                }
+                // Fallback: if we can't find by consultant, we accept it might be null for now
+                // or we could check if row["ESCRITORIO"] exists in future versions.
 
                 // Mapping fields
                 const newData = {
@@ -83,14 +106,11 @@ export async function POST(req: Request) {
                     nomerede: sanitize(row["NOMEREDE"]),
                     nomeGn: sanitize(row["NOMEGN"]),
                     nomeGerenteDivisao: sanitize(row["NOMEGERENTEDIVISAO"]),
-                    loginConsultor: sanitize(row["LOGINCONSULTOR"]), // CRITICAL for ownership
+                    loginConsultor: loginConsultor, // CRITICAL for ownership
                     adabasMovel: sanitize(row["ADABASMOVEL"]),
                     adabasFixa: sanitize(row["ADABASFIXA"]),
 
-                    // Office Name isn't explicit in column list provided, maybe derive from LOGINCONSULTOR or ADABAS?
-                    // User said: "o gerente de negocios que ve os escritorios que ele cuida"
-                    // Let's assume we map "NOMEGN" or look up loginConsultor later.
-                    // For now, store what we have.
+                    officeName: officeName,
 
                     // Metrics
                     qtMovelTerm: parseIntSafe(row["QT_MOVEL_TERM"]),
@@ -163,6 +183,14 @@ export async function POST(req: Request) {
                             fieldChanged: "vertical",
                             oldValue: existing.vertical,
                             newValue: newData.vertical
+                        });
+                    }
+                    // 4. Office Change (derived)
+                    if (existing.officeName !== newData.officeName && newData.officeName) {
+                        historyEvents.push({
+                            fieldChanged: "officeName",
+                            oldValue: existing.officeName,
+                            newValue: newData.officeName
                         });
                     }
 
