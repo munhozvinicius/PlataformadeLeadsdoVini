@@ -113,14 +113,14 @@ export default function IntelligencePage() {
     };
 
     return (
-        <div className="p-8 max-w-[1600px] mx-auto text-slate-200">
-            <header className="mb-8 flex justify-between items-center">
+        <div className="p-8 max-w-[1600px] mx-auto pb-24">
+            <header className="mb-8 flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-black text-white tracking-tight mb-2">
-                        Inteligência de Mercado
+                        INTELIGÊNCIA <span className="text-neon-blue">MAPA PARQUE</span>
                     </h1>
                     <p className="text-slate-400">
-                        Mapa Parque: Análise, Filtros e Geração de Campanhas
+                        Gestão da base de clientes, filtros avançados e criação de campanhas inteligentes.
                     </p>
                 </div>
                 <div className="flex gap-2">

@@ -28,7 +28,10 @@ export function Header({ userName, userRole, onOpenProfile }: HeaderProps) {
                             <a href="/admin/comunicados" className="text-slate-400 hover:text-neon-pink transition-colors">Comunicados</a>
                         )}
                         {(userRole === "MASTER" || userRole === "GERENTE_SENIOR") && (
-                            <a href="/admin/offices" className="text-slate-400 hover:text-neon-green transition-colors">Gestão de Escritórios</a>
+                            <>
+                                <a href="/admin/offices" className="text-slate-400 hover:text-neon-green transition-colors">Gestão de Escritórios</a>
+                                <a href="/admin/inteligencia" className="text-slate-400 hover:text-neon-blue transition-colors">Inteligência Mapa Parque</a>
+                            </>
                         )}
                         <a href="/board" className="text-slate-400 hover:text-neon-yellow transition-colors">Area de Trabalho</a>
                     </nav>
