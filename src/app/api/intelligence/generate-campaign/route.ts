@@ -36,6 +36,7 @@ export async function POST(req: Request) {
         }
 
         // 1. Build Query from Filters
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const where: any = {};
 
         // Example Filter Logic (Expand based on UI)
@@ -46,6 +47,7 @@ export async function POST(req: Request) {
         // Product Logic (Ranges)
         if (filters?.productRules && Array.isArray(filters.productRules)) {
             // [{ field: 'qtMovelTerm', operator: 'gt', value: 0 }]
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             filters.productRules.forEach((rule: any) => {
                 if (rule.value !== undefined && rule.field) {
                     if (!where[rule.field]) where[rule.field] = {};
@@ -60,7 +62,7 @@ export async function POST(req: Request) {
 
 
         // 2. Fetch Intelligence Data
-        // @ts-ignore - Model generated at build time
+        // @ts-expect-error - Model generated at build time
         const targets = await prisma.intelligenceData.findMany({
             where,
             take: 5000 // Limit for safety in V1, maybe paginated later

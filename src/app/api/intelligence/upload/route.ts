@@ -8,6 +8,7 @@ import * as XLSX from "xlsx";
 export const dynamic = "force-dynamic";
 
 // Helper to parse integers safely
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const parseIntSafe = (value: any): number => {
     if (!value) return 0;
     const clean = String(value).replace(/\D/g, ""); // Remove non-digits
@@ -15,6 +16,7 @@ const parseIntSafe = (value: any): number => {
 };
 
 // Helper to sanitize strings
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const sanitize = (value: any): string | null => {
     if (!value) return null;
     return String(value).trim();
@@ -40,10 +42,11 @@ export async function POST(req: Request) {
         const workbook = XLSX.read(buffer, { type: "buffer" });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const jsonData = XLSX.utils.sheet_to_json(worksheet) as Record<string, any>[];
 
         const batchId = new Date().toISOString(); // Simple batch ID for now
-        let stats = {
+        const stats = {
             created: 0,
             updated: 0,
             historyCreated: 0,

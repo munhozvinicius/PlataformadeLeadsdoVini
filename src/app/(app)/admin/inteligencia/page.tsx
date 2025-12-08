@@ -9,7 +9,7 @@ export default function IntelligencePage() {
 
     // Upload State
     const [uploadFile, setUploadFile] = useState<File | null>(null);
-    const [uploadStats, setUploadStats] = useState<any>(null);
+    const [uploadStats, setUploadStats] = useState<unknown>(null);
 
     // Filter State
     const [filters, setFilters] = useState({
@@ -20,6 +20,7 @@ export default function IntelligencePage() {
     });
 
     // Office Data
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [offices, setOffices] = useState<any[]>([]);
 
     // Campaign Modal State
@@ -38,7 +39,6 @@ export default function IntelligencePage() {
         "TI (Digital)": ["Microsoft", "Google Workspace", "SD WAN", "MDM", "Antivirus"]
     };
 
-    // Load offices on mount
     // Load offices on mount
     useEffect(() => {
         fetch("/api/admin/offices")
@@ -65,7 +65,7 @@ export default function IntelligencePage() {
             });
             const data = await res.json();
             setUploadStats(data);
-        } catch (e) {
+        } catch {
             alert("Erro no upload");
         } finally {
             setIsLoading(false);
@@ -94,7 +94,7 @@ export default function IntelligencePage() {
             } else {
                 alert("Erro: " + data.message);
             }
-        } catch (e) {
+        } catch {
             alert("Erro ao criar campanha");
         } finally {
             setIsLoading(false);
@@ -292,8 +292,8 @@ export default function IntelligencePage() {
                                         className="w-full bg-pic-dark border border-pic-border rounded-lg px-4 py-3 text-white focus:border-neon-pink outline-none appearance-none"
                                     >
                                         <option value="">Selecione...</option>
-                                        {/* @ts-ignore */}
-                                        {TOWER_OPTIONS[campaignConfig.tower].map(sub => (
+                                        {/* @ts-expect-error - Dictionary indexing */}
+                                        {TOWER_OPTIONS[campaignConfig.tower as keyof typeof TOWER_OPTIONS].map(sub => (
                                             <option key={sub} value={sub}>{sub}</option>
                                         ))}
                                     </select>
