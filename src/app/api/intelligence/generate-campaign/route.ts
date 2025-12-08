@@ -61,7 +61,7 @@ export async function POST(req: Request) {
         if (filters?.loginConsultor) where.loginConsultor = filters.loginConsultor;
 
         // Flag Logic (Strings "1"/"0")
-        if (filters?.flgCobertura) where.flgCobertura = "1";
+        if (filters?.flgCobertura) where.flgCobertura = { contains: "1" };
 
 
         // 2. Fetch Intelligence Data

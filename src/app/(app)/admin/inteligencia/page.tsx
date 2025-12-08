@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Upload, Filter, Database, Plus, Search, Loader2 } from "lucide-react";
+import { Upload, Filter, Database, Plus, Search, Loader2, X, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 
 export default function IntelligencePage() {
     const [activeTab, setActiveTab] = useState<"base" | "explore">("base");
@@ -23,13 +23,20 @@ export default function IntelligencePage() {
     const [uploadStats, setUploadStats] = useState<UploadResponse | null>(null);
 
     // Filter State
+    // Filter State
     const [filters, setFilters] = useState({
         cidade: "",
         vertical: "",
         officeName: "",
         flgCobertura: false, // New Flag Filter
-        productRules: [] as { field: string, operator: string, value: number }[]
+        productRules: [] as { id: string, field: string, operator: string, value: number }[]
     });
+
+    // Preview State
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [previewData, setPreviewData] = useState<{ count: number, items: any[] } | null>(null);
+    const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+    const [page, setPage] = useState(1);
 
     // Office Data
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,6 +56,15 @@ export default function IntelligencePage() {
         "Fixa Básica": ["Linha Básica", "Banda Larga"],
         "TI (Digital)": ["Microsoft", "Google Workspace", "SD WAN", "MDM", "Antivirus"]
     };
+
+    const PRODUCT_FIELDS = [
+        { label: "Móvel (Qtd)", value: "qtMovelTerm" },
+        { label: "Móvel Pen (Qtd)", value: "qtMovelPen" },
+        { label: "Banda Larga (Qtd)", value: "qtBasicaBl" },
+        { label: "Fibra (Qtd)", value: "qtBasicaFibra" },
+        { label: "Vivo Tech (Qtd)", value: "qtVivoTech" },
+        { label: "Office 365 (Qtd)", value: "qtOffice365" },
+    ];
 
     // Load offices on mount
     useEffect(() => {
@@ -226,8 +242,54 @@ export default function IntelligencePage() {
         } catch {
             alert("Erro ao criar campanha");
         } finally {
-            setIsLoading(false);
+            setIsPreviewLoading(false);
         }
+    };
+
+    const fetchPreview = async (newPage = 1) => {
+        setIsPreviewLoading(true);
+        try {
+            const res = await fetch("/api/intelligence/preview", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    filters,
+                    page: newPage,
+                    pageSize: 20
+                })
+            });
+            const data = await res.json();
+            setPreviewData(data);
+            setPage(newPage);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsPreviewLoading(false);
+        }
+    };
+
+    const addProductRule = () => {
+        setFilters(prev => ({
+            ...prev,
+            productRules: [
+                ...prev.productRules,
+                { id: Math.random().toString(36).substr(2, 9), field: "qtMovelTerm", operator: "gt", value: 0 }
+            ]
+        }));
+    };
+
+    const removeProductRule = (id: string) => {
+        setFilters(prev => ({
+            ...prev,
+            productRules: prev.productRules.filter(r => r.id !== id)
+        }));
+    };
+
+    const updateProductRule = (id: string, key: string, val: string | number) => {
+        setFilters(prev => ({
+            ...prev,
+            productRules: prev.productRules.map(r => r.id === id ? { ...r, [key]: val } : r)
+        }));
     };
 
     return (
@@ -365,6 +427,52 @@ export default function IntelligencePage() {
                                 />
                             </div>
                         </div>
+
+                        {/* Product Rules */}
+                        <div className="mt-6 pt-6 border-t border-pic-border space-y-4">
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Regras de Produto</label>
+                                <button onClick={addProductRule} className="text-neon-green text-xs hover:underline flex items-center">
+                                    <Plus className="w-3 h-3 mr-1" /> Adicionar
+                                </button>
+                            </div>
+
+                            {filters.productRules.map(rule => (
+                                <div key={rule.id} className="bg-pic-dark border border-pic-border rounded p-2 flex gap-2 items-center">
+                                    <div className="flex-1 grid grid-cols-1 gap-2">
+                                        <select
+                                            value={rule.field}
+                                            onChange={(e) => updateProductRule(rule.id, "field", e.target.value)}
+                                            className="bg-black/20 border border-pic-zinc rounded text-xs text-white p-1"
+                                        >
+                                            {PRODUCT_FIELDS.map(f => (
+                                                <option key={f.value} value={f.value}>{f.label}</option>
+                                            ))}
+                                        </select>
+                                        <div className="flex gap-2">
+                                            <select
+                                                value={rule.operator}
+                                                onChange={(e) => updateProductRule(rule.id, "operator", e.target.value)}
+                                                className="bg-black/20 border border-pic-zinc rounded text-xs text-white p-1 w-20"
+                                            >
+                                                <option value="gt">Maior que</option>
+                                                <option value="lt">Menor que</option>
+                                                <option value="equals">Igual a</option>
+                                            </select>
+                                            <input
+                                                type="number"
+                                                value={rule.value}
+                                                onChange={(e) => updateProductRule(rule.id, "value", e.target.value)}
+                                                className="bg-black/20 border border-pic-zinc rounded text-xs text-white p-1 flex-1 min-w-0"
+                                            />
+                                        </div>
+                                    </div>
+                                    <button onClick={() => removeProductRule(rule.id)} className="text-slate-500 hover:text-red-500">
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
                     </aside>
 
                     {/* COL 2: CAMPAIGN CONFIG */}
@@ -444,10 +552,22 @@ export default function IntelligencePage() {
 
                         <div className="flex-1 bg-pic-dark/30 rounded-lg border-2 border-dashed border-pic-border flex flex-col items-center justify-center p-4 text-center">
                             <span className="text-slate-500 text-sm mb-2">Leads Encontrados</span>
-                            <span className="text-4xl font-black text-white">---</span>
+                            {isPreviewLoading ? (
+                                <Loader2 className="animate-spin text-neon-blue w-8 h-8" />
+                            ) : (
+                                <span className={`text-4xl font-black ${previewData?.count ? "text-white" : "text-slate-600"}`}>
+                                    {previewData ? previewData.count.toLocaleString() : "---"}
+                                </span>
+                            )}
                             <p className="text-[10px] text-slate-600 mt-2 max-w-[200px]">
-                                Selecione filtros e configure a campanha para verificar a contagem.
+                                Selecione filtros e clique em Simular para verificar a contagem.
                             </p>
+                            <button
+                                onClick={() => fetchPreview(1)}
+                                className="mt-4 text-xs font-bold text-neon-blue border border-neon-blue/30 px-3 py-1 rounded hover:bg-neon-blue/10 transition-colors"
+                            >
+                                {previewData ? "Atualizar Contagem" : "Simular Contagem"}
+                            </button>
                         </div>
 
                         <button
@@ -464,6 +584,80 @@ export default function IntelligencePage() {
                         </button>
                     </section>
                 </div>
+            )}
+
+            {/* RESULTS GRID (FULL WIDTH BELOW) */}
+            {previewData && activeTab === "explore" && (
+                <section className="mt-8 animate-in slide-in-from-bottom-4">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                            <Database className="w-5 h-5 text-neon-blue" />
+                            Prévia dos Dados ({previewData.count})
+                        </h3>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => fetchPreview(page - 1)}
+                                disabled={page === 1 || isPreviewLoading}
+                                className="p-2 border border-pic-zinc rounded hover:bg-pic-dark text-slate-400 disabled:opacity-50"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <span className="flex items-center text-sm text-slate-500 font-mono px-2">
+                                Página {page}
+                            </span>
+                            <button
+                                onClick={() => fetchPreview(page + 1)}
+                                disabled={!previewData.items.length || isPreviewLoading}
+                                className="p-2 border border-pic-zinc rounded hover:bg-pic-dark text-slate-400 disabled:opacity-50"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="bg-pic-card border border-pic-border rounded-xl overflow-hidden overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="text-xs uppercase bg-black/40 text-slate-400 font-bold border-b border-pic-border">
+                                <tr>
+                                    <th className="px-4 py-3">CNPJ</th>
+                                    <th className="px-4 py-3">Razão Social</th>
+                                    <th className="px-4 py-3">Cidade / UF</th>
+                                    <th className="px-4 py-3">Vertical</th>
+                                    <th className="px-4 py-3">Móvel</th>
+                                    <th className="px-4 py-3">Fibra</th>
+                                    <th className="px-4 py-3">Office 365</th>
+                                    <th className="px-4 py-3">Flags</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-pic-border/50">
+                                {previewData.items.map((item) => (
+                                    <tr key={item.id} className="hover:bg-white/5 transition-colors">
+                                        <td className="px-4 py-3 font-mono text-slate-500">{item.cnpj}</td>
+                                        <td className="px-4 py-3 text-white font-medium">{item.razaoSocial}</td>
+                                        <td className="px-4 py-3 text-slate-400">{item.cidade} - {item.uf}</td>
+                                        <td className="px-4 py-3 text-slate-400">{item.vertical}</td>
+                                        <td className={`px-4 py-3 font-mono ${item.qtMovelTerm > 0 ? "text-neon-green" : "text-slate-600"}`}>{item.qtMovelTerm}</td>
+                                        <td className={`px-4 py-3 font-mono ${item.qtBasicaFibra > 0 ? "text-neon-green" : "text-slate-600"}`}>{item.qtBasicaFibra}</td>
+                                        <td className={`px-4 py-3 font-mono ${item.qtOffice365 > 0 ? "text-neon-green" : "text-slate-600"}`}>{item.qtOffice365}</td>
+                                        <td className="px-4 py-3">
+                                            <div className="flex gap-1">
+                                                {item.flgCobertura === "1" && <span className="text-[10px] bg-neon-pink/10 text-neon-pink border border-neon-pink/30 px-1 rounded">FIBRA</span>}
+                                                {item.flgMei === "SIM" && <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/30 px-1 rounded">MEI</span>}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {previewData.items.length === 0 && (
+                                    <tr>
+                                        <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                                            Nenhum registro encontrado.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
             )}
         </div>
     );
