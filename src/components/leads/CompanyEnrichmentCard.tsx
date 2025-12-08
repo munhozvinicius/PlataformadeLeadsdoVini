@@ -32,10 +32,10 @@ export function CompanyEnrichmentCard({ data, loading, onEnrich, companyName, ci
     const cleanName = (companyName || "Empresa").replace(/[^\w\s]/g, "").trim();
     const mapsQuery = encodeURIComponent(`${cleanName} ${city || ""}`.trim());
     // Use Google Site Search for Instagram which is more reliable than internal tag search
-    const instaQuery = encodeURIComponent(`site:instagram.com "${cleanName}" ${city || ""}`);
+    const instaQuery = encodeURIComponent(`site:instagram.com ${cleanName} ${city || ""}`);
     // General Google Search
-    const googleQuery = encodeURIComponent(`"${cleanName}" ${city || "Empresa"} contato`);
-    const linkedinQuery = encodeURIComponent(`site:linkedin.com/company "${cleanName}"`);
+    const googleQuery = encodeURIComponent(`${cleanName} ${city || "Empresa"} contato`);
+    const linkedinQuery = encodeURIComponent(`site:linkedin.com/company ${cleanName}`);
 
     return (
         <div className="border border-neon-blue/30 bg-pic-card p-0 overflow-hidden shadow-[0_0_20px_rgba(0,240,255,0.1)] transition-all hover:border-neon-blue">

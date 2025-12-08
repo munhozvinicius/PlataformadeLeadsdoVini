@@ -62,10 +62,7 @@ export function LeadCard({ lead, onOpen }: LeadCardProps) {
       <div className="border-t border-dashed border-pic-zinc pt-3 mt-auto">
         <div className="flex items-end justify-between">
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-0.5">Valor</p>
-            <p className="font-mono text-lg font-bold text-neon-blue tracking-tighter shadow-neon-blue drop-shadow-[0_0_5px_rgba(0,240,255,0.5)]">
-              {value}
-            </p>
+            {/* Value Removed */}
           </div>
           <div className="flex flex-col items-end">
             {lead.campanha?.nome && (

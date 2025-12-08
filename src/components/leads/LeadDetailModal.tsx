@@ -64,10 +64,14 @@ const ACTIVITY_TYPES = [
   "Retorno de ligação",
   "Follow-up",
   "Qualificação",
+  "Reunião",
   "Proposta enviada",
   "Negociação",
   "Outros",
 ] as const;
+
+
+
 
 const CHANNEL_OPTIONS = [
   { value: "TELEFONE", label: "Telefone" },
@@ -159,6 +163,21 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
   const [statusDirty, setStatusDirty] = useState(false);
 
   async function handleStatusSave() {
+    // Validation for lost reasons
+    if (selectedStatus === "PERDIDO" && !lossJust) {
+      alert("Para status PERDIDO, é obrigatório informar o motivo e justificativa.");
+      return;
+    }
+
+    // Save Loss Reason if applicable
+    if (selectedStatus === "PERDIDO") {
+      await fetch("/api/lead-losses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId: lead.id, motivo: lossMotivo, justificativa: lossJust }),
+      });
+    }
+
     await fetch(`/api/leads/${lead.id}/status`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -330,36 +349,7 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
             </div>
           </div>
 
-          {/* Action Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-neon-blue uppercase tracking-widest text-cyan-400">Estágio</label>
-              <div className="relative">
-                <select
-                  className="w-full bg-pic-dark border-2 border-cyan-400 text-white px-4 py-3 appearance-none font-bold uppercase tracking-wider focus:shadow-[0_0_15px_rgba(0,240,255,0.3)] transition-shadow outline-none"
-                  value={selectedStatus}
-                  onChange={(e) => {
-                    setSelectedStatus(e.target.value as LeadStatusId);
-                    setStatusDirty(e.target.value !== lead.status);
-                  }}
-                >
-                  {LEAD_STATUS.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
-                </select>
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-cyan-400 pointer-events-none">▼</div>
-              </div>
-            </div>
-
-            <button
-              onClick={handleStatusSave}
-              disabled={!statusDirty}
-              className={`w-full font-black uppercase py-3.5 tracking-widest transition-all shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] ${statusDirty
-                ? "bg-neon-pink text-white hover:bg-pink-600 hover:shadow-[4px_4px_0px_0px_rgba(255,0,153,0.5)]"
-                : "bg-slate-700 text-slate-400 cursor-not-allowed"
-                }`}
-            >
-              {statusDirty ? "Salvar Alterações" : "Sem Alterações"}
-            </button>
-          </div>
+          {/* Action Row Removed */}
         </div>
 
         {/* Content Tabs area */}
@@ -496,120 +486,177 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
 
           {tab === "tratativa" && (
             <div className="space-y-6">
-              {/* Unified Activity & Status Form */}
-              <div className="bg-pic-card border-2 border-slate-700 p-5 shadow-lg relative overflow-hidden">
-                <div className="columns-1">
-                  <p className="text-xs font-bold uppercase text-slate-400 tracking-widest mb-4 flex items-center gap-2">
-                    <Activity size={14} className="text-neon-pink" />
-                    Nova Interação / Movimentação
-                  </p>
+              {/* 1. Status Section */}
+              <div className="bg-pic-card border-2 border-slate-700 p-5 shadow-lg">
+                <div className="flex items-center gap-2 mb-4">
+                  <Activity size={16} className="text-neon-pink" />
+                  <h3 className="text-sm font-bold uppercase text-white tracking-widest">Status & Fluxo</h3>
                 </div>
 
-                <div className="space-y-4">
-                  {/* Linha 1: Tipo, Canal, Resultado */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <select
-                      value={activityForm.type}
-                      onChange={e => setActivityForm(p => ({ ...p, type: e.target.value }))}
-                      className="bg-black border border-slate-600 text-white text-sm p-3 focus:border-neon-pink outline-none"
-                    >
-                      {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                    <select
-                      value={activityForm.channel}
-                      onChange={e => setActivityForm(p => ({ ...p, channel: e.target.value }))}
-                      className="bg-black border border-slate-600 text-white text-sm p-3 focus:border-neon-pink outline-none"
-                    >
-                      {CHANNEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                    <input
-                      type="datetime-local"
-                      value={activityForm.nextFollowUp}
-                      onChange={e => setActivityForm(p => ({ ...p, nextFollowUp: e.target.value }))}
-                      className="bg-black border border-slate-600 text-white text-sm p-3 focus:border-neon-pink outline-none placeholder-slate-500"
-                    />
-                  </div>
-
-                  {/* Linha 2: Texto e Resultado */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <select
-                      value={activityForm.outcome}
-                      onChange={e => setActivityForm(p => ({ ...p, outcome: e.target.value }))}
-                      className="bg-black border border-slate-600 text-white text-sm p-3 focus:border-neon-pink outline-none"
-                    >
-                      <option value="">Selecione Resultado...</option>
-                      {OUTCOME_OPTIONS.map(o => <option key={o.code} value={o.code}>{o.label}</option>)}
-                    </select>
-
-                    {/* Stage Change within Activity */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Estágio Atual</label>
                     <div className="relative">
                       <select
-                        className="w-full bg-pic-dark border border-cyan-500 text-white px-3 py-3 appearance-none font-bold uppercase text-xs tracking-wider focus:shadow-[0_0_15px_rgba(0,240,255,0.3)] transition-shadow outline-none"
-                        value={activityForm.stage ?? ""}
-                        onChange={(e) => setActivityForm(p => ({ ...p, stage: e.target.value }))}
+                        className="w-full bg-pic-dark border-2 border-cyan-400 text-white px-4 py-3 appearance-none font-bold uppercase tracking-wider focus:shadow-[0_0_15px_rgba(0,240,255,0.3)] transition-shadow outline-none"
+                        value={selectedStatus}
+                        onChange={(e) => {
+                          setSelectedStatus(e.target.value as LeadStatusId);
+                          setStatusDirty(e.target.value !== lead.status);
+                        }}
                       >
                         {LEAD_STATUS.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
                       </select>
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-cyan-500 pointer-events-none text-xs">▼</div>
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-cyan-400 pointer-events-none">▼</div>
                     </div>
                   </div>
 
                   {/* Loss Reason Fields (Conditional) */}
-                  {(activityForm.stage === "lost" || activityForm.stage === "perda" || activityForm.stage === "desqualificado") && ( // Adjust ID based on constants
-                    <div className="bg-red-900/20 border border-red-500/50 p-4 animate-in slide-in-from-top-2">
-                      <p className="text-red-400 text-xs font-bold uppercase mb-2">Motivo da Perda (Palitagem)</p>
-                      <select
-                        value={lossMotivo}
-                        onChange={(e) => setLossMotivo(e.target.value)}
-                        className="w-full bg-black text-white border border-red-500/50 p-2 text-sm mb-2"
-                      >
-                        {lossMotivos.map((m) => <option key={m} value={m}>{m}</option>)}
-                      </select>
-                      <textarea
-                        value={lossJust}
-                        onChange={(e) => setLossJust(e.target.value)}
-                        className="w-full bg-black text-white border border-red-500/50 p-2 text-sm"
-                        placeholder="Detalhes da perda..."
-                        rows={2}
-                      />
+                  {selectedStatus === "PERDIDO" && (
+                    <div className="bg-red-900/10 border border-red-500/30 p-3 animate-in fade-in rounded space-y-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-red-400 uppercase tracking-widest block mb-1">Motivo da Perda (Palitagem) *</label>
+                        <select
+                          value={lossMotivo}
+                          onChange={(e) => setLossMotivo(e.target.value)}
+                          className="w-full bg-black text-white border border-red-500/50 p-2 text-xs mb-2 outline-none focus:border-red-500"
+                        >
+                          {lossMotivos.map((m) => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <input
+                          placeholder="Justificativa (obrigatório)..."
+                          value={lossJust}
+                          onChange={(e) => setLossJust(e.target.value)}
+                          className="w-full bg-black text-white border border-red-500/50 p-2 text-xs outline-none focus:border-red-500"
+                        />
+                      </div>
                     </div>
                   )}
+                </div>
 
-                  <textarea
-                    value={activityForm.note}
-                    onChange={e => setActivityForm(p => ({ ...p, note: e.target.value }))}
-                    className="w-full bg-black border border-slate-600 text-white text-sm p-3 font-mono focus:border-neon-pink outline-none"
-                    rows={3}
-                    placeholder="Descreva a interação..."
-                  />
+                <div className="mt-4 flex justify-end gap-3">
+                  {statusDirty && (
+                    <div className="text-xs text-neon-pink font-bold flex items-center animate-pulse">Save pending...</div>
+                  )}
+                  <button
+                    onClick={handleStatusSave}
+                    disabled={!statusDirty}
+                    className={`font-black uppercase py-2 px-6 text-xs tracking-widest transition-all ${statusDirty
+                      ? "bg-neon-pink text-white hover:bg-pink-600 shadow-[4px_4px_0px_0px_rgba(255,0,153,0.5)]"
+                      : "bg-slate-800 text-slate-500 cursor-not-allowed"
+                      }`}
+                  >
+                    {statusDirty ? "Salvar Status" : "Sem Alterações"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="w-full border-b border-dashed border-slate-800 opacity-50"></div>
+
+              {/* 2. Unified Activity Form */}
+              <div className="bg-pic-card border border-slate-800 p-5 relative">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+                  <p className="text-xs font-bold uppercase text-slate-400 tracking-widest flex items-center gap-2">
+                    <Clock size={14} className="text-neon-blue" />
+                    Nova Tratativa / FUP
+                  </p>
+
+                  {/* Quick Actions */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setActivityForm(p => ({ ...p, type: 'Follow-up', nextFollowUp: new Date(Date.now() + 86400000 * 2).toISOString().slice(0, 16) }))}
+                      className="text-[10px] font-bold uppercase bg-slate-800 text-neon-blue px-3 py-1 hover:bg-neon-blue hover:text-black transition-colors"
+                    >
+                      + Agendar FUP (48h)
+                    </button>
+                    <button
+                      onClick={() => setActivityForm(p => ({ ...p, type: 'Reunião', nextFollowUp: new Date(Date.now() + 86400000).toISOString().slice(0, 16) }))}
+                      className="text-[10px] font-bold uppercase bg-slate-800 text-neon-green px-3 py-1 hover:bg-neon-green hover:text-black transition-colors"
+                    >
+                      + Agendar Reunião
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Linha 1: Tipo, Canal, Data FUP */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-slate-500 uppercase">Tipo</label>
+                      <select
+                        value={activityForm.type}
+                        onChange={e => setActivityForm(p => ({ ...p, type: e.target.value }))}
+                        className="w-full bg-black border border-slate-600 text-white text-sm p-3 focus:border-neon-blue outline-none"
+                      >
+                        {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-slate-500 uppercase">Canal</label>
+                      <select
+                        value={activityForm.channel}
+                        onChange={e => setActivityForm(p => ({ ...p, channel: e.target.value }))}
+                        className="w-full bg-black border border-slate-600 text-white text-sm p-3 focus:border-neon-blue outline-none"
+                      >
+                        {CHANNEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-neon-green font-bold uppercase flex items-center gap-1">
+                        Lembrete / Data <Clock size={10} />
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={activityForm.nextFollowUp}
+                        onChange={e => setActivityForm(p => ({ ...p, nextFollowUp: e.target.value }))}
+                        className="w-full bg-black border border-slate-600 text-white text-sm p-3 focus:border-neon-green outline-none placeholder-slate-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Linha 2: Resultado e Nota */}
+                  <div className="space-y-2">
+                    <select
+                      value={activityForm.outcome}
+                      onChange={e => setActivityForm(p => ({ ...p, outcome: e.target.value }))}
+                      className="w-full bg-black border border-slate-600 text-white text-sm p-2 focus:border-neon-blue outline-none"
+                    >
+                      <option value="">Selecione Resultado (Opcional)...</option>
+                      {OUTCOME_OPTIONS.map(o => <option key={o.code} value={o.code}>{o.label}</option>)}
+                    </select>
+
+                    <textarea
+                      value={activityForm.note}
+                      onChange={e => setActivityForm(p => ({ ...p, note: e.target.value }))}
+                      className="w-full bg-black border border-slate-600 text-white text-sm p-3 font-mono focus:border-neon-blue outline-none resize-none"
+                      rows={3}
+                      placeholder="Descreva a interação, ata da reunião ou próximos passos..."
+                    />
+                  </div>
 
                   <div className="flex justify-end">
                     <button
-                      onClick={async () => {
-                        // Save Loss if applicable
-                        if ((activityForm.stage === "lost" || activityForm.stage === "perda") && lossJust) {
-                          await saveLoss();
-                        }
-                        await saveActivity();
-                      }}
+                      onClick={saveActivity}
                       disabled={savingActivity}
-                      className="bg-white text-black font-black uppercase text-xs px-6 py-3 hover:bg-neon-pink hover:text-white transition-colors"
+                      className="bg-neon-blue text-black font-black uppercase text-xs px-6 py-3 hover:bg-cyan-300 transition-colors shadow-[4px_4px_0px_0px_rgba(0,240,255,0.4)]"
                     >
-                      {savingActivity ? "Salvando..." : "Registrar & Atualizar"}
+                      {savingActivity ? "Salvando..." : "Registrar Tratativa"}
                     </button>
                   </div>
                 </div>
               </div>
 
               {/* Timeline (Feed) */}
-              <div className="relative">
-                <div className="absolute left-[19px] top-0 bottom-0 w-[2px] bg-slate-800"></div>
+              <div className="relative pt-4">
+                <div className="absolute left-[19px] top-4 bottom-0 w-[2px] bg-slate-800"></div>
                 <div className="space-y-6 pl-2">
                   {activities.map((a, idx) => (
                     <div key={a.id} className="relative flex gap-4 group">
                       <div className="z-10 bg-black border-2 border-slate-600 group-hover:border-neon-green w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-colors">
                         <span className="text-[10px] font-bold text-slate-400 group-hover:text-neon-green">
-                          {idx + 1}
+                          {activities.length - idx}
                         </span>
                       </div>
                       <div className="flex-1 bg-pic-card border border-slate-800 p-4 hover:border-slate-600 transition-colors relative">
