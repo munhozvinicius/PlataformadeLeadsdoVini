@@ -79,7 +79,7 @@ export default function IntelligencePage() {
 
             try {
                 data = JSON.parse(text);
-            } catch (e) {
+            } catch {
                 // If it's not JSON, it's likely an HTML error or plain text (e.g. 413 Payload Too Large)
                 throw new Error(`Erro do servidor (${res.status}): ${text.substring(0, 100)}...`);
             }
