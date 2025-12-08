@@ -73,20 +73,20 @@ export default function IntelligencePage() {
 
         try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            let jsonData: any[] = [];
+            let rawRows: any[][] = [];
 
-            // 1. Parse based on file type
+            // 1. Parse based on file type as RAW ARRAYS
             if (uploadFile.name.endsWith(".csv")) {
                 const Papa = (await import("papaparse")).default;
 
                 await new Promise<void>((resolve, reject) => {
                     Papa.parse(uploadFile, {
-                        header: true,
+                        header: false, // Parse as arrays to find header row manually
                         skipEmptyLines: true,
-                        encoding: "ISO-8859-1", // Common in Brazil legacy systems, or try UTF-8 if fails
+                        encoding: "ISO-8859-1",
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         complete: (results: any) => {
-                            jsonData = results.data;
+                            rawRows = results.data;
                             resolve();
                         },
                         error: (err: Error) => reject(err)
@@ -100,27 +100,54 @@ export default function IntelligencePage() {
                 const firstSheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[firstSheetName];
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+                rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[];
             }
 
-            if (jsonData.length === 0) {
+            if (rawRows.length === 0) {
                 alert("Arquivo vazio ou nenhum dado encontrado.");
                 return;
             }
 
-            // Check if parsing worked (look for known columns)
-            const firstRow = jsonData[0];
-            const keys = Object.keys(firstRow);
-            if (keys.length < 2) {
-                // Suspicious - likely delimiter fail
-                alert(`Atenção: O arquivo parece ter sido lido incorretamente. Apenas ${keys.length} colunas detectadas (${keys.join(", ")}). Verifique se é um CSV separado por ponto-e-vírgula ou vírgula.`);
+            // 2. Find Header Row (row containing "CNPJ" or "NR_CNPJ")
+            let headerRowIndex = -1;
+            for (let i = 0; i < Math.min(rawRows.length, 20); i++) {
+                const row = rawRows[i];
+                // Check if any cell contains "CNPJ" inside string
+                if (row.some((cell: string) => String(cell).toUpperCase().includes("CNPJ"))) {
+                    headerRowIndex = i;
+                    break;
+                }
+            }
+
+            if (headerRowIndex === -1) {
+                alert("Não foi possível encontrar a coluna 'CNPJ' ou 'NR_CNPJ' nas primeiras 20 linhas. Verifique se o arquivo está correto ou se há muitas linhas de cabeçalho antes da tabela.");
+                return;
+            }
+
+            // 3. Convert to Objects using found header
+            const headers = rawRows[headerRowIndex].map((h: string) => String(h).trim());
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const jsonData: any[] = [];
+
+            for (let i = headerRowIndex + 1; i < rawRows.length; i++) {
+                const row = rawRows[i];
+                if (!row || row.length === 0) continue;
+
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const obj: any = {};
+                headers.forEach((header: string, index: number) => {
+                    // Only map if header is not empty
+                    if (header) {
+                        obj[header] = row[index];
+                    }
+                });
+                jsonData.push(obj);
             }
 
             // 2. Upload in Chunks
             const batchId = new Date().toISOString();
             const CHUNK_SIZE = 500;
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const totalChunks = Math.ceil(jsonData.length / CHUNK_SIZE);
+
 
             const aggregatedStats = {
                 created: 0,
