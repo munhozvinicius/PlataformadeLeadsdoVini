@@ -303,7 +303,6 @@ export default function IntelligencePage() {
                                         className="w-full bg-pic-dark border border-pic-border rounded-lg px-4 py-3 text-white focus:border-neon-pink outline-none appearance-none"
                                     >
                                         <option value="">Selecione...</option>
-                                        {/* @ts-expect-error - Dictionary indexing */}
                                         {TOWER_OPTIONS[campaignConfig.tower as keyof typeof TOWER_OPTIONS].map(sub => (
                                             <option key={sub} value={sub}>{sub}</option>
                                         ))}
