@@ -119,172 +119,181 @@ export async function POST(req: Request) {
             }
         });
 
+        // Prepare objects for processing
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const preparedRows: { cnpj: string; row: any }[] = [];
+
         for (const row of jsonData) {
-            try {
-                // Find CNPJ key dynamically for this row (in case JSON keys are consistent)
-                const rowKeys = Object.keys(row);
-                const cnpjKey = rowKeys.find(k => k.toUpperCase().includes("CNPJ")) || "NR_CNPJ";
-
-                const cnpj = sanitize(row[cnpjKey]);
-                if (!cnpj) continue; // Skip lines without CNPJ
-
-                const loginConsultor = sanitize(row["LOGINCONSULTOR"]);
-                let officeName = null;
-
-                // Try to resolve office from consultant email
-                if (loginConsultor) {
-                    const mappedOffice = consultantOfficeMap.get(loginConsultor.toLowerCase());
-                    if (mappedOffice) {
-                        officeName = mappedOffice;
-                    }
-                }
-                // Fallback: if we can't find by consultant, we accept it might be null for now
-                // or we could check if row["ESCRITORIO"] exists in future versions.
-
-                // Mapping fields
-                const newData = {
-                    codCliente: sanitize(row["COD_CLIENTE"]),
-                    razaoSocial: sanitize(row["NM_CLIENTE"]),
-                    nomeFantasia: sanitize(row["NM_CLIENTE"]), // Map same if not separate
-                    endereco: sanitize(row["DS_ENDERECO"]),
-                    numero: sanitize(row["NUMERO"]),
-                    cep: sanitize(row["NR_CEP"]),
-                    // bairro: ? Not in list provided
-                    cidade: sanitize(row["DS_CIDADE"]),
-                    // uf: ?
-                    statusSfa: sanitize(row["STATUS_SFA"]), // Assuming column name
-
-                    situacaoReceita: sanitize(row["SITUACAO_RECEITA"]),
-                    vertical: sanitize(row["VERTICAL"]),
-                    atividadeEconomica: sanitize(row["DS_ATIVIDADE_ECONOMICA"]),
-                    // cnae: ?
-
-                    nomerede: sanitize(row["NOMEREDE"]),
-                    nomeGn: sanitize(row["NOMEGN"]),
-                    nomeGerenteDivisao: sanitize(row["NOMEGERENTEDIVISAO"]),
-                    loginConsultor: loginConsultor, // CRITICAL for ownership
-                    adabasMovel: sanitize(row["ADABASMOVEL"]),
-                    adabasFixa: sanitize(row["ADABASFIXA"]),
-
-                    officeName: officeName,
-
-                    // Metrics
-                    qtMovelTerm: parseIntSafe(row["QT_MOVEL_TERM"]),
-                    qtMovelPen: parseIntSafe(row["QT_MOVEL_PEN"]),
-                    qtM2m: parseIntSafe(row["QT_MOVEL_M2M"]),
-                    qtFwt: parseIntSafe(row["QT_MOVEL_FWT"]),
-                    qtBasicaFibra: parseIntSafe(row["QT_BASICA_TERM_FIBRA"]),
-                    qtBasicaMetalico: parseIntSafe(row["QT_BASICA_TERM_METALICO"]),
-                    qtBasicaBl: parseIntSafe(row["QT_BASICA_BL"]),
-                    qtBlFtth: parseIntSafe(row["QT_BL_FTTH"]),
-                    qtBlFttc: parseIntSafe(row["QT_BL_FTTC"]),
-                    qtBasicaTv: parseIntSafe(row["QT_BASICA_TV"]),
-                    qtBasicaOutros: parseIntSafe(row["QT_BASICA_OUTROS"]),
-                    qtBasicaLinhas: parseIntSafe(row["QT_BASICA_LINAS"]),
-                    qtAvancadaDados: parseIntSafe(row["QT_AVANCADA_DADOS"]),
-                    qtAvancadaVoz: parseIntSafe(row["AVANCADA_VOZ"]), // typo in request "AVANCADA_VOZ"
-                    qtVivoTech: parseIntSafe(row["QT_VIVO_TECH"]),
-                    qtOffice365: parseIntSafe(row["QT_OFFICE_365"]),
-                    qtVvn: parseIntSafe(row["QT_VVN"]),
-
-                    // Flags
-                    flgCobertura: sanitize(row["FLG_COBERTURA"]),
-                    dsDisponibilidade: sanitize(row["DS_DISPONIBILIDADE"]),
-                    flgMei: sanitize(row["FLG_MEI"]),
-                    flgNaoPerturbe: sanitize(row["FLG_NAO_PERTURBE"]),
-                    flgCidDispVvn: sanitize(row["FLG_CID_DISP_VVN"]),
-                    flgErb: sanitize(row["FLG_ERB"]),
-
-                    // Marketing
-                    trilha: sanitize(row["TRILHA"]),
-                    primeiraOferta: sanitize(row["PRIMEIRA_OFERTA"]),
-                    segundaOferta: sanitize(row["SEGUNDA_OFERTA"]),
-                    terceiraOferta: sanitize(row["TERCEIRA_OFERTA"]),
-                    acaoMkt1: sanitize(row["ACAO_MKT1"]),
-                    acaoMkt2: sanitize(row["ACAO_MKT2"]),
-                    acaoMkt3: sanitize(row["ACAO_MKT3"]),
-
-                    lastImportId: batchId,
-                    updatedAt: new Date(),
-                };
-
-                const existing = await prisma.intelligenceData.findUnique({
-                    where: { cnpj }
-                });
-
-                if (existing) {
-                    // Update
-                    // Check history triggers
-                    const historyEvents = [];
-
-                    // 1. Consultant Change (Portability)
-                    if (existing.loginConsultor !== newData.loginConsultor) {
-                        historyEvents.push({
-                            fieldChanged: "loginConsultor",
-                            oldValue: existing.loginConsultor,
-                            newValue: newData.loginConsultor
-                        });
-                    }
-                    // 2. GN Change
-                    if (existing.nomeGn !== newData.nomeGn) {
-                        historyEvents.push({
-                            fieldChanged: "nomeGn",
-                            oldValue: existing.nomeGn,
-                            newValue: newData.nomeGn
-                        });
-                    }
-                    // 3. Vertical Change
-                    if (existing.vertical !== newData.vertical) {
-                        historyEvents.push({
-                            fieldChanged: "vertical",
-                            oldValue: existing.vertical,
-                            newValue: newData.vertical
-                        });
-                    }
-                    // 4. Office Change (derived)
-                    if (existing.officeName !== newData.officeName && newData.officeName) {
-                        historyEvents.push({
-                            fieldChanged: "officeName",
-                            oldValue: existing.officeName,
-                            newValue: newData.officeName
-                        });
-                    }
-
-                    // Save history
-                    if (historyEvents.length > 0) {
-                        await prisma.intelligenceHistory.createMany({
-                            data: historyEvents.map(evt => ({
-                                intelligenceDataId: existing.id,
-                                cnpj,
-                                ...evt,
-                                importBatchId: batchId
-                            }))
-                        });
-                        stats.historyCreated += historyEvents.length;
-                    }
-
-                    // Update Data
-                    await prisma.intelligenceData.update({
-                        where: { id: existing.id },
-                        data: newData
-                    });
-                    stats.updated++;
-
-                } else {
-                    // Create
-                    await prisma.intelligenceData.create({
-                        data: {
-                            cnpj,
-                            ...newData
-                        }
-                    });
-                    stats.created++;
-                }
-
-            } catch (err) {
-                console.error("Error processing row:", err);
-                stats.errors++;
+            const rowKeys = Object.keys(row);
+            const cnpjKey = rowKeys.find(k => k.toUpperCase().includes("CNPJ")) || "NR_CNPJ";
+            const cnpj = sanitize(row[cnpjKey]);
+            if (cnpj) {
+                preparedRows.push({ cnpj, row });
             }
+        }
+
+        // Process in batches to control concurrency
+        const BATCH_SIZE = 20;
+        for (let i = 0; i < preparedRows.length; i += BATCH_SIZE) {
+            const batch = preparedRows.slice(i, i + BATCH_SIZE);
+            await Promise.all(batch.map(async ({ cnpj, row }) => {
+                try {
+                    const loginConsultor = sanitize(row["LOGINCONSULTOR"]);
+                    let officeName = null;
+
+                    // Try to resolve office from consultant email
+                    if (loginConsultor) {
+                        const mappedOffice = consultantOfficeMap.get(loginConsultor.toLowerCase());
+                        if (mappedOffice) {
+                            officeName = mappedOffice;
+                        }
+                    }
+
+                    // Mapping fields
+                    const newData = {
+                        codCliente: sanitize(row["COD_CLIENTE"]),
+                        razaoSocial: sanitize(row["NM_CLIENTE"]),
+                        nomeFantasia: sanitize(row["NM_CLIENTE"]), // Map same if not separate
+                        endereco: sanitize(row["DS_ENDERECO"]),
+                        numero: sanitize(row["NUMERO"]),
+                        cep: sanitize(row["NR_CEP"]),
+                        // bairro: ? Not in list provided
+                        cidade: sanitize(row["DS_CIDADE"]),
+                        // uf: ?
+                        statusSfa: sanitize(row["STATUS_SFA"]), // Assuming column name
+
+                        situacaoReceita: sanitize(row["SITUACAO_RECEITA"]),
+                        vertical: sanitize(row["VERTICAL"]),
+                        atividadeEconomica: sanitize(row["DS_ATIVIDADE_ECONOMICA"]),
+                        // cnae: ?
+
+                        nomerede: sanitize(row["NOMEREDE"]),
+                        nomeGn: sanitize(row["NOMEGN"]),
+                        nomeGerenteDivisao: sanitize(row["NOMEGERENTEDIVISAO"]),
+                        loginConsultor: loginConsultor, // CRITICAL for ownership
+                        adabasMovel: sanitize(row["ADABASMOVEL"]),
+                        adabasFixa: sanitize(row["ADABASFIXA"]),
+
+                        officeName: officeName,
+
+                        // Metrics
+                        qtMovelTerm: parseIntSafe(row["QT_MOVEL_TERM"]),
+                        qtMovelPen: parseIntSafe(row["QT_MOVEL_PEN"]),
+                        qtM2m: parseIntSafe(row["QT_MOVEL_M2M"]),
+                        qtFwt: parseIntSafe(row["QT_MOVEL_FWT"]),
+                        qtBasicaFibra: parseIntSafe(row["QT_BASICA_TERM_FIBRA"]),
+                        qtBasicaMetalico: parseIntSafe(row["QT_BASICA_TERM_METALICO"]),
+                        qtBasicaBl: parseIntSafe(row["QT_BASICA_BL"]),
+                        qtBlFtth: parseIntSafe(row["QT_BL_FTTH"]),
+                        qtBlFttc: parseIntSafe(row["QT_BL_FTTC"]),
+                        qtBasicaTv: parseIntSafe(row["QT_BASICA_TV"]),
+                        qtBasicaOutros: parseIntSafe(row["QT_BASICA_OUTROS"]),
+                        qtBasicaLinhas: parseIntSafe(row["QT_BASICA_LINAS"]),
+                        qtAvancadaDados: parseIntSafe(row["QT_AVANCADA_DADOS"]),
+                        qtAvancadaVoz: parseIntSafe(row["AVANCADA_VOZ"]), // typo in request "AVANCADA_VOZ"
+                        qtVivoTech: parseIntSafe(row["QT_VIVO_TECH"]),
+                        qtOffice365: parseIntSafe(row["QT_OFFICE_365"]),
+                        qtVvn: parseIntSafe(row["QT_VVN"]),
+
+                        // Flags
+                        flgCobertura: sanitize(row["FLG_COBERTURA"]),
+                        dsDisponibilidade: sanitize(row["DS_DISPONIBILIDADE"]),
+                        flgMei: sanitize(row["FLG_MEI"]),
+                        flgNaoPerturbe: sanitize(row["FLG_NAO_PERTURBE"]),
+                        flgCidDispVvn: sanitize(row["FLG_CID_DISP_VVN"]),
+                        flgErb: sanitize(row["FLG_ERB"]),
+
+                        // Marketing
+                        trilha: sanitize(row["TRILHA"]),
+                        primeiraOferta: sanitize(row["PRIMEIRA_OFERTA"]),
+                        segundaOferta: sanitize(row["SEGUNDA_OFERTA"]),
+                        terceiraOferta: sanitize(row["TERCEIRA_OFERTA"]),
+                        acaoMkt1: sanitize(row["ACAO_MKT1"]),
+                        acaoMkt2: sanitize(row["ACAO_MKT2"]),
+                        acaoMkt3: sanitize(row["ACAO_MKT3"]),
+
+                        lastImportId: batchId,
+                        updatedAt: new Date(),
+                    };
+
+                    const existing = await prisma.intelligenceData.findUnique({
+                        where: { cnpj }
+                    });
+
+                    if (existing) {
+                        // Update
+                        // Check history triggers
+                        const historyEvents = [];
+
+                        // 1. Consultant Change (Portability)
+                        if (existing.loginConsultor !== newData.loginConsultor) {
+                            historyEvents.push({
+                                fieldChanged: "loginConsultor",
+                                oldValue: existing.loginConsultor,
+                                newValue: newData.loginConsultor
+                            });
+                        }
+                        // 2. GN Change
+                        if (existing.nomeGn !== newData.nomeGn) {
+                            historyEvents.push({
+                                fieldChanged: "nomeGn",
+                                oldValue: existing.nomeGn,
+                                newValue: newData.nomeGn
+                            });
+                        }
+                        // 3. Vertical Change
+                        if (existing.vertical !== newData.vertical) {
+                            historyEvents.push({
+                                fieldChanged: "vertical",
+                                oldValue: existing.vertical,
+                                newValue: newData.vertical
+                            });
+                        }
+                        // 4. Office Change (derived)
+                        if (existing.officeName !== newData.officeName && newData.officeName) {
+                            historyEvents.push({
+                                fieldChanged: "officeName",
+                                oldValue: existing.officeName,
+                                newValue: newData.officeName
+                            });
+                        }
+
+                        // Save history
+                        if (historyEvents.length > 0) {
+                            await prisma.intelligenceHistory.createMany({
+                                data: historyEvents.map(evt => ({
+                                    intelligenceDataId: existing.id,
+                                    cnpj,
+                                    ...evt,
+                                    importBatchId: batchId
+                                }))
+                            });
+                            stats.historyCreated += historyEvents.length;
+                        }
+
+                        // Update Data
+                        await prisma.intelligenceData.update({
+                            where: { id: existing.id },
+                            data: newData
+                        });
+                        stats.updated++;
+
+                    } else {
+                        // Create
+                        await prisma.intelligenceData.create({
+                            data: {
+                                cnpj,
+                                ...newData
+                            }
+                        });
+                        stats.created++;
+                    }
+
+                } catch (err) {
+                    console.error("Error processing row:", err);
+                    stats.errors++;
+                }
+            }));
         }
 
         return NextResponse.json({
