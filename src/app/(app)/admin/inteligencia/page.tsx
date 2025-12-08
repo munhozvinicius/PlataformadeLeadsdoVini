@@ -74,7 +74,16 @@ export default function IntelligencePage() {
                 method: "POST",
                 body: formData
             });
-            const data = await res.json();
+            let data;
+            const text = await res.text();
+
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                // If it's not JSON, it's likely an HTML error or plain text (e.g. 413 Payload Too Large)
+                throw new Error(`Erro do servidor (${res.status}): ${text.substring(0, 100)}...`);
+            }
+
             if (!res.ok) {
                 throw new Error(data.message || "Erro no processamento");
             }
