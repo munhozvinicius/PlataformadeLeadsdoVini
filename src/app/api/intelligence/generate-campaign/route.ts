@@ -60,6 +60,9 @@ export async function POST(req: Request) {
         if (filters?.officeName) where.officeName = filters.officeName;
         if (filters?.loginConsultor) where.loginConsultor = filters.loginConsultor;
 
+        // Flag Logic (Strings "1"/"0")
+        if (filters?.flgCobertura) where.flgCobertura = "1";
+
 
         // 2. Fetch Intelligence Data
         const targets = await prisma.intelligenceData.findMany({

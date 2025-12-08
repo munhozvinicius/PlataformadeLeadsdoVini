@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Upload, Filter, Database, Plus, Search, Loader2 } from "lucide-react";
 
 export default function IntelligencePage() {
-    const [activeTab, setActiveTab] = useState<"base" | "explore">("explore");
+    const [activeTab, setActiveTab] = useState<"base" | "explore">("base");
     const [isLoading, setIsLoading] = useState(false);
 
     // Upload State
@@ -27,6 +27,7 @@ export default function IntelligencePage() {
         cidade: "",
         vertical: "",
         officeName: "",
+        flgCobertura: false, // New Flag Filter
         productRules: [] as { field: string, operator: string, value: number }[]
     });
 
@@ -193,22 +194,41 @@ export default function IntelligencePage() {
             )}
 
             {activeTab === "explore" && (
-                <div className="grid grid-cols-12 gap-8">
-                    {/* Filters Sidebar */}
-                    <aside className="col-span-3 bg-pic-card border border-pic-border rounded-xl p-6 h-fit sticky top-24">
-                        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <div className="grid grid-cols-12 gap-6 items-start">
+                    {/* COL 1: FILTERS */}
+                    <aside className="col-span-3 bg-pic-card border border-pic-border rounded-xl p-5 sticky top-24">
+                        <h3 className="text-md font-bold text-white mb-4 flex items-center gap-2">
                             <Filter className="w-4 h-4 text-neon-blue" />
-                            Filtros
+                            1. Filtros de Busca
                         </h3>
 
                         <div className="space-y-4">
+                            <div className="space-y-2">
+                                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Cobertura / Flags</label>
+
+                                <label className="flex items-center gap-3 p-3 bg-pic-dark border border-pic-border rounded-lg cursor-pointer hover:border-neon-pink transition-colors group">
+                                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${filters.flgCobertura ? "bg-neon-pink border-neon-pink" : "border-slate-600 group-hover:border-neon-pink"}`}>
+                                        {filters.flgCobertura && <div className="w-2.5 h-2.5 bg-white rounded-sm" />}
+                                    </div>
+                                    <input
+                                        type="checkbox"
+                                        className="hidden"
+                                        checked={filters.flgCobertura}
+                                        onChange={(e) => setFilters({ ...filters, flgCobertura: e.target.checked })}
+                                    />
+                                    <span className={`text-sm font-medium ${filters.flgCobertura ? "text-white" : "text-slate-400 group-hover:text-white"}`}>
+                                        Com Cobertura Fibra (1)
+                                    </span>
+                                </label>
+                            </div>
+
                             <div>
-                                <label className="block text-xs font-semibold text-slate-400 mb-1">Cidade</label>
+                                <label className="block text-xs font-semibold text-slate-400 mb-1">Cidade (Contém)</label>
                                 <input
                                     type="text"
                                     value={filters.cidade}
                                     onChange={e => setFilters({ ...filters, cidade: e.target.value })}
-                                    className="w-full bg-pic-dark border border-pic-border rounded-lg px-3 py-2 text-sm focus:border-neon-blue outline-none text-white"
+                                    className="w-full bg-pic-dark border border-pic-border rounded-lg px-3 py-2 text-sm focus:border-neon-blue outline-none text-white placeholder-slate-600"
                                     placeholder="Ex: São Paulo"
                                 />
                             </div>
@@ -218,104 +238,27 @@ export default function IntelligencePage() {
                                     type="text"
                                     value={filters.vertical}
                                     onChange={e => setFilters({ ...filters, vertical: e.target.value })}
-                                    className="w-full bg-pic-dark border border-pic-border rounded-lg px-3 py-2 text-sm focus:border-neon-blue outline-none text-white"
+                                    className="w-full bg-pic-dark border border-pic-border rounded-lg px-3 py-2 text-sm focus:border-neon-blue outline-none text-white placeholder-slate-600"
                                     placeholder="Ex: Serviços"
                                 />
                             </div>
-
-                            <hr className="border-pic-border my-2" />
-
-                            {/* Product Logic Placeholder */}
-                            <div className="p-3 bg-pic-dark/50 rounded-lg border border-pic-border border-dashed text-center">
-                                <p className="text-xs text-slate-500 mb-2">Regras de Produto</p>
-                                <button className="text-xs text-neon-blue hover:text-white font-medium">
-                                    + Adicionar Regra
-                                </button>
-                            </div>
                         </div>
-
-                        <button
-                            className="w-full mt-6 bg-neon-blue/10 border border-neon-blue/50 text-neon-blue hover:bg-neon-blue hover:text-black font-bold py-2 rounded-lg transition-all"
-                            onClick={() => { /* Real search trigger would go here to refresh grid */ }}
-                        >
-                            Aplicar Filtros
-                        </button>
                     </aside>
 
-                    {/* Main Content */}
-                    <main className="col-span-9">
-                        <div className="bg-pic-card border border-pic-border rounded-xl p-6 min-h-[500px] flex flex-col">
-                            <div className="flex justify-between items-center mb-6">
-                                <h3 className="text-lg font-bold text-white">Resultados (Simulação)</h3>
-                                <button
-                                    onClick={() => setIsCampaignModalOpen(true)}
-                                    className="bg-neon-pink text-white font-bold py-2 px-6 rounded-lg hover:bg-neon-pink/90 transition-shadow shadow-lg shadow-neon-pink/20 flex items-center gap-2"
-                                >
-                                    <Plus className="w-4 h-4" />
-                                    Criar Campanha
-                                </button>
-                            </div>
+                    {/* COL 2: CAMPAIGN CONFIG */}
+                    <section className="col-span-5 bg-pic-card border border-pic-border rounded-xl p-5 sticky top-24">
+                        <h3 className="text-md font-bold text-white mb-4 flex items-center gap-2">
+                            <Database className="w-4 h-4 text-neon-pink" />
+                            2. Configuração da Campanha
+                        </h3>
 
-                            <div className="flex-1 flex items-center justify-center text-slate-500 flex-col gap-4">
-                                <Database className="w-16 h-16 opacity-20" />
-                                <p>Use os filtros para encontrar clientes na base Mapa Parque.</p>
-                            </div>
-                        </div>
-                    </main>
-                </div>
-            )}
-
-            {/* Campaign Creation Modal */}
-            {isCampaignModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-                    <div className="bg-pic-card border border-pic-border rounded-xl w-full max-w-lg p-8 shadow-2xl relative">
-                        <button
-                            onClick={() => setIsCampaignModalOpen(false)}
-                            className="absolute top-4 right-4 text-slate-500 hover:text-white"
-                        >
-                            ✕
-                        </button>
-
-                        <h2 className="text-2xl font-black text-white mb-1">Nova Campanha</h2>
-                        <p className="text-slate-400 text-sm mb-6">Gerando campanha a partir da seleção atual.</p>
-
-                        <div className="space-y-5">
+                        <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-semibold text-white mb-2">Torre (Produto Principal)</label>
-                                <select
-                                    value={campaignConfig.tower}
-                                    onChange={(e) => setCampaignConfig({ ...campaignConfig, tower: e.target.value, subTower: "" })}
-                                    className="w-full bg-pic-dark border border-pic-border rounded-lg px-4 py-3 text-white focus:border-neon-pink outline-none appearance-none"
-                                >
-                                    <option value="">Selecione uma Torre...</option>
-                                    {Object.keys(TOWER_OPTIONS).map(tower => (
-                                        <option key={tower} value={tower}>{tower}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {campaignConfig.tower && (
-                                <div>
-                                    <label className="block text-sm font-semibold text-white mb-2">Sub-Torre (Detalhe)</label>
-                                    <select
-                                        value={campaignConfig.subTower}
-                                        onChange={(e) => setCampaignConfig({ ...campaignConfig, subTower: e.target.value })}
-                                        className="w-full bg-pic-dark border border-pic-border rounded-lg px-4 py-3 text-white focus:border-neon-pink outline-none appearance-none"
-                                    >
-                                        <option value="">Selecione...</option>
-                                        {TOWER_OPTIONS[campaignConfig.tower as keyof typeof TOWER_OPTIONS].map(sub => (
-                                            <option key={sub} value={sub}>{sub}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
-
-                            <div>
-                                <label className="block text-sm font-semibold text-white mb-2">Escritório Responsável</label>
+                                <label className="block text-xs font-semibold text-slate-400 mb-1">Escritório Responsável</label>
                                 <select
                                     value={campaignConfig.officeId}
                                     onChange={(e) => setCampaignConfig({ ...campaignConfig, officeId: e.target.value })}
-                                    className="w-full bg-pic-dark border border-pic-border rounded-lg px-4 py-3 text-white focus:border-neon-pink outline-none appearance-none"
+                                    className="w-full bg-pic-dark border border-pic-border rounded-lg px-3 py-2 text-sm text-white focus:border-neon-pink outline-none appearance-none cursor-pointer hover:border-slate-500 transition-colors"
                                 >
                                     <option value="">Selecione o Escritório...</option>
                                     {offices.map(office => (
@@ -324,29 +267,80 @@ export default function IntelligencePage() {
                                 </select>
                             </div>
 
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-400 mb-1">Torre (Objetivo)</label>
+                                    <select
+                                        value={campaignConfig.tower}
+                                        onChange={(e) => setCampaignConfig({ ...campaignConfig, tower: e.target.value, subTower: "" })}
+                                        className="w-full bg-pic-dark border border-pic-border rounded-lg px-3 py-2 text-sm text-white focus:border-neon-pink outline-none appearance-none cursor-pointer hover:border-slate-500 transition-colors"
+                                    >
+                                        <option value="">Selecione...</option>
+                                        {Object.keys(TOWER_OPTIONS).map(tower => (
+                                            <option key={tower} value={tower}>{tower}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-400 mb-1">Sub-Torre (Detalhe)</label>
+                                    <select
+                                        value={campaignConfig.subTower}
+                                        onChange={(e) => setCampaignConfig({ ...campaignConfig, subTower: e.target.value })}
+                                        className="w-full bg-pic-dark border border-pic-border rounded-lg px-3 py-2 text-sm text-white focus:border-neon-pink outline-none appearance-none cursor-pointer hover:border-slate-500 transition-colors disabled:opacity-50"
+                                        disabled={!campaignConfig.tower}
+                                    >
+                                        <option value="">Selecione...</option>
+                                        {campaignConfig.tower && TOWER_OPTIONS[campaignConfig.tower as keyof typeof TOWER_OPTIONS].map(sub => (
+                                            <option key={sub} value={sub}>{sub}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
                             <div>
-                                <label className="block text-sm font-semibold text-white mb-2">Nome Personalizado (Opcional)</label>
+                                <label className="block text-xs font-semibold text-slate-400 mb-1">Nome Personalizado (Sufixo)</label>
                                 <input
                                     type="text"
                                     value={campaignConfig.customName}
-                                    onChange={(e) => setCampaignConfig({ ...campaignConfig, customName: e.target.value })}
-                                    className="w-full bg-pic-dark border border-pic-border rounded-lg px-4 py-3 text-white focus:border-neon-pink outline-none"
-                                    placeholder="Ex: Q4 Foco Churn"
+                                    onChange={e => setCampaignConfig({ ...campaignConfig, customName: e.target.value })}
+                                    className="w-full bg-pic-dark border border-pic-border rounded-lg px-3 py-2 text-sm focus:border-neon-pink outline-none text-white placeholder-slate-600"
+                                    placeholder="Ex: Foco Q1 2025"
                                 />
-                                <p className="text-xs text-slate-500 mt-2">
-                                    Nome Final: <span className="text-neon-pink">[{campaignConfig.tower || "Torre"}] - {campaignConfig.subTower || "Sub"} - {campaignConfig.customName || "..."} - {new Date().toLocaleDateString('pt-BR')}</span>
+                                <p className="text-[10px] text-slate-500 mt-1">
+                                    Nome Final: <span className="text-slate-300">[{campaignConfig.tower || "Torre"}] - {campaignConfig.subTower ? `${campaignConfig.subTower} - ` : ""}{campaignConfig.customName || "Personalizado"} - {new Date().toLocaleDateString('pt-BR')}</span>
                                 </p>
                             </div>
-
-                            <button
-                                onClick={handleGenerateCampaign}
-                                disabled={isLoading || !campaignConfig.tower || !campaignConfig.officeId}
-                                className="w-full bg-neon-pink text-white font-bold py-4 rounded-lg hover:bg-neon-pink/90 transition-all mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {isLoading ? "Gerando..." : "Confirmar e Criar Campanha"}
-                            </button>
                         </div>
-                    </div>
+                    </section>
+
+                    {/* COL 3: SIMULATION & ACTION */}
+                    <section className="col-span-4 bg-pic-card border border-pic-border rounded-xl p-5 sticky top-24 flex flex-col h-[300px]">
+                        <h3 className="text-md font-bold text-white mb-4 flex items-center gap-2">
+                            <Search className="w-4 h-4 text-neon-green" />
+                            3. Simulação & Disparo
+                        </h3>
+
+                        <div className="flex-1 bg-pic-dark/30 rounded-lg border-2 border-dashed border-pic-border flex flex-col items-center justify-center p-4 text-center">
+                            <span className="text-slate-500 text-sm mb-2">Leads Encontrados</span>
+                            <span className="text-4xl font-black text-white">---</span>
+                            <p className="text-[10px] text-slate-600 mt-2 max-w-[200px]">
+                                Selecione filtros e configure a campanha para verificar a contagem.
+                            </p>
+                        </div>
+
+                        <button
+                            onClick={handleGenerateCampaign}
+                            disabled={isLoading || !campaignConfig.tower || !campaignConfig.officeId}
+                            className="w-full mt-4 bg-neon-green text-black font-bold py-3 rounded-lg hover:bg-neon-green/90 transition-all shadow-lg shadow-neon-green/20 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+                        >
+                            {isLoading ? <Loader2 className="animate-spin w-5 h-5" /> : (
+                                <>
+                                    <Plus className="w-5 h-5" />
+                                    Gerar Campanha
+                                </>
+                            )}
+                        </button>
+                    </section>
                 </div>
             )}
         </div>
