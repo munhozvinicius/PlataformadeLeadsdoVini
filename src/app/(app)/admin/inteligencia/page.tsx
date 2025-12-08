@@ -19,12 +19,16 @@ export default function IntelligencePage() {
         productRules: [] as { field: string, operator: string, value: number }[]
     });
 
+    // Office Data
+    const [offices, setOffices] = useState<any[]>([]);
+
     // Campaign Modal State
     const [isCampaignModalOpen, setIsCampaignModalOpen] = useState(false);
     const [campaignConfig, setCampaignConfig] = useState({
         tower: "",
         subTower: "",
-        customName: ""
+        customName: "",
+        officeId: ""
     });
 
     const TOWER_OPTIONS = {
@@ -33,6 +37,17 @@ export default function IntelligencePage() {
         "Fixa Básica": ["Linha Básica", "Banda Larga"],
         "TI (Digital)": ["Microsoft", "Google Workspace", "SD WAN", "MDM", "Antivirus"]
     };
+
+    // Load offices on mount
+    import { useEffect } from "react";
+    useEffect(() => {
+        fetch("/api/admin/offices")
+            .then(res => res.json())
+            .then(data => {
+                if (Array.isArray(data)) setOffices(data);
+            })
+            .catch(err => console.error("Error loading offices", err));
+    }, []);
 
     // Mock Data (Replace with real API fetch later)
     // For V1 UI build, we assume user will hook up fetch
@@ -286,6 +301,20 @@ export default function IntelligencePage() {
                             )}
 
                             <div>
+                                <label className="block text-sm font-semibold text-white mb-2">Escritório Responsável</label>
+                                <select
+                                    value={campaignConfig.officeId}
+                                    onChange={(e) => setCampaignConfig({ ...campaignConfig, officeId: e.target.value })}
+                                    className="w-full bg-pic-dark border border-pic-border rounded-lg px-4 py-3 text-white focus:border-neon-pink outline-none appearance-none"
+                                >
+                                    <option value="">Selecione o Escritório...</option>
+                                    {offices.map(office => (
+                                        <option key={office.id} value={office.id}>{office.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
                                 <label className="block text-sm font-semibold text-white mb-2">Nome Personalizado (Opcional)</label>
                                 <input
                                     type="text"
@@ -301,7 +330,7 @@ export default function IntelligencePage() {
 
                             <button
                                 onClick={handleGenerateCampaign}
-                                disabled={isLoading || !campaignConfig.tower}
+                                disabled={isLoading || !campaignConfig.tower || !campaignConfig.officeId}
                                 className="w-full bg-neon-pink text-white font-bold py-4 rounded-lg hover:bg-neon-pink/90 transition-all mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {isLoading ? "Gerando..." : "Confirmar e Criar Campanha"}
