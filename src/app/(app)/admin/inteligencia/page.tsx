@@ -149,6 +149,7 @@ export default function IntelligencePage() {
         const Papa = (await import("papaparse")).default;
 
         let headerMap: string[] | null = null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let batch: any[] = [];
         const BATCH_SIZE = 1000;
         let processedRows = 0;
