@@ -10,7 +10,7 @@ export async function POST(req: Request) {
     try {
         const session = await getServerSession(authOptions);
         // Only MASTER and GERENTE_SENIOR can generate campaigns
-        const allowedRoles = [Role.MASTER, Role.GERENTE_SENIOR];
+        const allowedRoles: string[] = [Role.MASTER, Role.GERENTE_SENIOR];
 
         if (!session?.user || !allowedRoles.includes(session.user.role || "")) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -60,6 +60,7 @@ export async function POST(req: Request) {
 
 
         // 2. Fetch Intelligence Data
+        // @ts-ignore - Model generated at build time
         const targets = await prisma.intelligenceData.findMany({
             where,
             take: 5000 // Limit for safety in V1, maybe paginated later

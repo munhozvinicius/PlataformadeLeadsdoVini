@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Upload, Filter, Database, Plus, Search, Loader2 } from "lucide-react";
 
 export default function IntelligencePage() {
@@ -39,7 +39,7 @@ export default function IntelligencePage() {
     };
 
     // Load offices on mount
-    import { useEffect } from "react";
+    // Load offices on mount
     useEffect(() => {
         fetch("/api/admin/offices")
             .then(res => res.json())
