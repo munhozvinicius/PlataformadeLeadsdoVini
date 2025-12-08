@@ -151,7 +151,7 @@ export default function IntelligencePage() {
         let headerMap: string[] | null = null;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let batch: any[] = [];
-        const BATCH_SIZE = 1000;
+        const BATCH_SIZE = 200;
         let processedRows = 0;
         const aggregatedStats = { created: 0, updated: 0, historyCreated: 0, errors: 0 };
         const batchId = new Date().toISOString();
@@ -252,7 +252,7 @@ export default function IntelligencePage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const uploadBatches = async (allData: any[]) => {
         const batchId = new Date().toISOString();
-        const BATCH_SIZE = 1000;
+        const BATCH_SIZE = 200;
         const aggregatedStats = { created: 0, updated: 0, historyCreated: 0, errors: 0 };
 
         for (let i = 0; i < allData.length; i += BATCH_SIZE) {
