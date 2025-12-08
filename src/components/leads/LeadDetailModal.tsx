@@ -267,19 +267,7 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
     await onRefresh();
   }
 
-  async function saveLoss() {
-    if (!lossJust.trim()) return;
-    // setSavingLoss(true);
-    await fetch("/api/lead-losses", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ leadId: lead.id, motivo: lossMotivo, justificativa: lossJust }),
-    });
-    // setSavingLoss(false);
-    setLossJust("");
-    // await loadLosses();
-    await onRefresh();
-  }
+
 
   async function runEnrichment() {
     setExternalLoading(true);

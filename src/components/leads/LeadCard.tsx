@@ -27,9 +27,7 @@ export function LeadCard({ lead, onOpen }: LeadCardProps) {
 
 
   // Format currency if present (assuming internal value or placeholder)
-  const value = lead.vlFatPresumido
-    ? (parseFloat(lead.vlFatPresumido) ? parseFloat(lead.vlFatPresumido).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : lead.vlFatPresumido)
-    : "R$ -";
+
 
   return (
     <div
