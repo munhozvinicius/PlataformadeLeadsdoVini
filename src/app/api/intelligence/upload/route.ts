@@ -45,6 +45,13 @@ export async function POST(req: Request) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const jsonData = XLSX.utils.sheet_to_json(worksheet) as Record<string, any>[];
 
+        console.log("Upload Debug - Rows found:", jsonData.length);
+        if (jsonData.length > 0) {
+            console.log("Upload Debug - First Row Keys:", Object.keys(jsonData[0]));
+        } else {
+            console.log("Upload Debug - No rows found in sheet:", firstSheetName);
+        }
+
         const batchId = new Date().toISOString(); // Simple batch ID for now
         const stats = {
             created: 0,
@@ -52,6 +59,25 @@ export async function POST(req: Request) {
             historyCreated: 0,
             errors: 0
         };
+
+        // Validate presence of critical column
+        if (jsonData.length > 0) {
+            const keys = Object.keys(jsonData[0]);
+            // Check if NR_CNPJ exists (looser check)
+            const cnpjKey = keys.find(k => k.toUpperCase().includes("CNPJ"));
+            if (!cnpjKey) {
+                return NextResponse.json({
+                    message: `Coluna de CNPJ não encontrada (procurando por 'CNPJ'). Colunas detectadas: ${keys.slice(0, 5).join(", ")}...`
+                }, { status: 400 });
+            }
+
+            // Remap the found key to "NR_CNPJ" for the loop below if needed, 
+            // but easier to just use the found key in the loop.
+        }
+
+        // Process in chunks or sequentially? Sequentially is safer for logic, but might be slow.
+        // For V1, let's do sequential loop but optimize with transactions if needed.
+        // Given complexity of "History", standard loop is best.
 
         // Pre-fetch users to optimize lookup (caching emails -> officeName)
         // This avoids querying DB for every row
@@ -69,7 +95,11 @@ export async function POST(req: Request) {
 
         for (const row of jsonData) {
             try {
-                const cnpj = sanitize(row["NR_CNPJ"]);
+                // Find CNPJ key dynamically for this row (in case JSON keys are consistent)
+                const rowKeys = Object.keys(row);
+                const cnpjKey = rowKeys.find(k => k.toUpperCase().includes("CNPJ")) || "NR_CNPJ";
+
+                const cnpj = sanitize(row[cnpjKey]);
                 if (!cnpj) continue; // Skip lines without CNPJ
 
                 const loginConsultor = sanitize(row["LOGINCONSULTOR"]);

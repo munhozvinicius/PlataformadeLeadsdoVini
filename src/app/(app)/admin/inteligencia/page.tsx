@@ -75,9 +75,13 @@ export default function IntelligencePage() {
                 body: formData
             });
             const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.message || "Erro no processamento");
+            }
             setUploadStats(data);
-        } catch {
-            alert("Erro no upload");
+        } catch (err: any) {
+            console.error(err);
+            alert("Erro no upload: " + (err.message || "Erro desconhecido"));
         } finally {
             setIsLoading(false);
         }
