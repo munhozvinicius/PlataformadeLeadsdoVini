@@ -72,25 +72,55 @@ export default function IntelligencePage() {
         setProgress({ current: 0, total: 0 });
 
         try {
-            // 1. Client-side Parsing
-            const XLSX = await import("xlsx");
-
-            const buffer = await uploadFile.arrayBuffer();
-            const workbook = XLSX.read(buffer, { type: 'array' });
-            const firstSheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[firstSheetName];
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+            let jsonData: any[] = [];
+
+            // 1. Parse based on file type
+            if (uploadFile.name.endsWith(".csv")) {
+                const Papa = (await import("papaparse")).default;
+
+                await new Promise<void>((resolve, reject) => {
+                    Papa.parse(uploadFile, {
+                        header: true,
+                        skipEmptyLines: true,
+                        encoding: "ISO-8859-1", // Common in Brazil legacy systems, or try UTF-8 if fails
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        complete: (results: any) => {
+                            jsonData = results.data;
+                            resolve();
+                        },
+                        error: (err: Error) => reject(err)
+                    });
+                });
+            } else {
+                // XLSX / XLS
+                const XLSX = await import("xlsx");
+                const buffer = await uploadFile.arrayBuffer();
+                const workbook = XLSX.read(buffer, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+            }
 
             if (jsonData.length === 0) {
-                alert("Arquivo vazio ou inválido.");
+                alert("Arquivo vazio ou nenhum dado encontrado.");
                 return;
+            }
+
+            // Check if parsing worked (look for known columns)
+            const firstRow = jsonData[0];
+            const keys = Object.keys(firstRow);
+            if (keys.length < 2) {
+                // Suspicious - likely delimiter fail
+                alert(`Atenção: O arquivo parece ter sido lido incorretamente. Apenas ${keys.length} colunas detectadas (${keys.join(", ")}). Verifique se é um CSV separado por ponto-e-vírgula ou vírgula.`);
             }
 
             // 2. Upload in Chunks
             const batchId = new Date().toISOString();
             const CHUNK_SIZE = 500;
-
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const totalChunks = Math.ceil(jsonData.length / CHUNK_SIZE);
 
             const aggregatedStats = {
                 created: 0,
@@ -115,7 +145,7 @@ export default function IntelligencePage() {
                 if (!res.ok) {
                     const text = await res.text();
                     console.error(`Error processing chunk ${i / CHUNK_SIZE}:`, text);
-                    aggregatedStats.errors += chunk.length; // Assume all failed if request failed
+                    aggregatedStats.errors += chunk.length;
                     continue;
                 }
 
