@@ -63,61 +63,84 @@ export default function IntelligencePage() {
     // Mock Data (Replace with real API fetch later)
     // For V1 UI build, we assume user will hook up fetch
 
+    const [progress, setProgress] = useState({ current: 0, total: 0 });
+
     const handleUpload = async () => {
         if (!uploadFile) return;
         setIsLoading(true);
+        setUploadStats(null);
+        setProgress({ current: 0, total: 0 });
 
         try {
-            // 1. Client-side Parsing & Compression
-            // Dynamic import to avoid heavy initial load if possible, or just standard import if simple
+            // 1. Client-side Parsing
             const XLSX = await import("xlsx");
-            const { gzipSync } = await import("fflate");
 
             const buffer = await uploadFile.arrayBuffer();
             const workbook = XLSX.read(buffer, { type: 'array' });
             const firstSheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[firstSheetName];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
 
             if (jsonData.length === 0) {
                 alert("Arquivo vazio ou inválido.");
                 return;
             }
 
-            // Compress
-            const jsonString = JSON.stringify(jsonData);
-            const compressed = gzipSync(new TextEncoder().encode(jsonString));
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const compressedBlob = new Blob([compressed as any]);
+            // 2. Upload in Chunks
+            const batchId = new Date().toISOString();
+            const CHUNK_SIZE = 500;
+            const totalChunks = Math.ceil(jsonData.length / CHUNK_SIZE);
 
-            // 2. Upload
-            const formData = new FormData();
-            formData.append("file", compressedBlob, "data.json.gz");
-            formData.append("isCompressed", "true");
+            const aggregatedStats = {
+                created: 0,
+                updated: 0,
+                historyCreated: 0,
+                errors: 0
+            };
 
-            const res = await fetch("/api/intelligence/upload", {
-                method: "POST",
-                body: formData
+            for (let i = 0; i < jsonData.length; i += CHUNK_SIZE) {
+                const chunk = jsonData.slice(i, i + CHUNK_SIZE);
+                setProgress({ current: i + chunk.length, total: jsonData.length });
+
+                const res = await fetch("/api/intelligence/upload", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        records: chunk,
+                        batchId
+                    })
+                });
+
+                if (!res.ok) {
+                    const text = await res.text();
+                    console.error(`Error processing chunk ${i / CHUNK_SIZE}:`, text);
+                    aggregatedStats.errors += chunk.length; // Assume all failed if request failed
+                    continue;
+                }
+
+                const data: UploadResponse = await res.json();
+                if (data.stats) {
+                    aggregatedStats.created += data.stats.created;
+                    aggregatedStats.updated += data.stats.updated;
+                    aggregatedStats.historyCreated += data.stats.historyCreated;
+                    aggregatedStats.errors += data.stats.errors;
+                }
+            }
+
+            setUploadStats({
+                success: true,
+                message: `Upload finalizado. Processados ${jsonData.length} registros.`,
+                stats: aggregatedStats
             });
-            let data;
-            const text = await res.text();
 
-            try {
-                data = JSON.parse(text);
-            } catch {
-                throw new Error(`Erro do servidor (${res.status}): ${text.substring(0, 100)}...`);
-            }
-
-            if (!res.ok) {
-                throw new Error(data.message || "Erro no processamento");
-            }
-            setUploadStats(data);
         } catch (err) {
             console.error(err);
             const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
             alert("Erro no upload: " + errorMessage);
         } finally {
             setIsLoading(false);
+            setProgress({ current: 0, total: 0 });
         }
     };
 
@@ -213,7 +236,12 @@ export default function IntelligencePage() {
                             disabled={isLoading}
                             className="w-full mt-6 bg-neon-pink text-white font-bold py-3 rounded-lg hover:bg-neon-pink/90 transition-colors disabled:opacity-50 flex justify-center items-center gap-2"
                         >
-                            {isLoading ? <Loader2 className="animate-spin w-5 h-5" /> : "Processar Arquivo"}
+                            {isLoading ? (
+                                <span className="flex items-center gap-2">
+                                    <Loader2 className="animate-spin w-5 h-5" />
+                                    {progress.total > 0 ? `Processando ${Math.round((progress.current / progress.total) * 100)}%...` : "Processando..."}
+                                </span>
+                            ) : "Processar Arquivo"}
                         </button>
                     )}
 

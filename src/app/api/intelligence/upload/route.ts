@@ -31,34 +31,44 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
         }
 
-        const formData = await req.formData();
-        const file = formData.get("file") as File;
-        const isCompressed = formData.get("isCompressed") === "true";
+        const contentType = req.headers.get("content-type") || "";
 
-        if (!file) {
-            return NextResponse.json({ message: "File is required" }, { status: 400 });
-        }
-
-        const buffer = await file.arrayBuffer();
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let jsonData: Record<string, any>[] = [];
+        let batchId = new Date().toISOString();
 
-        if (isCompressed) {
-            try {
-                const { gunzipSync } = await import("fflate");
-                const decompressed = gunzipSync(new Uint8Array(buffer));
-                const jsonString = new TextDecoder().decode(decompressed);
-                jsonData = JSON.parse(jsonString);
-            } catch (err) {
-                console.error("Decompression error:", err);
-                return NextResponse.json({ message: "Failed to decompress/parse file" }, { status: 400 });
-            }
+        if (contentType.includes("application/json")) {
+            const body = await req.json();
+            jsonData = body.records || [];
+            if (body.batchId) batchId = body.batchId;
         } else {
-            // Legacy / Direct Excel Upload
-            const workbook = XLSX.read(buffer, { type: "buffer" });
-            const firstSheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[firstSheetName];
-            jsonData = XLSX.utils.sheet_to_json(worksheet);
+            const formData = await req.formData();
+            const file = formData.get("file") as File;
+            const isCompressed = formData.get("isCompressed") === "true";
+
+            if (!file) {
+                return NextResponse.json({ message: "File or records required" }, { status: 400 });
+            }
+
+            const buffer = await file.arrayBuffer();
+
+            if (isCompressed) {
+                try {
+                    const { gunzipSync } = await import("fflate");
+                    const decompressed = gunzipSync(new Uint8Array(buffer));
+                    const jsonString = new TextDecoder().decode(decompressed);
+                    jsonData = JSON.parse(jsonString);
+                } catch (err) {
+                    console.error("Decompression error:", err);
+                    return NextResponse.json({ message: "Failed to decompress/parse file" }, { status: 400 });
+                }
+            } else {
+                // Legacy / Direct Excel Upload
+                const workbook = XLSX.read(buffer, { type: "buffer" });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                jsonData = XLSX.utils.sheet_to_json(worksheet);
+            }
         }
 
         console.log("Upload Debug - Rows found:", jsonData.length);
@@ -68,7 +78,7 @@ export async function POST(req: Request) {
             console.log("Upload Debug - No rows found");
         }
 
-        const batchId = new Date().toISOString(); // Simple batch ID for now
+
         const stats = {
             created: 0,
             updated: 0,
