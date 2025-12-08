@@ -394,3 +394,90 @@ model AnnouncementRead {
 
   @@unique([announcementId, userId])
 }
+
+model IntelligenceData {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  cnpj      String   @unique
+  
+  // Client Info
+  codCliente     String?
+  razaoSocial    String?
+  nomeFantasia   String?
+  endereco       String?
+  numero         String?
+  cep            String?
+  bairro         String?
+  cidade         String?
+  uf             String?
+  statusSfa      String?
+  
+  // Receita & Vertical
+  situacaoReceita      String?
+  vertical             String?
+  atividadeEconomica   String?
+  cnae                 String?
+  
+  // Hierarchy
+  nomerede             String?
+  nomeGn               String?
+  nomeGerenteDivisao   String?
+  loginConsultor       String?
+  adabasMovel          String?
+  adabasFixa           String?
+  officeName           String? // Extracted from file
+  
+  // Vivo Plant (Numeric for filtering)
+  qtMovelTerm          Int @default(0)
+  qtMovelPen           Int @default(0)
+  qtM2m                Int @default(0)
+  qtFwt                Int @default(0)
+  qtBasicaFibra        Int @default(0)
+  qtBasicaMetalico     Int @default(0)
+  qtBasicaBl           Int @default(0)
+  qtBlFtth             Int @default(0)
+  qtBlFttc             Int @default(0)
+  qtBasicaTv           Int @default(0)
+  qtBasicaOutros       Int @default(0)
+  qtBasicaLinhas       Int @default(0)
+  qtAvancadaDados      Int @default(0)
+  qtAvancadaVoz        Int @default(0)
+  qtVivoTech           Int @default(0)
+  qtOffice365          Int @default(0)
+  qtVvn                Int @default(0)
+  
+  // Coverage & Flags
+  flgCobertura         String?
+  dsDisponibilidade    String?
+  flgMei               String?
+  flgNaoPerturbe       String?
+  flgCidDispVvn        String?
+  flgErb               String?
+  
+  // Marketing
+  trilha               String?
+  primeiraOferta       String?
+  segundaOferta        String?
+  terceiraOferta       String?
+  acaoMkt1             String?
+  acaoMkt2             String?
+  acaoMkt3             String?
+  
+  history              IntelligenceHistory[]
+  
+  updatedAt            DateTime @default(now())
+  lastImportId         String? // Batch ID
+}
+
+model IntelligenceHistory {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  intelligenceDataId String  @db.ObjectId
+  intelligenceData  IntelligenceData @relation(fields: [intelligenceDataId], references: [id], onDelete: Cascade)
+  cnpj              String
+  
+  fieldChanged      String
+  oldValue          String?
+  newValue          String?
+  
+  changedAt         DateTime @default(now())
+  importBatchId     String?
+}
