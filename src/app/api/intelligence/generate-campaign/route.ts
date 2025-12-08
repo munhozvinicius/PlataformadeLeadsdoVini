@@ -62,7 +62,6 @@ export async function POST(req: Request) {
 
 
         // 2. Fetch Intelligence Data
-        // @ts-expect-error - Model generated at build time
         const targets = await prisma.intelligenceData.findMany({
             where,
             take: 5000 // Limit for safety in V1, maybe paginated later
