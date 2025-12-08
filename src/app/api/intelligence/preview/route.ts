@@ -15,6 +15,7 @@ export async function POST(req: Request) {
         const body = await req.json();
         const { filters, page = 1, pageSize = 20 } = body;
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const where: any = {};
 
         // 1. Basic Text Filters
@@ -41,6 +42,7 @@ export async function POST(req: Request) {
         // 3. Product Rules (Numeric)
         // filters.productRules = [{ field: 'qtMovelTerm', operator: 'gt', value: 0 }]
         if (Array.isArray(filters.productRules) && filters.productRules.length > 0) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             filters.productRules.forEach((rule: any) => {
                 if (rule.field && rule.operator && rule.value !== undefined) {
                     const numVal = Number(rule.value);

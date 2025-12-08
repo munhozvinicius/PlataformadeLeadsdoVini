@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Upload, Filter, Database, Plus, Search, Loader2, X, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { Upload, Filter, Database, Plus, Search, Loader2, X, ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function IntelligencePage() {
     const [activeTab, setActiveTab] = useState<"base" | "explore">("base");
