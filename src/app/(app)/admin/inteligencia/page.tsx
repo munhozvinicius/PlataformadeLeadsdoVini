@@ -88,125 +88,11 @@ export default function IntelligencePage() {
         setProgress({ current: 0, total: 0 });
 
         try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            let rawRows: any[][] = [];
-
-            // 1. Parse based on file type as RAW ARRAYS
-            if (uploadFile.name.endsWith(".csv")) {
-                const Papa = (await import("papaparse")).default;
-
-                await new Promise<void>((resolve, reject) => {
-                    Papa.parse(uploadFile, {
-                        header: false, // Parse as arrays to find header row manually
-                        skipEmptyLines: true,
-                        encoding: "ISO-8859-1",
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        complete: (results: any) => {
-                            rawRows = results.data;
-                            resolve();
-                        },
-                        error: (err: Error) => reject(err)
-                    });
-                });
+            if (uploadFile.name.toLowerCase().endsWith(".csv")) {
+                await processCsvStreaming(uploadFile);
             } else {
-                // XLSX / XLS
-                const XLSX = await import("xlsx");
-                const buffer = await uploadFile.arrayBuffer();
-                const workbook = XLSX.read(buffer, { type: 'array' });
-                const firstSheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[firstSheetName];
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[];
+                await processExcelLegacy(uploadFile);
             }
-
-            if (rawRows.length === 0) {
-                alert("Arquivo vazio ou nenhum dado encontrado.");
-                return;
-            }
-
-            // 2. Find Header Row (row containing "CNPJ" or "NR_CNPJ")
-            let headerRowIndex = -1;
-            for (let i = 0; i < Math.min(rawRows.length, 20); i++) {
-                const row = rawRows[i];
-                // Check if any cell contains "CNPJ" inside string
-                if (row.some((cell: string) => String(cell).toUpperCase().includes("CNPJ"))) {
-                    headerRowIndex = i;
-                    break;
-                }
-            }
-
-            if (headerRowIndex === -1) {
-                alert("Não foi possível encontrar a coluna 'CNPJ' ou 'NR_CNPJ' nas primeiras 20 linhas. Verifique se o arquivo está correto ou se há muitas linhas de cabeçalho antes da tabela.");
-                return;
-            }
-
-            // 3. Convert to Objects using found header
-            const headers = rawRows[headerRowIndex].map((h: string) => String(h).trim());
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const jsonData: any[] = [];
-
-            for (let i = headerRowIndex + 1; i < rawRows.length; i++) {
-                const row = rawRows[i];
-                if (!row || row.length === 0) continue;
-
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const obj: any = {};
-                headers.forEach((header: string, index: number) => {
-                    // Only map if header is not empty
-                    if (header) {
-                        obj[header] = row[index];
-                    }
-                });
-                jsonData.push(obj);
-            }
-
-            // 2. Upload in Chunks
-            const batchId = new Date().toISOString();
-            const CHUNK_SIZE = 500;
-
-
-            const aggregatedStats = {
-                created: 0,
-                updated: 0,
-                historyCreated: 0,
-                errors: 0
-            };
-
-            for (let i = 0; i < jsonData.length; i += CHUNK_SIZE) {
-                const chunk = jsonData.slice(i, i + CHUNK_SIZE);
-                setProgress({ current: i + chunk.length, total: jsonData.length });
-
-                const res = await fetch("/api/intelligence/upload", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        records: chunk,
-                        batchId
-                    })
-                });
-
-                if (!res.ok) {
-                    const text = await res.text();
-                    console.error(`Error processing chunk ${i / CHUNK_SIZE}:`, text);
-                    aggregatedStats.errors += chunk.length;
-                    continue;
-                }
-
-                const data: UploadResponse = await res.json();
-                if (data.stats) {
-                    aggregatedStats.created += data.stats.created;
-                    aggregatedStats.updated += data.stats.updated;
-                    aggregatedStats.historyCreated += data.stats.historyCreated;
-                    aggregatedStats.errors += data.stats.errors;
-                }
-            }
-
-            setUploadStats({
-                success: true,
-                message: `Upload finalizado. Processados ${jsonData.length} registros.`,
-                stats: aggregatedStats
-            });
-
         } catch (err) {
             console.error(err);
             const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
@@ -215,6 +101,188 @@ export default function IntelligencePage() {
             setIsLoading(false);
             setProgress({ current: 0, total: 0 });
         }
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const processExcelLegacy = async (file: File) => {
+        const XLSX = await import("xlsx");
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[];
+
+        if (rawRows.length === 0) throw new Error("Arquivo vazio");
+
+        // Find Header
+        let headerRowIndex = -1;
+        for (let i = 0; i < Math.min(rawRows.length, 20); i++) {
+            const row = rawRows[i];
+            if (row.some((cell: string) => String(cell).toUpperCase().includes("CNPJ"))) {
+                headerRowIndex = i;
+                break;
+            }
+        }
+
+        if (headerRowIndex === -1) throw new Error("Coluna CNPJ não encontrada nas primeiras 20 linhas");
+
+        const headers = rawRows[headerRowIndex].map((h: string) => String(h).trim());
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const jsonData: any[] = [];
+
+        for (let i = headerRowIndex + 1; i < rawRows.length; i++) {
+            const row = rawRows[i];
+            if (!row || row.length === 0) continue;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const obj: any = {};
+            headers.forEach((header: string, index: number) => {
+                if (header) obj[header] = row[index];
+            });
+            jsonData.push(obj);
+        }
+
+        await uploadBatches(jsonData);
+    };
+
+    const processCsvStreaming = async (file: File) => {
+        const Papa = (await import("papaparse")).default;
+
+        let headerMap: string[] | null = null;
+        let batch: any[] = [];
+        const BATCH_SIZE = 1000;
+        let processedRows = 0;
+        const aggregatedStats = { created: 0, updated: 0, historyCreated: 0, errors: 0 };
+        const batchId = new Date().toISOString();
+
+        return new Promise<void>((resolve, reject) => {
+            Papa.parse(file, {
+                header: false,
+                skipEmptyLines: true,
+                encoding: "ISO-8859-1",
+                chunk: async (results, parser) => {
+                    parser.pause(); // Pause to handle async upload
+
+                    const rows = results.data as any[];
+                    let startIndex = 0;
+
+                    // 1. Find Header if not found
+                    if (!headerMap) {
+                        for (let i = 0; i < rows.length; i++) {
+                            const row = rows[i];
+                            if (Array.isArray(row) && row.some((cell: string) => String(cell).toUpperCase().includes("CNPJ"))) {
+                                headerMap = row.map((h: string) => String(h).trim());
+                                startIndex = i + 1;
+                                break;
+                            }
+                        }
+                    }
+
+                    // 2. Process Rows
+                    if (headerMap) {
+                        for (let i = startIndex; i < rows.length; i++) {
+                            const row = rows[i] as any[];
+                            if (!row || row.length === 0) continue;
+
+                            const obj: any = {};
+                            headerMap.forEach((header, idx) => {
+                                if (header) obj[header] = row[idx];
+                            });
+                            batch.push(obj);
+                        }
+                    }
+
+                    // 3. Upload Batch if full
+                    if (batch.length >= BATCH_SIZE) {
+                        try {
+                            const stats = await sendBatch(batch, batchId);
+                            // Merge stats
+                            aggregatedStats.created += stats.created;
+                            aggregatedStats.updated += stats.updated;
+                            aggregatedStats.historyCreated += stats.historyCreated;
+                            aggregatedStats.errors += stats.errors;
+
+                            processedRows += batch.length;
+                            setProgress({ current: processedRows, total: 0 }); // Unknown total for stream, show count
+
+                            batch = []; // Clear batch
+
+                        } catch (err) {
+                            console.error("Batch upload failed", err);
+                            // Optionally capture global error or count as errors
+                            aggregatedStats.errors += batch.length;
+                            batch = [];
+                        }
+                    }
+
+                    parser.resume();
+                },
+                complete: async () => {
+                    // Send remaining
+                    if (batch.length > 0) {
+                        try {
+                            const stats = await sendBatch(batch, batchId);
+                            aggregatedStats.created += stats.created;
+                            aggregatedStats.updated += stats.updated;
+                            aggregatedStats.historyCreated += stats.historyCreated;
+                            aggregatedStats.errors += stats.errors;
+                            processedRows += batch.length;
+                        } catch (err) {
+                            console.error("Final batch error", err);
+                            aggregatedStats.errors += batch.length;
+                        }
+                    }
+
+                    setUploadStats({
+                        success: true,
+                        message: `Upload finalizado. Total processado: ${processedRows}`,
+                        stats: aggregatedStats
+                    });
+                    resolve();
+                },
+                error: (err: Error) => reject(err)
+            });
+        });
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const uploadBatches = async (allData: any[]) => {
+        const batchId = new Date().toISOString();
+        const BATCH_SIZE = 1000;
+        const aggregatedStats = { created: 0, updated: 0, historyCreated: 0, errors: 0 };
+
+        for (let i = 0; i < allData.length; i += BATCH_SIZE) {
+            const chunk = allData.slice(i, i + BATCH_SIZE);
+            setProgress({ current: i + chunk.length, total: allData.length });
+            try {
+                const stats = await sendBatch(chunk, batchId);
+                aggregatedStats.created += stats.created;
+                aggregatedStats.updated += stats.updated;
+                aggregatedStats.historyCreated += stats.historyCreated;
+                aggregatedStats.errors += stats.errors;
+            } catch (err) {
+                console.error("Batch error", err);
+                aggregatedStats.errors += chunk.length;
+            }
+        }
+
+        setUploadStats({
+            success: true,
+            message: `Upload finalizado. Processados ${allData.length} registros.`,
+            stats: aggregatedStats
+        });
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sendBatch = async (records: any[], batchId: string) => {
+        const res = await fetch("/api/intelligence/upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ records, batchId })
+        });
+        if (!res.ok) throw new Error("Failed to upload batch");
+        const data = await res.json();
+        return data.stats || { created: 0, updated: 0, historyCreated: 0, errors: records.length };
     };
 
     const handleGenerateCampaign = async () => {
