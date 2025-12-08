@@ -66,10 +66,35 @@ export default function IntelligencePage() {
     const handleUpload = async () => {
         if (!uploadFile) return;
         setIsLoading(true);
-        const formData = new FormData();
-        formData.append("file", uploadFile);
 
         try {
+            // 1. Client-side Parsing & Compression
+            // Dynamic import to avoid heavy initial load if possible, or just standard import if simple
+            const XLSX = await import("xlsx");
+            const { gzipSync } = await import("fflate");
+
+            const buffer = await uploadFile.arrayBuffer();
+            const workbook = XLSX.read(buffer, { type: 'array' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+            if (jsonData.length === 0) {
+                alert("Arquivo vazio ou inválido.");
+                return;
+            }
+
+            // Compress
+            const jsonString = JSON.stringify(jsonData);
+            const compressed = gzipSync(new TextEncoder().encode(jsonString));
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const compressedBlob = new Blob([compressed as any]);
+
+            // 2. Upload
+            const formData = new FormData();
+            formData.append("file", compressedBlob, "data.json.gz");
+            formData.append("isCompressed", "true");
+
             const res = await fetch("/api/intelligence/upload", {
                 method: "POST",
                 body: formData
@@ -80,7 +105,6 @@ export default function IntelligencePage() {
             try {
                 data = JSON.parse(text);
             } catch {
-                // If it's not JSON, it's likely an HTML error or plain text (e.g. 413 Payload Too Large)
                 throw new Error(`Erro do servidor (${res.status}): ${text.substring(0, 100)}...`);
             }
 

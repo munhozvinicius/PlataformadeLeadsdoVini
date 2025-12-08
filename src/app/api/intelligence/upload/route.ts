@@ -33,23 +33,39 @@ export async function POST(req: Request) {
 
         const formData = await req.formData();
         const file = formData.get("file") as File;
+        const isCompressed = formData.get("isCompressed") === "true";
 
         if (!file) {
             return NextResponse.json({ message: "File is required" }, { status: 400 });
         }
 
         const buffer = await file.arrayBuffer();
-        const workbook = XLSX.read(buffer, { type: "buffer" });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const jsonData = XLSX.utils.sheet_to_json(worksheet) as Record<string, any>[];
+        let jsonData: Record<string, any>[] = [];
+
+        if (isCompressed) {
+            try {
+                const { gunzipSync } = await import("fflate");
+                const decompressed = gunzipSync(new Uint8Array(buffer));
+                const jsonString = new TextDecoder().decode(decompressed);
+                jsonData = JSON.parse(jsonString);
+            } catch (err) {
+                console.error("Decompression error:", err);
+                return NextResponse.json({ message: "Failed to decompress/parse file" }, { status: 400 });
+            }
+        } else {
+            // Legacy / Direct Excel Upload
+            const workbook = XLSX.read(buffer, { type: "buffer" });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            jsonData = XLSX.utils.sheet_to_json(worksheet);
+        }
 
         console.log("Upload Debug - Rows found:", jsonData.length);
         if (jsonData.length > 0) {
             console.log("Upload Debug - First Row Keys:", Object.keys(jsonData[0]));
         } else {
-            console.log("Upload Debug - No rows found in sheet:", firstSheetName);
+            console.log("Upload Debug - No rows found");
         }
 
         const batchId = new Date().toISOString(); // Simple batch ID for now
@@ -71,7 +87,7 @@ export async function POST(req: Request) {
                 }, { status: 400 });
             }
 
-            // Remap the found key to "NR_CNPJ" for the loop below if needed, 
+            // Remap the found key to "NR_CNPJ" for the loop below if needed,
             // but easier to just use the found key in the loop.
         }
 
