@@ -62,7 +62,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Campanha ausente" }, { status: 400 });
     }
     // Check if exists
-    const existing = await prisma.campanha.findFirst({ where: { nome: normalizedCampaignName } });
+    const existing = await prisma.campanha.findFirst({
+      where: {
+        nome: { equals: normalizedCampaignName, mode: "insensitive" }
+      }
+    });
     if (existing) {
       campanhaIdToUse = existing.id;
     } else {

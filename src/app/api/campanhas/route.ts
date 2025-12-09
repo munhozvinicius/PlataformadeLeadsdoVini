@@ -39,10 +39,23 @@ export async function POST(req: Request) {
         if (gsId) campaignData.gsId = gsId;
         if (ownerId) campaignData.ownerId = ownerId;
 
-        // Create Campaign First
-        const campanha = await prisma.campanha.create({
-            data: campaignData,
+        // Check if Campaign exists (Case Insensitive)
+        const normalizedName = nome.trim();
+        let campanha = await prisma.campanha.findFirst({
+            where: {
+                nome: { equals: normalizedName, mode: "insensitive" }
+            }
         });
+
+        if (!campanha) {
+            campanha = await prisma.campanha.create({
+                data: campaignData,
+            });
+        } else {
+            // If exists, strictly speaking we might want to update description or owners if provided?
+            // For now, let's just reuse it to prevent duplicates which is the main user pain point.
+            // keeping original owners/description to avoid overwriting with potentially empty fields.
+        }
 
         let importedCount = 0;
 
@@ -68,18 +81,17 @@ export async function POST(req: Request) {
             });
 
             // Prepare Leads for Bulk Insert
-            // Note: Mapping logic assumes headers match standard lead fields or loosely maps them
             const leadsToCreate = jsonData.map((row) => ({
                 campanhaId: campanha.id,
                 importBatchId: batch.id,
                 nomeFantasia: typeof row["Nome Fantasia"] === 'string' ? row["Nome Fantasia"] : (String(row["Nome"] || row["Cliente"] || "")),
                 razaoSocial: typeof row["Razão Social"] === 'string' ? row["Razão Social"] : (String(row["Empresa"] || "")),
                 cnpj: row["CNPJ"] ? String(row["CNPJ"]) : undefined,
-                telefone: row["Telefone"] ? String(row["Telefone"]) : undefined,
+                telefone: (row["Telefone"] || row["Telefone 1"] || row["Celular"]) ? String(row["Telefone"] || row["Telefone 1"] || row["Celular"]) : undefined,
                 email: (row["Email"] || row["E-mail"]) ? String(row["Email"] || row["E-mail"]) : undefined,
                 cidade: row["Cidade"] ? String(row["Cidade"]) : undefined,
                 estado: (row["Estado"] || row["UF"]) ? String(row["Estado"] || row["UF"]) : undefined,
-                status: "NOVO" as const, // Use const assertion for Enum
+                status: "NOVO" as const,
                 externalData: row as Prisma.InputJsonValue,
             }));
 
@@ -93,8 +105,8 @@ export async function POST(req: Request) {
             await prisma.campanha.update({
                 where: { id: campanha.id },
                 data: {
-                    totalLeads: importedCount,
-                    remainingLeads: importedCount,
+                    totalLeads: { increment: importedCount },
+                    remainingLeads: { increment: importedCount },
                 },
             });
         }
