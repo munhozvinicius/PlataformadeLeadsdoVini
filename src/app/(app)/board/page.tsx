@@ -206,11 +206,11 @@ function ConsultantBoard({
       ) : null}
 
       {/* Kanban Board */}
-      <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar min-h-[calc(100vh-280px)]">
+      <div className="grid grid-cols-5 gap-4 pb-4 min-h-[calc(100vh-280px)] w-full">
         {LEAD_STATUS.map((stage) => (
           <div
             key={stage.id}
-            className="flex-shrink-0 w-80 flex flex-col bg-pic-dark/50 rounded-sm border-t-2 border-transparent hover:border-neon-pink/30 transition-colors"
+            className="flex flex-col bg-pic-dark/50 rounded-sm border-t-2 border-transparent hover:border-neon-pink/30 transition-colors min-w-0"
           >
             {/* Column Header */}
             <div className="p-3 mb-2 flex items-center justify-between border-b border-pic-zinc bg-pic-card/30">
