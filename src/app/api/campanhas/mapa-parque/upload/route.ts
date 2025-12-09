@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Role } from "@prisma/client";
+import { Role, Prisma } from "@prisma/client";
 import * as XLSX from "xlsx";
 
 export const dynamic = "force-dynamic";
@@ -66,6 +66,7 @@ export async function POST(req: Request) {
 
         if (campanha) {
             // Update totals & connect offices if new ones provided
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const dataToUpdate: any = {
                 totalLeads: { increment: jsonData.length },
                 remainingLeads: { increment: jsonData.length },
