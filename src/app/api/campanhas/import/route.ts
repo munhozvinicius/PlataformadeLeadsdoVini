@@ -287,6 +287,18 @@ export async function POST(req: Request) {
     },
   });
 
+  // Update Campaign Counters
+  await prisma.campanha.update({
+    where: { id: campanhaIdToUse! },
+    data: {
+      totalLeads: { increment: created },
+      remainingLeads: { increment: created - attributedLeads }, // If distributed immediately, remaining doesn't increase by full amount? 
+      // User logic: "Remaining" usually means "Stock" (not distributed).
+      // If we assigned 'attributedLeads', then they are NOT in stock.
+      assignedLeads: { increment: attributedLeads },
+    }
+  });
+
   return NextResponse.json(
     {
       campaignId: campanhaIdToUse,
