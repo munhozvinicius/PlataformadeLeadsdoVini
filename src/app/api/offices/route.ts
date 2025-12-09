@@ -19,7 +19,7 @@ export async function GET() {
   const { role, id: userId } = session.user;
 
   // Defaults: Master/GS sees all
-  let whereClause: any = {};
+  let whereClause: Record<string, unknown> = {};
 
   if (role === Role.GERENTE_NEGOCIOS) {
     // GN sees offices they manage via ManagerOffice or direct businessManagerId
