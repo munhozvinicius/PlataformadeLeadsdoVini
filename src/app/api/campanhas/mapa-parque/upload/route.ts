@@ -7,12 +7,12 @@ import * as XLSX from "xlsx";
 
 export const dynamic = "force-dynamic";
 
-const sanitize = (value: any): string => {
+const sanitize = (value: unknown): string => {
     if (!value) return "";
     return String(value).trim();
 };
 
-const parseIntSafe = (value: any): number => {
+const parseIntSafe = (value: unknown): number => {
     if (!value) return 0;
     const clean = String(value).replace(/\D/g, "");
     return parseInt(clean, 10) || 0;
