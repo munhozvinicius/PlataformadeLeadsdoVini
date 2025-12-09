@@ -230,10 +230,10 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
             ? { officeRecord: { connect: { id: officeRecordId } } }
             : { officeRecord: { disconnect: true } }
           : finalRole !== Role.CONSULTOR
-          ? {}
-          : targetOfficeRecordId
-          ? { officeRecord: { connect: { id: targetOfficeRecordId } } }
-          : {}),
+            ? {}
+            : targetOfficeRecordId
+              ? { officeRecord: { connect: { id: targetOfficeRecordId } } }
+              : {}),
       },
       select: USER_SELECT,
     });
@@ -250,5 +250,94 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
       return NextResponse.json({ message: "Email já cadastrado" }, { status: 409 });
     }
     return NextResponse.json({ message: "Não foi possível atualizar o usuário" }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request, { params }: { params: { id?: string } }) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
+  const sessionRole = session.user.role;
+  if (!sessionRole) {
+    return NextResponse.json({ message: "Sessão inválida" }, { status: 401 });
+  }
+
+  if (!canManageUsers(sessionRole)) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
+  const targetId = params.id;
+  if (!targetId) {
+    return NextResponse.json({ message: "User id is required" }, { status: 400 });
+  }
+
+  if (targetId === session.user.id) {
+    return NextResponse.json({ message: "Você não pode se excluir" }, { status: 400 });
+  }
+
+  const targetUser = await prisma.user.findUnique({
+    where: { id: targetId },
+    include: {
+      owner: { include: { offices: { select: { office: true } } } },
+      offices: { select: { office: true } },
+    },
+  });
+  if (!targetUser) {
+    return NextResponse.json({ message: "Usuário não encontrado" }, { status: 404 });
+  }
+
+  const sessionUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    include: { offices: { select: { office: true } } },
+  });
+  if (!sessionUser) {
+    return NextResponse.json({ message: "Sessão inválida" }, { status: 401 });
+  }
+
+  if (!canAccessTarget(sessionRole, sessionUser.id, extractOfficeCodes(sessionUser.offices), targetUser)) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
+  }
+
+  // Hierarchical checks
+  if (targetUser.role === Role.MASTER && sessionRole !== Role.MASTER) {
+    return NextResponse.json({ message: "Apenas Master pode excluir Master" }, { status: 403 });
+  }
+  if (targetUser.role === Role.GERENTE_SENIOR && sessionRole !== Role.MASTER && sessionRole !== Role.GERENTE_SENIOR) {
+    return NextResponse.json({ message: "Você não pode excluir um Gerente Sênior" }, { status: 403 });
+  }
+  // GN can only delete within office scope (handled by canAccessTarget) and lower roles?
+  // canAccessTarget handles office overlap. But we should ensure GN doesn't delete another GN unless valid?
+  // Logic: canAccessTarget returns true if office overlaps.
+  // We want GN to assume full control over their office, including deleting users.
+  // But usually create/delete logic implies stricter hierarchy.
+  // Safe default: cannot delete someone with Same or Higher role?
+  // Master > GS > GN > Owner > Consultant.
+  const hierarchy = {
+    [Role.MASTER]: 4,
+    [Role.GERENTE_SENIOR]: 3,
+    [Role.GERENTE_NEGOCIOS]: 2,
+    [Role.PROPRIETARIO]: 1,
+    [Role.CONSULTOR]: 0
+  };
+
+  if (hierarchy[sessionRole] < hierarchy[targetUser.role]) {
+    return NextResponse.json({ message: "Você não pode excluir um usuário com cargo superior" }, { status: 403 });
+  }
+  // Prevent deleting same rank (except Master/GS who are global admins?)
+  // Actually, usually you can't delete your peer.
+  if (sessionRole !== Role.MASTER && hierarchy[sessionRole] === hierarchy[targetUser.role]) {
+    return NextResponse.json({ message: "Você não pode excluir um usuário do mesmo nível" }, { status: 403 });
+  }
+
+  try {
+    await prisma.user.delete({
+      where: { id: targetId },
+    });
+    return NextResponse.json({ message: "Usuário excluído com sucesso" });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ message: "Erro ao excluir usuário" }, { status: 500 });
   }
 }

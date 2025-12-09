@@ -59,9 +59,12 @@ type UserDrawerProps = {
   owners: OwnerOption[];
   isSubmitting?: boolean;
   onClose: () => void;
+
   onSubmit: (payload: UserDrawerPayload) => Promise<void>;
   onResetPassword?: () => Promise<string | void>;
+  onDelete?: () => Promise<void>;
   currentUserRole?: Role;
+
   currentUserId?: string;
   currentUserOfficeRecordId?: string | null;
 };
@@ -84,9 +87,12 @@ export default function UserDrawer({
   owners,
   isSubmitting,
   onClose,
+
   onSubmit,
   onResetPassword,
+  onDelete,
   currentUserRole,
+
   currentUserId,
   currentUserOfficeRecordId,
 }: UserDrawerProps) {
@@ -244,10 +250,19 @@ export default function UserDrawer({
       }
     } catch (resetError) {
       setError((resetError as Error)?.message ?? "Erro ao resetar a senha.");
+
     } finally {
       setIsResetting(false);
     }
   };
+
+  const handleDelete = async () => {
+    if (!onDelete) return;
+    if (confirm(`Tem certeza que deseja excluir o usuário ${name}? Esta ação não pode ser desfeita.`)) {
+      await onDelete();
+    }
+  };
+
 
   const handleToggleBlock = () => {
     setActive(!active);
@@ -465,9 +480,30 @@ export default function UserDrawer({
                     </div>
                   )}
                 </div>
+
+              )}
+
+              {/* Delete User */}
+              {onDelete && (
+                <div className="p-3 rounded-lg border border-red-900/50 bg-red-950/20">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-bold text-red-500">Excluir Usuário</p>
+                      <p className="text-[10px] text-red-400/60 uppercase tracking-wider">Ação irreversível</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleDelete}
+                      className="px-3 py-1.5 text-xs font-bold rounded uppercase tracking-wider border border-red-900 text-red-500 hover:bg-red-900/20"
+                    >
+                      Excluir
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           )}
+
         </div>
       </div>
     </div>

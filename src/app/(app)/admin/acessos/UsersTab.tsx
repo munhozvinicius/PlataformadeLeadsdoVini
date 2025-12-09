@@ -78,7 +78,7 @@ export function UsersTab() {
 
     const loadOffices = useCallback(async () => {
         try {
-            const res = await fetch("/api/offices", { cache: "no-store" });
+            const res = await fetch("/api/admin/offices", { cache: "no-store" });
             if (!res.ok) {
                 throw new Error("Não foi possível carregar os escritórios.");
             }
@@ -173,6 +173,29 @@ export function UsersTab() {
         }
         return newPassword;
     }, [selectedUser]);
+
+    const handleDeleteUser = useCallback(async () => {
+        if (!selectedUser) return;
+        setDrawerSubmitting(true);
+        try {
+            const res = await fetch(`/api/admin/users/${selectedUser.id}`, {
+                method: "DELETE",
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body?.message ?? "Não foi possível excluir o usuário.");
+            }
+            // Success
+            await loadUsers();
+            closeDrawer();
+        } catch (err) {
+            console.error(err);
+            alert((err as Error).message);
+        } finally {
+            setDrawerSubmitting(false);
+        }
+    }, [selectedUser, loadUsers]);
+
 
     const currentSessionUser = users.find((user) => user.id === session?.user.id);
     const canViewUsers = canManageUsers(session?.user.role);
@@ -324,10 +347,22 @@ export function UsersTab() {
                 isSubmitting={drawerSubmitting}
                 onClose={closeDrawer}
                 onSubmit={handleDrawerSubmit}
+
                 onResetPassword={handleResetPassword}
+                onDelete={
+                    // Simple client-side check to show/hide delete button
+                    selectedUser && session?.user.id !== selectedUser.id &&
+                        (session?.user.role === Role.MASTER ||
+                            (session?.user.role === Role.GERENTE_SENIOR && selectedUser.role !== Role.MASTER && selectedUser.role !== Role.GERENTE_SENIOR) ||
+                            (session?.user.role === Role.GERENTE_NEGOCIOS && selectedUser.role !== Role.MASTER && selectedUser.role !== Role.GERENTE_SENIOR && selectedUser.role !== Role.GERENTE_NEGOCIOS) ||
+                            (session?.user.role === Role.PROPRIETARIO && selectedUser.role === Role.CONSULTOR)
+                        )
+                        ? handleDeleteUser : undefined
+                }
                 currentUserRole={session?.user.role}
                 currentUserId={session?.user.id}
                 currentUserOfficeRecordId={currentSessionUser?.officeRecord?.id ?? null}
+
             />
         </div>
     );

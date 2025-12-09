@@ -104,18 +104,22 @@ export function OfficesTab() {
     const [businessManagers, setBusinessManagers] = useState<UserOption[]>([]);
     const [owners, setOwners] = useState<UserOption[]>([]);
 
+
     // Removed redirect since this is now a tab component
     // useEffect(() => {
-    //   if (status === "authenticated" && session?.user?.role !== Role.MASTER) {
+    //   if (status === "authenticated" && !canManageOffices(session?.user?.role)) {
     //     router.replace("/board");
     //   }
     // }, [status, session, router]);
+
+    const canManage = session?.user?.role === Role.MASTER || session?.user?.role === Role.GERENTE_SENIOR || session?.user?.role === Role.GERENTE_NEGOCIOS;
+
 
     const fetchOffices = useCallback(async () => {
         setLoading(true);
         setError("");
         try {
-            const res = await fetch("/api/offices", { cache: "no-store" });
+            const res = await fetch("/api/admin/offices", { cache: "no-store" });
             if (!res.ok) {
                 throw new Error("Não foi possível carregar os escritórios.");
             }
@@ -130,10 +134,10 @@ export function OfficesTab() {
     }, []);
 
     useEffect(() => {
-        if (status === "authenticated" && session?.user?.role === Role.MASTER) {
+        if (status === "authenticated" && canManage) {
             fetchOffices();
         }
-    }, [status, session, fetchOffices]);
+    }, [status, session, canManage, fetchOffices]);
 
     const fetchHierarchyUsers = useCallback(async () => {
         try {
@@ -169,10 +173,10 @@ export function OfficesTab() {
     }, []);
 
     useEffect(() => {
-        if (status === "authenticated" && session?.user?.role === Role.MASTER) {
+        if (status === "authenticated" && canManage) {
             fetchHierarchyUsers();
         }
-    }, [status, session, fetchHierarchyUsers]);
+    }, [status, session, canManage, fetchHierarchyUsers]);
 
     const openCreateModal = () => {
         setModalMode("create");
@@ -225,7 +229,7 @@ export function OfficesTab() {
                 ownerId: form.ownerId || null,
             };
             const endpoint =
-                modalMode === "create" ? "/api/offices" : `/api/offices/${encodeURIComponent(editingId ?? "")}`;
+                modalMode === "create" ? "/api/admin/offices" : `/api/admin/offices/${encodeURIComponent(editingId ?? "")}`;
             const method = modalMode === "create" ? "POST" : "PATCH";
             const res = await fetch(endpoint, {
                 method,
@@ -254,7 +258,7 @@ export function OfficesTab() {
         );
         if (!confirmed) return;
         try {
-            const res = await fetch(`/api/offices/${encodeURIComponent(editingId)}`, {
+            const res = await fetch(`/api/admin/offices/${encodeURIComponent(editingId)}`, {
                 method: "DELETE",
             });
             if (!res.ok) {
@@ -277,8 +281,8 @@ export function OfficesTab() {
         setDetailLoading(true);
         try {
             const [officeRes, usersRes] = await Promise.all([
-                fetch(`/api/offices/${office.id}`, { cache: "no-store" }),
-                fetch(`/api/offices/${office.id}/users`, { cache: "no-store" }),
+                fetch(`/api/admin/offices/${office.id}`, { cache: "no-store" }),
+                fetch(`/api/admin/offices/${office.id}/users`, { cache: "no-store" }), // Note: Ensure this endpoint exists or use logic to filter users
             ]);
             if (officeRes.ok) {
                 const updated: OfficeRecordDto = await officeRes.json();
@@ -312,16 +316,16 @@ export function OfficesTab() {
     );
 
     if (status === "loading") return null;
-    if (session?.user?.role !== Role.MASTER) return null;
+    if (!canManage) return null;
 
     return (
         <div className="max-w-6xl mx-auto space-y-6">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Master</p>
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Gestão</p>
                     <h1 className="text-3xl font-semibold text-slate-900">Escritórios</h1>
                     <p className="text-sm text-slate-500">
-                        Gerencie escritórios (PV, Safe TI, JLC Tech etc.) e veja a hierarquia de proprietários e consultores vinculados.
+                        Gerencie os escritórios e sua hierarquia de gerentes e proprietários.
                     </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
