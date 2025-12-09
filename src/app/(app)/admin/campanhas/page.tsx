@@ -43,12 +43,20 @@ export default function CampanhasPage() {
           <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Master/Owner</p>
           <h1 className="text-2xl font-semibold text-slate-900">Campanhas</h1>
         </div>
-        <button
-          onClick={load}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-100"
-        >
-          Atualizar
-        </button>
+        <div className="flex gap-2">
+          <Link
+            href="/admin/campanhas/nova-mapa-parque"
+            className="rounded-lg border border-neon-pink bg-neon-pink/10 text-neon-pink px-3 py-2 text-sm font-bold hover:bg-neon-pink hover:text-white transition-all uppercase tracking-wide"
+          >
+            + Mapa Parque
+          </Link>
+          <button
+            onClick={load}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-100"
+          >
+            Atualizar
+          </button>
+        </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
         {campaigns.map((c) => (

@@ -12,11 +12,12 @@ type LeadDetail = LeadCardProps["lead"] & {
   origem?: string | null;
   site?: string | null;
   contatoPrincipal?: { nome?: string; cargo?: string; telefone?: string; email?: string } | null;
-  externalData?: Record<string, unknown> | null;
+  externaData?: Record<string, unknown> | null;
   cnpj?: string | null;
   razaoSocial?: string | null;
   nomeFantasia?: string | null;
   vlFatPresumido?: string | null;
+  numero?: string | null;
 };
 
 import { LeadStatusId, LEAD_STATUS } from "@/constants/leadStatus";
@@ -367,94 +368,266 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
 
                 {/* Left Column: Basic Info & Contacts */}
                 <div className="space-y-6">
-                  <div className="border-l-4 border-neon-green pl-4">
-                    <h3 className="text-xl font-bold text-white uppercase tracking-wider mb-4">Dados da Empresa</h3>
-                    <div className="space-y-4">
-                      <div className="space-y-1">
-                        <label className="text-[10px] uppercase text-slate-500 tracking-widest">Razão Social</label>
-                        <div className="bg-black border border-slate-800 p-3 text-white font-mono text-sm">
-                          {lead.razaoSocial ?? "-"}
+                  {/* MAPA PARQUE LAYOUT CHECK */}
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  {(lead.externalData as any)?.mapaParque ? (
+                    (() => {
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      const mp = (lead.externalData as any).mapaParque;
+                      return (
+                        <div className="space-y-6 animate-in slide-in-from-left-2">
+                          {/* 1. Header: CNPJ & Nome */}
+                          <div className="border-l-4 border-neon-pink pl-4 bg-slate-900/50 p-4">
+                            <h3 className="text-xl font-bold text-white uppercase tracking-wider mb-2">Dados do Cliente</h3>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <label className="text-[10px] uppercase text-slate-500 tracking-widest">CNPJ</label>
+                                <p className="text-white font-mono text-sm font-bold">{lead.cnpj}</p>
+                              </div>
+                              <div>
+                                <label className="text-[10px] uppercase text-slate-500 tracking-widest">Nome</label>
+                                <p className="text-white font-mono text-sm">{lead.razaoSocial}</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 2. Endereço */}
+                          <div className="border-l-4 border-pic-zinc pl-4 bg-slate-900/50 p-4">
+                            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Localização</h3>
+                            <p className="text-white text-sm">
+                              {mp.logradouro ?? lead.numero}, {mp.numero} <br />
+                              {mp.cidade} - CEP: {mp.cep}
+                            </p>
+                          </div>
+
+                          {/* 3. Vertical & Flags */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-pic-card p-3 border border-slate-700">
+                              <label className="text-[10px] uppercase text-slate-500 tracking-widest">Vertical</label>
+                              <p className="text-neon-blue font-bold uppercase">{mp.vertical ?? lead.vertical ?? "-"}</p>
+                            </div>
+                            <div className="bg-pic-card p-3 border border-slate-700">
+                              <label className="text-[10px] uppercase text-slate-500 tracking-widest">Filiais SFA</label>
+                              <p className="text-white font-mono">{mp.qtdSfaFiliais ?? 0}</p>
+                            </div>
+                          </div>
+
+                          {/* 4. Base Vivo (Detailed Products) */}
+                          <div className="border-l-4 border-neon-green pl-4 bg-slate-900/50 p-4">
+                            <h3 className="text-sm font-bold text-neon-green uppercase tracking-wider mb-4 border-b border-dashed border-slate-700 pb-2">
+                              Base Vivo (Atual)
+                            </h3>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-y-4 gap-x-2">
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-slate-500">Móvel Term</p>
+                                <p className="text-white font-mono font-bold">{mp.qtMovelTerm}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-slate-500">Móvel Pen</p>
+                                <p className="text-white font-mono font-bold">{mp.qtMovelPen}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-slate-500">M2M</p>
+                                <p className="text-white font-mono font-bold">{mp.qtMovelM2m}</p>
+                              </div>
+
+                              <div className="col-span-full h-px bg-slate-800 my-1"></div>
+
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-slate-500">Fibra</p>
+                                <p className="text-white font-mono font-bold">{mp.qtBasicaFibra}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-slate-500">Metálico</p>
+                                <p className="text-white font-mono font-bold">{mp.qtBasicaMetalico}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-slate-500">Banda Larga</p>
+                                <p className="text-white font-mono font-bold">{mp.qtBasicaBl}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-slate-500">BL FTTH</p>
+                                <p className="text-white font-mono font-bold">{mp.qtBlFtth}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-slate-500">BL FTTC</p>
+                                <p className="text-white font-mono font-bold">{mp.qtBlFttc}</p>
+                              </div>
+
+                              <div className="col-span-full h-px bg-slate-800 my-1"></div>
+
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-slate-500">Voz/Linhas</p>
+                                <p className="text-white font-mono font-bold">{mp.qtBasicaLinhas}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-slate-500">TV</p>
+                                <p className="text-white font-mono font-bold">{mp.qtBasicaTv}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-slate-500">Outros</p>
+                                <p className="text-white font-mono font-bold">{mp.qtBasicaOutros}</p>
+                              </div>
+
+                              <div className="col-span-full h-px bg-slate-800 my-1"></div>
+
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-slate-500">Dados Avanc.</p>
+                                <p className="text-white font-mono font-bold">{mp.qtAvancadaDados}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-slate-500">Voz Avanc.</p>
+                                <p className="text-white font-mono font-bold">{mp.avancadaVoz}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-slate-500">Vivo Tech</p>
+                                <p className="text-white font-mono font-bold">{mp.qtVivoTech}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-slate-500">VVN</p>
+                                <p className="text-white font-mono font-bold">{mp.qtVvn}</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 6. VTech Flags */}
+                          <div className="grid grid-cols-3 gap-2 text-center">
+                            <div className={`p-2 border ${mp.flgTrocaVtech === 'SIM' ? 'border-red-500 bg-red-500/10' : 'border-slate-800'}`}>
+                              <p className="text-[8px] uppercase text-slate-500">Troca VTech</p>
+                              <p className="text-xs font-bold text-white">{mp.flgTrocaVtech ?? 'NÃO'}</p>
+                            </div>
+                            <div className={`p-2 border ${mp.flgPqDigital === 'SIM' ? 'border-neon-blue bg-neon-blue/10' : 'border-slate-800'}`}>
+                              <p className="text-[8px] uppercase text-slate-500">PQ Digital</p>
+                              <p className="text-xs font-bold text-white">{mp.flgPqDigital ?? 'NÃO'}</p>
+                            </div>
+                            <div className="p-2 border border-slate-800">
+                              <p className="text-[8px] uppercase text-slate-500">Fim VTech</p>
+                              <p className="text-xs font-bold text-white">{mp.dataFimVtech ?? '-'}</p>
+                            </div>
+                          </div>
+
+                          {/* 7. Contatos */}
+                          <div className="border-l-4 border-neon-blue pl-4">
+                            <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-4">Contatos Mapa Parque</h3>
+
+                            {/* Principal */}
+                            {(mp.nmContatoSfa || mp.emailContatoSfa || mp.celularContatoSfa) && (
+                              <div className="mb-4 bg-pic-card p-3 border border-slate-700">
+                                <p className="text-xs font-bold text-white mb-1">{mp.nmContatoSfa || "Contato Principal"}</p>
+                                <p className="text-xs text-neon-blue font-mono">{mp.celularContatoSfa}</p>
+                                <p className="text-[10px] text-slate-500">{mp.emailContatoSfa}</p>
+                              </div>
+                            )}
+
+                            {/* Phones List */}
+                            <div className="space-y-2">
+                              <label className="text-[10px] uppercase text-slate-500 tracking-widest block">Telefones Adicionais</label>
+                              {[mp.tlfn1, mp.tlfn2, mp.tlfn3, mp.tlfn4, mp.tlfn5, mp.telComercialSiebel, mp.telCelularSiebel, mp.telResidencialSiebel].filter(Boolean).map((tel, idx) => (
+                                <PhoneItem
+                                  key={idx}
+                                  phone={{ rotulo: "Tel Mapa Parque", valor: tel, feedback: null }}
+                                  onFeedback={handlePhoneFeedback}
+                                />
+                              ))}
+                            </div>
+                          </div>
+
                         </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <label className="text-[10px] uppercase text-slate-500 tracking-widest">Documento</label>
-                          <div className="bg-black border border-slate-800 p-3 text-white font-mono text-sm">
-                            {lead.cnpj ?? "-"}
+                      );
+                    })()
+                  ) : (
+                    // STANDARD LAYOUT
+                    <>
+                      <div className="border-l-4 border-neon-green pl-4">
+                        <h3 className="text-xl font-bold text-white uppercase tracking-wider mb-4">Dados da Empresa</h3>
+                        <div className="space-y-4">
+                          <div className="space-y-1">
+                            <label className="text-[10px] uppercase text-slate-500 tracking-widest">Razão Social</label>
+                            <div className="bg-black border border-slate-800 p-3 text-white font-mono text-sm">
+                              {lead.razaoSocial ?? "-"}
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <label className="text-[10px] uppercase text-slate-500 tracking-widest">Documento</label>
+                              <div className="bg-black border border-slate-800 p-3 text-white font-mono text-sm">
+                                {lead.cnpj ?? "-"}
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] uppercase text-slate-500 tracking-widest">Cidade / UF</label>
+                              <div className="bg-black border border-slate-800 p-3 text-white font-mono text-sm">
+                                {lead.cidade ?? "-"} / {lead.estado ?? "-"}
+                              </div>
+                            </div>
                           </div>
                         </div>
-                        <div className="space-y-1">
-                          <label className="text-[10px] uppercase text-slate-500 tracking-widest">Cidade / UF</label>
-                          <div className="bg-black border border-slate-800 p-3 text-white font-mono text-sm">
-                            {lead.cidade ?? "-"} / {lead.estado ?? "-"}
-                          </div>
-                        </div>
                       </div>
-                    </div>
-                  </div>
 
-                  <div className="border-l-4 border-neon-blue pl-4">
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-xl font-bold text-white uppercase tracking-wider">Contatos Válidos</h3>
-                      <button
-                        onClick={() => setShowContactForm(!showContactForm)}
-                        className="bg-neon-blue text-black text-[10px] uppercase font-black px-3 py-1 hover:bg-white"
-                      >
-                        + Adicionar
-                      </button>
-                    </div>
-
-                    {showContactForm && (
-                      <div className="bg-slate-900/50 p-4 border border-slate-700 mb-4 animate-in fade-in slide-in-from-top-2">
-                        <div className="grid grid-cols-2 gap-2 mb-2">
-                          <input placeholder="Nome" value={newContact.name} onChange={e => setNewContact({ ...newContact, name: e.target.value })} className="bg-black border border-slate-600 text-white text-xs p-2" />
-                          <input placeholder="Cargo/Papel" value={newContact.role} onChange={e => setNewContact({ ...newContact, role: e.target.value })} className="bg-black border border-slate-600 text-white text-xs p-2" />
-                          <input placeholder="Telefone" value={newContact.phone} onChange={e => setNewContact({ ...newContact, phone: e.target.value })} className="bg-black border border-slate-600 text-white text-xs p-2" />
-                          <input placeholder="Email" value={newContact.email} onChange={e => setNewContact({ ...newContact, email: e.target.value })} className="bg-black border border-slate-600 text-white text-xs p-2" />
-                        </div>
-                        <div className="flex justify-end gap-2">
-                          <button onClick={() => setShowContactForm(false)} className="text-xs text-slate-500 uppercase">Cancelar</button>
-                          <button onClick={saveContact} disabled={savingContact} className="text-xs bg-neon-green text-black px-4 py-1 font-bold uppercase hover:bg-white">
-                            {savingContact ? "Salvando..." : "Salvar Contato"}
+                      <div className="border-l-4 border-neon-blue pl-4">
+                        <div className="flex justify-between items-center mb-4">
+                          <h3 className="text-xl font-bold text-white uppercase tracking-wider">Contatos Válidos</h3>
+                          <button
+                            onClick={() => setShowContactForm(!showContactForm)}
+                            className="bg-neon-blue text-black text-[10px] uppercase font-black px-3 py-1 hover:bg-white"
+                          >
+                            + Adicionar
                           </button>
                         </div>
-                      </div>
-                    )}
 
-                    <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
-                      {contacts.map((c, i) => (
-                        <div key={i} className="flex justify-between items-center bg-pic-card border border-slate-800 p-2 hover:border-slate-600">
-                          <div>
-                            <p className="text-sm font-bold text-white">{c.name}</p>
-                            <p className="text-[10px] text-slate-500 uppercase">{c.role}</p>
+                        {showContactForm && (
+                          <div className="bg-slate-900/50 p-4 border border-slate-700 mb-4 animate-in fade-in slide-in-from-top-2">
+                            <div className="grid grid-cols-2 gap-2 mb-2">
+                              <input placeholder="Nome" value={newContact.name} onChange={e => setNewContact({ ...newContact, name: e.target.value })} className="bg-black border border-slate-600 text-white text-xs p-2" />
+                              <input placeholder="Cargo/Papel" value={newContact.role} onChange={e => setNewContact({ ...newContact, role: e.target.value })} className="bg-black border border-slate-600 text-white text-xs p-2" />
+                              <input placeholder="Telefone" value={newContact.phone} onChange={e => setNewContact({ ...newContact, phone: e.target.value })} className="bg-black border border-slate-600 text-white text-xs p-2" />
+                              <input placeholder="Email" value={newContact.email} onChange={e => setNewContact({ ...newContact, email: e.target.value })} className="bg-black border border-slate-600 text-white text-xs p-2" />
+                            </div>
+                            <div className="flex justify-end gap-2">
+                              <button onClick={() => setShowContactForm(false)} className="text-xs text-slate-500 uppercase">Cancelar</button>
+                              <button onClick={saveContact} disabled={savingContact} className="text-xs bg-neon-green text-black px-4 py-1 font-bold uppercase hover:bg-white">
+                                {savingContact ? "Salvando..." : "Salvar Contato"}
+                              </button>
+                            </div>
                           </div>
-                          <div className="text-right">
-                            <p className="text-xs text-neon-blue font-mono">{c.phone}</p>
-                            <p className="text-[10px] text-slate-600">{c.email}</p>
-                          </div>
+                        )}
+
+                        <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+                          {contacts.map((c, i) => (
+                            <div key={i} className="flex justify-between items-center bg-pic-card border border-slate-800 p-2 hover:border-slate-600">
+                              <div>
+                                <p className="text-sm font-bold text-white">{c.name}</p>
+                                <p className="text-[10px] text-slate-500 uppercase">{c.role}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs text-neon-blue font-mono">{c.phone}</p>
+                                <p className="text-[10px] text-slate-600">{c.email}</p>
+                              </div>
+                            </div>
+                          ))}
+                          {contacts.length === 0 && <p className="text-xs text-slate-600 italic">Nenhum contato qualificado.</p>}
                         </div>
-                      ))}
-                      {contacts.length === 0 && <p className="text-xs text-slate-600 italic">Nenhum contato qualificado.</p>}
-                    </div>
-                  </div>
+                      </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase text-slate-500 tracking-widest mb-2 block">Telefones (Geral)</label>
-                    <div className="space-y-2">
-                      {phonesState.length > 0 ? (
-                        phonesState.map((p, i) => (
-                          <PhoneItem
-                            key={i}
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            phone={p as any}
-                            onFeedback={handlePhoneFeedback}
-                          />
-                        ))
-                      ) : (
-                        <p className="text-slate-600 text-xs italic">Sem telefones cadastrados.</p>
-                      )}
-                    </div>
-                  </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] uppercase text-slate-500 tracking-widest mb-2 block">Telefones (Geral)</label>
+                        <div className="space-y-2">
+                          {phonesState.length > 0 ? (
+                            phonesState.map((p, i) => (
+                              <PhoneItem
+                                key={i}
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                phone={p as any}
+                                onFeedback={handlePhoneFeedback}
+                              />
+                            ))
+                          ) : (
+                            <p className="text-slate-600 text-xs italic">Sem telefones cadastrados.</p>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Right Column: Enrichment */}
