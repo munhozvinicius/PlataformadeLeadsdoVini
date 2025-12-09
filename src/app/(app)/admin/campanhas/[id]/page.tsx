@@ -260,6 +260,66 @@ export default function CampanhaDetailPage() {
         </div>
       </div>
 
+      {stats ? (
+        <div className="rounded-xl border bg-white p-4 shadow-sm space-y-4">
+          <h3 className="text-lg font-semibold text-slate-900">Estatísticas de Distribuição</h3>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-3 bg-slate-50 rounded-lg border">
+              <p className="text-xs text-slate-500 uppercase">Total Leads</p>
+              <p className="text-2xl font-bold text-slate-900">{stats.total}</p>
+            </div>
+            <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+              <p className="text-xs text-blue-600 uppercase">Em Estoque</p>
+              <p className="text-2xl font-bold text-blue-900">{stats.stock}</p>
+            </div>
+            <div className="p-3 bg-green-50 rounded-lg border border-green-100">
+              <p className="text-xs text-green-600 uppercase">Distribuídos</p>
+              <p className="text-2xl font-bold text-green-900">{stats.distributed}</p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="text-left bg-slate-50 border-b">
+                  <th className="py-2 px-3 font-medium text-slate-600">Consultor</th>
+                  <th className="py-2 px-3 font-medium text-slate-600">Qtd. Leads</th>
+                  <th className="py-2 px-3 font-medium text-slate-600">Lead + Antigo (Horas)</th>
+                  <th className="py-2 px-3 font-medium text-slate-600">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.distribution.map((d) => (
+                  <tr key={d.consultantId} className="border-b last:border-b-0">
+                    <td className="py-2 px-3 font-medium text-slate-900">{d.name}</td>
+                    <td className="py-2 px-3">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-800">
+                        {d.count} leads
+                      </span>
+                    </td>
+                    <td className="py-2 px-3 text-slate-500">
+                      {d.hoursHeld > 24 ? (
+                        <span className="text-amber-600 font-semibold">{Math.floor(d.hoursHeld / 24)}d {d.hoursHeld % 24}h</span>
+                      ) : (
+                        <span>{d.hoursHeld}h</span>
+                      )}
+                    </td>
+                    <td className="py-2 px-3">
+                      {d.count > 0 ? (
+                        <span className="text-green-600 text-xs">Ativo</span>
+                      ) : (
+                        <span className="text-slate-400 text-xs">-</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
       <div className="rounded-xl border bg-white p-4 shadow-sm overflow-x-auto">
         <table className="min-w-full text-sm">
           <thead>

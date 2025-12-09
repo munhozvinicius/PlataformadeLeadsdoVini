@@ -31,9 +31,10 @@ export async function GET(
         if (!currentUser) return NextResponse.json({ message: "User not found" }, { status: 404 });
 
         // 2. RBAC Check for Campaign Access
+        // 2. RBAC Check for Campaign Access
         const campaign = await prisma.campanha.findUnique({
             where: { id: campaignId },
-            include: { office: true } // Assuming we might check office match
+            // include: { office: true } // Removed: Office is an Enum
         });
 
         if (!campaign) return NextResponse.json({ message: "Campaign not found" }, { status: 404 });
@@ -42,18 +43,11 @@ export async function GET(
         if (currentUser.role === Role.MASTER || currentUser.role === Role.GERENTE_SENIOR) {
             hasAccess = true;
         } else if (currentUser.role === Role.GERENTE_NEGOCIOS) {
-            // GN manages offices. Check if campaign created by him OR if campaign leads are in his managed offices? 
-            // For now, simplify: if he created it OR if he is the GN of the campaign (schema has gnId)
-            // Schema has gnId, gsId, ownerId.
             if (campaign.gnId === currentUser.id) hasAccess = true;
         } else if (currentUser.role === Role.PROPRIETARIO) {
             if (campaign.ownerId === currentUser.id) hasAccess = true;
         }
 
-        // Fallback: Check if user is linked to campaign office (if strict office separation exists)
-        // Or just proceed. The user request implies they want to see stats for THEIR campaigns/scope.
-        // If strict check fails above, we might deny. 
-        // However, let's allow if they are at least authenticated and have some relation (e.g. createdById).
         if (!hasAccess && campaign.createdById === currentUser.id) hasAccess = true;
 
         if (!hasAccess) {
@@ -61,18 +55,16 @@ export async function GET(
         }
 
         // 3. Aggregate Stats
-        // Optimized queries using groupBy
 
         // Total Leads
         const totalLeads = await prisma.lead.count({
-            where: { campanhaId }
+            where: { campanhaId: campaignId }
         });
 
         // Stock (Unassigned or explicitly NOVO and unassigned)
-        // "Estoque" usually means unassigned.
         const stockLeads = await prisma.lead.count({
             where: {
-                campanhaId,
+                campanhaId: campaignId,
                 consultorId: null
             }
         });
@@ -88,7 +80,7 @@ export async function GET(
         const assignedStats = await prisma.lead.groupBy({
             by: ['consultorId'],
             where: {
-                campanhaId,
+                campanhaId: campaignId,
                 consultorId: { not: null }
             },
             _count: {
