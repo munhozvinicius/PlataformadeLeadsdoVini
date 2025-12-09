@@ -55,18 +55,36 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Coluna 'NR_CNPJ' não encontrada no arquivo." }, { status: 400 });
         }
 
-        // Create Campaign
-        const campanha = await prisma.campanha.create({
-            data: {
-                nome: campaignName,
-                descricao: "Campanha Mapa Parque (Importação CSV)",
-                observacoes: "MAPA_PARQUE_FLOW",
-                createdById: session.user.id,
-                totalLeads: jsonData.length,
-                remainingLeads: jsonData.length,
-                ...(session.user.officeIds?.[0] ? { office: session.user.officeIds[0] } : {})
+        // Check if Campaign exists
+        let campanha = await prisma.campanha.findFirst({
+            where: {
+                nome: campaignName
             }
         });
+
+        if (campanha) {
+            // Update totals
+            campanha = await prisma.campanha.update({
+                where: { id: campanha.id },
+                data: {
+                    totalLeads: { increment: jsonData.length },
+                    remainingLeads: { increment: jsonData.length },
+                }
+            });
+        } else {
+            // Create Campaign
+            campanha = await prisma.campanha.create({
+                data: {
+                    nome: campaignName,
+                    descricao: "Campanha Mapa Parque (Importação CSV)",
+                    observacoes: "MAPA_PARQUE_FLOW",
+                    createdById: session.user.id,
+                    totalLeads: jsonData.length,
+                    remainingLeads: jsonData.length,
+                    ...(session.user.officeIds?.[0] ? { office: session.user.officeIds[0] } : {})
+                }
+            });
+        }
 
         let leadsCreated = 0;
 
