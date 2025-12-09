@@ -47,12 +47,30 @@ export default function CampanhaDetailPage() {
   const [distribuirLoading, setDistribuirLoading] = useState(false);
   const [campaignSummary, setCampaignSummary] = useState<CampaignSummary | null>(null);
 
+  type DistributionStats = {
+    total: number;
+    stock: number;
+    distributed: number;
+    distribution: {
+      consultantId: string;
+      name: string;
+      email: string;
+      count: number;
+      hoursHeld: number;
+      oldestAssignment: string | null;
+    }[];
+  };
+
+  const [stats, setStats] = useState<DistributionStats | null>(null);
+
   const load = useCallback(async () => {
-    const [leadRes, userRes, summaryRes] = await Promise.all([
+    const [leadRes, userRes, summaryRes, statsRes] = await Promise.all([
       fetch(`/api/campanhas/${id}/leads`, { cache: "no-store" }),
       fetch("/api/admin/users", { cache: "no-store" }),
       fetch("/api/campanhas/summary", { cache: "no-store" }),
+      fetch(`/api/campanhas/${id}/stats`, { cache: "no-store" }),
     ]);
+
     if (leadRes.ok) {
       setLeads(await leadRes.json());
     } else if (leadRes.status === 401) {
@@ -68,6 +86,9 @@ export default function CampanhaDetailPage() {
       setCampaignSummary(current);
     } else {
       setCampaignSummary(null);
+    }
+    if (statsRes.ok) {
+      setStats(await statsRes.json());
     }
   }, [id, router]);
 
@@ -214,8 +235,8 @@ export default function CampanhaDetailPage() {
                   type="button"
                   onClick={() => setDistribuirQuantidade(value)}
                   className={`rounded-full border px-3 py-1 uppercase ${distribuirQuantidade === value
-                      ? "border-slate-900 bg-slate-900 text-white"
-                      : "border-slate-200 bg-white text-slate-600"
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-200 bg-white text-slate-600"
                     }`}
                 >
                   {value}
