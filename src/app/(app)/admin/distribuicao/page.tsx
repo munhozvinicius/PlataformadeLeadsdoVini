@@ -7,6 +7,7 @@ import { Users, BarChart3, RefreshCw, FileSpreadsheet, Plus, Trash2, Edit, Datab
 
 // Types
 type User = { id: string; name: string; email: string; role: string; escritorio: string };
+type Office = { id: string; name: string; code: string };
 type CampaignSummary = {
   id: string;
   nome: string;
@@ -53,6 +54,7 @@ export default function DistribuicaoPage() {
   const [newCampGN, setNewCampGN] = useState("");
   const [newCampGS, setNewCampGS] = useState("");
   const [newCampOwner, setNewCampOwner] = useState("");
+  const [selectedOfficeIds, setSelectedOfficeIds] = useState<string[]>([]);
   const [campaignFile, setCampaignFile] = useState<File | null>(null);
   const [creating, setCreating] = useState(false);
   const [createMsg, setCreateMsg] = useState("");
@@ -60,7 +62,9 @@ export default function DistribuicaoPage() {
   // Role Lists for Selectors
   const [usersGS, setUsersGS] = useState<User[]>([]);
   const [usersGN, setUsersGN] = useState<User[]>([]);
+
   const [usersOwner, setUsersOwner] = useState<User[]>([]);
+  const [activeOffices, setActiveOffices] = useState<Office[]>([]);
 
   // State - Batches
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -98,9 +102,10 @@ export default function DistribuicaoPage() {
   async function loadInfo() {
     // Load Campaigns Summary
     // Load Users for Filters
-    const [campRes, userRes] = await Promise.all([
+    const [campRes, userRes, officeRes] = await Promise.all([
       fetch("/api/campanhas/summary", { cache: "no-store" }),
-      fetch("/api/admin/users", { cache: "no-store" })
+      fetch("/api/admin/users", { cache: "no-store" }),
+      fetch("/api/admin/offices", { cache: "no-store" })
     ]);
 
     if (campRes.ok) {
@@ -115,6 +120,10 @@ export default function DistribuicaoPage() {
       setUsersGS(allUsers.filter(u => u.role === "GERENTE_SENIOR" || u.role === "MASTER"));
       setUsersGN(allUsers.filter(u => u.role === "GERENTE_NEGOCIOS" || u.role === "MASTER"));
       setUsersOwner(allUsers.filter(u => u.role === "PROPRIETARIO" || u.role === "MASTER"));
+    }
+
+    if (officeRes.ok) {
+      setActiveOffices(await officeRes.json());
     }
   }
 
@@ -148,6 +157,7 @@ export default function DistribuicaoPage() {
       formData.append("gnId", newCampGN);
       formData.append("gsId", newCampGS);
       formData.append("ownerId", newCampOwner);
+      selectedOfficeIds.forEach(id => formData.append("officeIds", id));
       formData.append("file", campaignFile);
 
       const res = await fetch("/api/campanhas", {
@@ -160,6 +170,7 @@ export default function DistribuicaoPage() {
         setCreateMsg(`Campanha criada com sucesso! ${data.importedCount} leads importados.`);
         setNewCampName("");
         setCampaignFile(null);
+        setSelectedOfficeIds([]);
         // Refresh Dashboard
         loadInfo();
         setActiveTab("dashboard");
@@ -584,6 +595,28 @@ export default function DistribuicaoPage() {
                   {usersOwner.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                 </select>
               </div>
+            </div>
+
+            {/* Office Selection */}
+            <div className="space-y-3 p-4 bg-white/5 border border-white/10 rounded-lg">
+              <label className="text-xs font-bold uppercase text-neon-yellow">Escritórios Participantes (Obrigatório)</label>
+              <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                {activeOffices.map(office => (
+                  <label key={office.id} className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer hover:text-white">
+                    <input
+                      type="checkbox"
+                      className="accent-neon-blue"
+                      checked={selectedOfficeIds.includes(office.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedOfficeIds(prev => [...prev, office.id]);
+                        else setSelectedOfficeIds(prev => prev.filter(id => id !== office.id));
+                      }}
+                    />
+                    {office.name}
+                  </label>
+                ))}
+              </div>
+              {activeOffices.length === 0 && <p className="text-xs text-slate-500">Nenhum escritório encontrado.</p>}
             </div>
 
             {/* File Upload Area */}

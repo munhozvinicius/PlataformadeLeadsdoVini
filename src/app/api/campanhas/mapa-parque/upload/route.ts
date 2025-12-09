@@ -55,6 +55,8 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Coluna 'NR_CNPJ' não encontrada no arquivo." }, { status: 400 });
         }
 
+        const officeIds = formData.getAll("officeIds") as string[];
+
         // Check if Campaign exists
         let campanha = await prisma.campanha.findFirst({
             where: {
@@ -63,13 +65,25 @@ export async function POST(req: Request) {
         });
 
         if (campanha) {
-            // Update totals
+            // Update totals & connect offices if new ones provided
+            const dataToUpdate: any = {
+                totalLeads: { increment: jsonData.length },
+                remainingLeads: { increment: jsonData.length },
+                // If officeIds are provided, add them to the list (merge)
+                // Note: Prisma connect simply connects, doesn't duplicate if already connected usually
+                // But for M:N with explicit IDs array, we might need to handle differently or just use connect.
+                // Since we added `officeRecords` relation, let's use that.
+            };
+
+            if (officeIds.length > 0) {
+                dataToUpdate.officeRecords = {
+                    connect: officeIds.map(id => ({ id }))
+                };
+            }
+
             campanha = await prisma.campanha.update({
                 where: { id: campanha.id },
-                data: {
-                    totalLeads: { increment: jsonData.length },
-                    remainingLeads: { increment: jsonData.length },
-                }
+                data: dataToUpdate
             });
         } else {
             // Create Campaign
@@ -81,7 +95,9 @@ export async function POST(req: Request) {
                     createdById: session.user.id,
                     totalLeads: jsonData.length,
                     remainingLeads: jsonData.length,
-                    ...(session.user.officeIds?.[0] ? { office: session.user.officeIds[0] } : {})
+                    officeRecords: {
+                        connect: officeIds.map(id => ({ id }))
+                    }
                 }
             });
         }

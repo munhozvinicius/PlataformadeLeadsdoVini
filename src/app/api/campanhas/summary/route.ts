@@ -10,9 +10,41 @@ export async function GET() {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
+  // Fetch user with office context
+  const currentUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    include: {
+      managedOffices: true,
+      ownedOffices: true
+    }
+  });
+
+  if (!currentUser) return NextResponse.json({ message: "User not found" }, { status: 401 });
+
+  let whereClause = {};
+
+  // Hierarchy Filter
+  if (currentUser.role === Role.GERENTE_NEGOCIOS) {
+    const officeIds = currentUser.managedOffices.map(o => o.officeRecordId);
+    whereClause = {
+      officeRecords: {
+        some: { id: { in: officeIds } }
+      }
+    };
+  } else if (currentUser.role === Role.PROPRIETARIO) {
+    const officeIds = currentUser.ownedOffices.map(o => o.id);
+    whereClause = {
+      officeRecords: {
+        some: { id: { in: officeIds } }
+      }
+    };
+  }
+  // Master/GS see all (empty whereClause)
+
   const campanhas = await prisma.campanha.findMany({
+    where: whereClause,
     orderBy: { createdAt: "desc" },
-    select: { id: true, nome: true, descricao: true, createdAt: true },
+    select: { id: true, nome: true, descricao: true, createdAt: true, officeRecords: { select: { name: true } } },
   });
 
   const result = [];

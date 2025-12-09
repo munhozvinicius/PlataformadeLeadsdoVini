@@ -65,6 +65,9 @@ export async function POST(req: Request) {
         if (ownerId) campaignData.ownerId = ownerId;
 
         // Check if Campaign exists (Case Insensitive)
+        const officeIds = formData.getAll("officeIds") as string[];
+
+        // Check if Campaign exists (Case Insensitive)
         const normalizedName = nome.trim();
         let campanha = await prisma.campanha.findFirst({
             where: {
@@ -74,8 +77,25 @@ export async function POST(req: Request) {
 
         if (!campanha) {
             campanha = await prisma.campanha.create({
-                data: campaignData,
+                data: {
+                    ...campaignData,
+                    officeRecords: {
+                        connect: officeIds.map(id => ({ id }))
+                    }
+                },
             });
+        } else {
+            // If updating, should we merge offices?
+            if (officeIds.length > 0) {
+                await prisma.campanha.update({
+                    where: { id: campanha.id },
+                    data: {
+                        officeRecords: {
+                            connect: officeIds.map(id => ({ id }))
+                        }
+                    }
+                });
+            }
         }
 
         let importedCount = 0;

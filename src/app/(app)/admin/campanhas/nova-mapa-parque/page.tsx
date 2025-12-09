@@ -1,9 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Upload, FileUp, Database, ArrowLeft, Loader2, CheckCircle, AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+
+type Office = {
+    id: string;
+    name: string;
+    code: string;
+};
 
 export default function NovaCampanhaMapaParquePage() {
     const router = useRouter();
@@ -12,10 +18,44 @@ export default function NovaCampanhaMapaParquePage() {
     const [campaignName, setCampaignName] = useState("");
     const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
+    // Office Selection State
+    const [availableOffices, setAvailableOffices] = useState<Office[]>([]);
+    const [selectedOfficeIds, setSelectedOfficeIds] = useState<string[]>([]);
+    const [isLoadingOffices, setIsLoadingOffices] = useState(true);
+
+    useEffect(() => {
+        const fetchOffices = async () => {
+            try {
+                const res = await fetch("/api/admin/offices");
+                if (res.ok) {
+                    const data = await res.json();
+                    setAvailableOffices(data);
+                }
+            } catch (error) {
+                console.error("Failed to fetch offices", error);
+            } finally {
+                setIsLoadingOffices(false);
+            }
+        };
+        fetchOffices();
+    }, []);
+
+    const toggleOffice = (officeId: string) => {
+        setSelectedOfficeIds(prev =>
+            prev.includes(officeId)
+                ? prev.filter(id => id !== officeId)
+                : [...prev, officeId]
+        );
+    };
+
     const handleUpload = async () => {
         if (!uploadFile) return;
         if (!campaignName.trim()) {
             setStatus({ type: 'error', message: "Por favor, defina um nome para a campanha." });
+            return;
+        }
+        if (selectedOfficeIds.length === 0) {
+            setStatus({ type: 'error', message: "Selecione pelo menos um escritório participante." });
             return;
         }
 
@@ -25,6 +65,7 @@ export default function NovaCampanhaMapaParquePage() {
         const formData = new FormData();
         formData.append("file", uploadFile);
         formData.append("campaignName", campaignName);
+        selectedOfficeIds.forEach(id => formData.append("officeIds", id));
 
         try {
             const res = await fetch("/api/campanhas/mapa-parque/upload", {
@@ -62,23 +103,61 @@ export default function NovaCampanhaMapaParquePage() {
                     Nova Campanha <span className="text-neon-blue">Mapa Parque</span>
                 </h1>
                 <p className="text-slate-500 mt-2">
-                    Importe leads da base com informações detalhadas de produtos e estrutura.
+                    Importe leads da base e selecione os escritórios que trabalharão nela.
                 </p>
             </div>
 
             <div className="space-y-6">
                 {/* Campaign Details */}
-                <div className="p-6 bg-white rounded-xl border border-slate-200 shadow-sm">
-                    <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">
-                        Nome da Campanha
-                    </label>
-                    <input
-                        type="text"
-                        value={campaignName}
-                        onChange={(e) => setCampaignName(e.target.value)}
-                        placeholder="Ex: Base Avançada Q1 2024"
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-neon-blue focus:ring-1 focus:ring-neon-blue transition-all"
-                    />
+                <div className="p-6 bg-white rounded-xl border border-slate-200 shadow-sm space-y-4">
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">
+                            Nome da Campanha
+                        </label>
+                        <input
+                            type="text"
+                            value={campaignName}
+                            onChange={(e) => setCampaignName(e.target.value)}
+                            placeholder="Ex: Base Avançada Q1 2024"
+                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-neon-blue focus:ring-1 focus:ring-neon-blue transition-all"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">
+                            Escritórios Participantes (Quem recebe leads?)
+                        </label>
+                        {isLoadingOffices ? (
+                            <div className="flex items-center gap-2 text-slate-400 text-sm">
+                                <Loader2 className="w-4 h-4 animate-spin" /> Carregando escritórios...
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {availableOffices.map((office) => {
+                                    const isSelected = selectedOfficeIds.includes(office.id);
+                                    return (
+                                        <button
+                                            key={office.id}
+                                            onClick={() => toggleOffice(office.id)}
+                                            className={`flex items-center p-3 rounded-lg border text-sm font-medium transition-all ${isSelected
+                                                    ? 'bg-neon-blue/10 border-neon-blue text-neon-blue'
+                                                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                                                }`}
+                                        >
+                                            <div className={`w-4 h-4 rounded border flex items-center justify-center mr-3 ${isSelected ? 'bg-neon-blue border-neon-blue' : 'bg-white border-slate-300'
+                                                }`}>
+                                                {isSelected && <CheckCircle className="w-3 h-3 text-white" />}
+                                            </div>
+                                            {office.name}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        <p className="text-xs text-slate-500 mt-2">
+                            * A hierarquia (Gerentes, Owners) será automaticamente vinculada com base nos escritórios selecionados.
+                        </p>
+                    </div>
                 </div>
 
                 {/* Upload Area */}
@@ -123,7 +202,7 @@ export default function NovaCampanhaMapaParquePage() {
                 {/* Action Button */}
                 <button
                     onClick={handleUpload}
-                    disabled={!uploadFile || isLoading || !campaignName.trim()}
+                    disabled={!uploadFile || isLoading || !campaignName.trim() || selectedOfficeIds.length === 0}
                     className="w-full py-4 bg-slate-900 text-white font-bold rounded-xl hover:bg-neon-pink disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-neon-pink/20 uppercase tracking-wider flex items-center justify-center gap-2"
                 >
                     {isLoading ? (

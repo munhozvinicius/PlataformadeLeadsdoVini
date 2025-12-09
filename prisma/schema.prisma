@@ -98,6 +98,8 @@ model Campanha {
   observacoes    String?
   status         String?   @default("ATIVA")
   office         Office?
+  officeIDs      String[]  @db.ObjectId
+  officeRecords  OfficeRecord[] @relation("CampanhaOffices", fields: [officeIDs], references: [id])
   periodoInicio  DateTime?
   periodoFim     DateTime?
   createdAt      DateTime  @default(now())
@@ -245,6 +247,9 @@ model OfficeRecord {
   users     User[]   @relation("OfficeUsers")
   managers  ManagerOffice[] @relation("ManagerOffices")
   leads     Lead[]
+  
+  campanhaIDs String[]   @db.ObjectId
+  campanhas   Campanha[] @relation("CampanhaOffices", fields: [campanhaIDs], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -45,6 +45,28 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "O usuário de destino não é um consultor." }, { status: 400 });
   }
 
+  // 3.5 Check Campaign Scope (Office Match)
+  // Ensure the consultant is in an office that participates in this campaign
+  const campaign = await prisma.campanha.findUnique({
+    where: { id: campanhaId },
+    select: { officeIDs: true }
+  });
+
+  if (!campaign) {
+    return NextResponse.json({ message: "Campanha não encontrada." }, { status: 404 });
+  }
+
+  // If campaign has specific offices assigned, enforce it.
+  // If officeIDs is empty, maybe it's a global/legacy campaign? allow all or strict?
+  // User implies strict: "selecionado os escritorios... quem terá acesso"
+  if (campaign.officeIDs && campaign.officeIDs.length > 0) {
+    if (!targetConsultant.officeRecordId || !campaign.officeIDs.includes(targetConsultant.officeRecordId)) {
+      return NextResponse.json({
+        message: "Este consultor não pertence a nenhum escritório participante desta campanha."
+      }, { status: 400 });
+    }
+  }
+
   // 4. Permission Logic matches "User Rules"
   // Master/GS: Global access
   const isGlobalAdmin = currentUser.role === Role.MASTER || currentUser.role === Role.GERENTE_SENIOR;

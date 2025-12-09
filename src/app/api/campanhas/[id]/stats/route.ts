@@ -34,18 +34,34 @@ export async function GET(
         // 2. RBAC Check for Campaign Access
         const campaign = await prisma.campanha.findUnique({
             where: { id: campaignId },
-            // include: { office: true } // Removed: Office is an Enum
+            include: { officeRecords: { select: { id: true } } }
         });
 
         if (!campaign) return NextResponse.json({ message: "Campaign not found" }, { status: 404 });
 
         let hasAccess = false;
+
+        // Master/GS: Global Access
         if (currentUser.role === Role.MASTER || currentUser.role === Role.GERENTE_SENIOR) {
             hasAccess = true;
-        } else if (currentUser.role === Role.GERENTE_NEGOCIOS) {
-            if (campaign.gnId === currentUser.id) hasAccess = true;
-        } else if (currentUser.role === Role.PROPRIETARIO) {
-            if (campaign.ownerId === currentUser.id) hasAccess = true;
+        }
+        // GN: Access if Campaign is linked to a Managed Office
+        else if (currentUser.role === Role.GERENTE_NEGOCIOS) {
+            const managedIds = currentUser.managedOffices.map(m => m.officeRecordId);
+            const campaignOfficeIds = campaign.officeRecords.map(o => o.id);
+            // Check intersection
+            if (campaignOfficeIds.some(id => managedIds.includes(id))) {
+                hasAccess = true;
+            }
+        }
+        // Owner: Access if Campaign is linked to an Owned Office
+        else if (currentUser.role === Role.PROPRIETARIO) {
+            const ownedIds = currentUser.ownedOffices.map(o => o.id);
+            const campaignOfficeIds = campaign.officeRecords.map(o => o.id);
+            // Check intersection
+            if (campaignOfficeIds.some(id => ownedIds.includes(id))) {
+                hasAccess = true;
+            }
         }
 
         if (!hasAccess && campaign.createdById === currentUser.id) hasAccess = true;
