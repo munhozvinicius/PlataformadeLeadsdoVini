@@ -1,4 +1,5 @@
 import { Lead } from "@prisma/client";
+import { fetchCompanyData } from "@/services/enrichment";
 
 export type EnrichmentSuggestionType =
   | "PHONE"
@@ -21,29 +22,6 @@ export type EnrichmentSuggestion = {
   ignored?: boolean;
 };
 
-type BrasilApiCompany = {
-  cnpj: string;
-  razao_social: string;
-  nome_fantasia: string;
-  cnae_fiscal_descricao: string;
-  descricao_situacao_cadastral: string;
-  capital_social: number;
-  unidade_federativa: string;
-  municipio: string;
-  logradouro: string;
-  numero: string;
-  complemento: string;
-  bairro: string;
-  cep: string;
-  ddd_telefone_1?: string;
-  ddd_telefone_2?: string;
-  qsa?: Array<{
-    nome_socio: string;
-    qualificacao_socio: string;
-    faixa_etaria?: string;
-  }>;
-};
-
 export async function fetchExternalEnrichmentForLead(lead: Lead): Promise<EnrichmentSuggestion[]> {
   const cnpj = lead.cnpj?.replace(/\D/g, "");
 
@@ -56,32 +34,29 @@ export async function fetchExternalEnrichmentForLead(lead: Lead): Promise<Enrich
     `${key}-${lead.id}-${Math.random().toString(36).slice(2, 8)}`;
 
   try {
-    const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+    const data = await fetchCompanyData(cnpj);
 
-    if (!response.ok) {
-      console.error("BrasilAPI Error:", response.status, response.statusText);
+    if (!data) {
       return [];
     }
 
-    const data = (await response.json()) as BrasilApiCompany;
-
     // 1. Phone
-    if (data.ddd_telefone_1) {
+    if (data.main_phone) {
       suggestions.push({
         id: makeId("phone_1"),
         type: "PHONE",
-        label: "Telefone Principal (Receita)",
-        value: data.ddd_telefone_1,
-        source: "BrasilAPI",
+        label: "Telefone Principal",
+        value: data.main_phone,
+        source: "DigitalEnrichment",
       });
     }
-    if (data.ddd_telefone_2) {
+    if (data.secondary_phone) {
       suggestions.push({
         id: makeId("phone_2"),
         type: "PHONE",
-        label: "Telefone Secundário (Receita)",
-        value: data.ddd_telefone_2,
-        source: "BrasilAPI",
+        label: "Telefone Secundário",
+        value: data.secondary_phone,
+        source: "DigitalEnrichment",
       });
     }
 
@@ -90,15 +65,15 @@ export async function fetchExternalEnrichmentForLead(lead: Lead): Promise<Enrich
       suggestions.push({
         id: makeId("address"),
         type: "ADDRESS",
-        label: "Endereço Receita",
+        label: "Endereço Fiscal",
         value: {
-          logradouro: `${data.logradouro}, ${data.numero} ${data.complemento || ""}`,
-          bairro: data.bairro,
+          logradouro: `${data.logradouro}, ${data.numero || "S/N"}`,
+          bairro: "Não informado", // enrichment service might not return bairro for all providers
           cidade: data.municipio,
-          estado: data.unidade_federativa,
-          cep: data.cep,
+          estado: data.uf,
+          cep: "Não informado", // enrichment service might not return cep for all providers
         },
-        source: "BrasilAPI",
+        source: "DigitalEnrichment",
       });
     }
 
@@ -109,44 +84,27 @@ export async function fetchExternalEnrichmentForLead(lead: Lead): Promise<Enrich
         type: "CNAE",
         label: "CNAE Principal",
         value: data.cnae_fiscal_descricao,
-        source: "BrasilAPI",
+        source: "DigitalEnrichment",
       });
     }
 
     // 4. Partners (QSA)
     if (data.qsa && data.qsa.length > 0) {
-      // We store the full QSA array as a JSON value or individual items? 
-      // The current UI expects `qsa` array in the `externalData` blob, but here we are generating suggestions.
-      // However, the `enrich` route route ALSO returns the raw data as part of `externalData` in the LeadDetailModal logic
-      // if we look at `LeadDetailModal.tsx` -> `runEnrichment` -> `api/leads/enrich`.
-      // The route `api/leads/[id]/enrich/route.ts` calls THIS function to get suggestions, 
-      // BUT `LeadDetailModal` expects `externalData` to be popuplated with the raw JSON for the `CompanyEnrichmentCard`.
-      // We should arguably return the RAW data too, but this function signature returns proper specific suggestions.
-      // 
-      // Wait, `LeadDetailModal` DOES NOT use these suggestions for the `CompanyEnrichmentCard`. 
-      // It passes `externalData` to the card. 
-      // The ROUTE needs to return the RAW payload for the card to work.
-
-      // Let's add individual Responsible suggestions for the "Add Contact" feature
       data.qsa.forEach((socio) => {
         suggestions.push({
           id: makeId(`partner_${socio.nome_socio.substring(0, 5)}`),
           type: "RESPONSIBLE",
           label: `Sócio: ${socio.qualificacao_socio}`,
           value: { nome: socio.nome_socio, cargo: socio.qualificacao_socio },
-          source: "BrasilAPI",
+          source: "DigitalEnrichment",
         });
       });
     }
-
   } catch (error) {
-    console.error("Error fetching functionality from BrasilAPI", error);
-    // Silent fail or throw? Silent is better for enrichment.
+    console.error("Error fetching enrichment data", error);
   }
 
-  // Add Site Mock/Google prediction if needed, or remove if we want strict accuracy. 
-  // User asked for "Google Search", so maybe we don't guess the website URL anymore 
-  // unless we have a Custom Search API.
+  // Add Site Mock/Google prediction
   if (lead.razaoSocial) {
     suggestions.push({
       id: makeId("site_search"),
