@@ -93,18 +93,18 @@ export async function GET() {
     const derivedGS =
       baseGS && (baseGS as { id: string; name?: string | null; email?: string | null })
         ? {
-            id: baseGS.id,
-            name: baseGS.name,
-            email: baseGS.email,
-          }
+          id: baseGS.id,
+          name: baseGS.name,
+          email: baseGS.email,
+        }
         : null;
     const derivedGN =
       baseGN && (baseGN as { id: string; name?: string | null; email?: string | null })
         ? {
-            id: baseGN.id,
-            name: baseGN.name,
-            email: baseGN.email,
-          }
+          id: baseGN.id,
+          name: baseGN.name,
+          email: baseGN.email,
+        }
         : null;
 
     return {
@@ -180,8 +180,8 @@ export async function POST(req: Request) {
       ? sessionRole === Role.GERENTE_SENIOR
         ? { connect: { id: session.user.id } }
         : seniorId
-        ? { connect: { id: seniorId } }
-        : undefined
+          ? { connect: { id: seniorId } }
+          : undefined
       : undefined;
 
   try {
@@ -194,8 +194,8 @@ export async function POST(req: Request) {
         managedOfficeRecordIds.length > 0
           ? managedOfficeRecordIds
           : targetOfficeRecordId
-          ? [targetOfficeRecordId]
-          : [];
+            ? [targetOfficeRecordId]
+            : [];
       if (!officeRecordIds.length) {
         return NextResponse.json({ message: "GERENTE_NEGOCIOS precisa de ao menos um escritório" }, { status: 400 });
       }
@@ -232,6 +232,9 @@ export async function POST(req: Request) {
       }
       return NextResponse.json(managerUser, { status: 201 });
     } else if (role === Role.PROPRIETARIO) {
+      if (!targetOfficeRecordId && !normalizedOffices.length) {
+        return NextResponse.json({ message: "Proprietário precisa de um escritório vinculado" }, { status: 400 });
+      }
       if (normalizedOffices.length) {
         targetOffices.push(normalizedOffices[0]);
       }

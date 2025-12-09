@@ -192,8 +192,8 @@ export default function UserDrawer({
       return;
     }
 
-    if (role === Role.CONSULTOR && !selectedOfficeId) {
-      setError("Consultor precisa ter um escritório.");
+    if ((role === Role.CONSULTOR || role === Role.PROPRIETARIO) && !selectedOfficeId) {
+      setError("É necessário vincular a um escritório.");
       return;
     }
 

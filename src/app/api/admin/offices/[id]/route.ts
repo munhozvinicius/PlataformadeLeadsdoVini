@@ -78,7 +78,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
 
     try {
-        const { name, code, active, uf, city, region, notes, seniorManagerId, businessManagerId, ownerId } = body;
+        const { name, code, active, uf, city, region, notes } = body;
 
         const updated = await prisma.officeRecord.update({
             where: { id: officeId },
