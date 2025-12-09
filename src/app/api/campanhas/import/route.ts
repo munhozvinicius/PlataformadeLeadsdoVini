@@ -55,14 +55,22 @@ export async function POST(req: Request) {
   }
 
   let campanhaIdToUse = campanhaId;
+  const normalizedCampaignName = campanhaNome?.trim();
+
   if (!campanhaIdToUse) {
-    if (!campanhaNome) {
+    if (!normalizedCampaignName) {
       return NextResponse.json({ message: "Campanha ausente" }, { status: 400 });
     }
-    const created = await prisma.campanha.create({
-      data: { nome: campanhaNome, descricao: campanhaNome, createdById: session.user.id },
-    });
-    campanhaIdToUse = created.id;
+    // Check if exists
+    const existing = await prisma.campanha.findFirst({ where: { nome: normalizedCampaignName } });
+    if (existing) {
+      campanhaIdToUse = existing.id;
+    } else {
+      const created = await prisma.campanha.create({
+        data: { nome: normalizedCampaignName, descricao: normalizedCampaignName, createdById: session.user.id },
+      });
+      campanhaIdToUse = created.id;
+    }
   }
 
   let buffer = Buffer.from(await file.arrayBuffer());
@@ -123,21 +131,21 @@ export async function POST(req: Request) {
   });
   for (const row of rows) {
     const norm = normalizeRow(row);
-    const razaoSocial = firstNonEmpty(norm["RAZAO_SOCIAL"], norm["EMPRESA"], norm["NOME_FANTASIA"]);
-    const nomeFantasia = firstNonEmpty(norm["NOME_FANTASIA"], norm["EMPRESA"], norm["RAZAO_SOCIAL"]);
-    const cidade = norm["CIDADE"];
+    const razaoSocial = firstNonEmpty(norm["RAZAO_SOCIAL"], norm["EMPRESA"], norm["NOME_FANTASIA"], norm["NM_CLIENTE"]);
+    const nomeFantasia = firstNonEmpty(norm["NOME_FANTASIA"], norm["EMPRESA"], norm["RAZAO_SOCIAL"], norm["NM_CLIENTE"]);
+    const cidade = firstNonEmpty(norm["CIDADE"], norm["DS_CIDADE"]);
     const estado = firstNonEmpty(norm["ESTADO"], norm["UF"]);
-    const telefone1 = norm["TELEFONE1"] || norm["TELEFONE"];
-    const telefone2 = norm["TELEFONE2"];
-    const telefone3 = norm["TELEFONE3"];
-    const telefone = firstNonEmpty(telefone1, telefone2, telefone3, norm["TELEFONE"]);
-    const cnpj = firstNonEmpty(norm["CNPJ"], norm["DOCUMENTO"]);
-    const email = norm["EMAIL"];
+    const telefone1 = firstNonEmpty(norm["TELEFONE1"], norm["TELEFONE"], norm["TLFN_1"]);
+    const telefone2 = firstNonEmpty(norm["TELEFONE2"], norm["TLFN_2"]);
+    const telefone3 = firstNonEmpty(norm["TELEFONE3"], norm["TLFN_3"]);
+    const telefone = firstNonEmpty(telefone1, telefone2, telefone3);
+    const cnpj = firstNonEmpty(norm["CNPJ"], norm["DOCUMENTO"], norm["NR_CNPJ"]);
+    const email = firstNonEmpty(norm["EMAIL"], norm["EMAIL_CONTATO_PRINCIPAL_SFA"]);
     const enderecoBairro = norm["BAIRRO"];
     const vertical = norm["VERTICAL"];
-    const logradouro = norm["LOGRADOURO"];
+    const logradouro = firstNonEmpty(norm["LOGRADOURO"], norm["DS_ENDERECO"]);
     const numero = norm["NUMERO"];
-    const cep = norm["CEP"];
+    const cep = firstNonEmpty(norm["CEP"], norm["NR_CEP"]);
     const endereco = logradouro ? `${logradouro}${numero ? `, ${numero}` : ""}` : "";
     const territorio = norm["TERRITORIO"];
     const ofertaMkt = firstNonEmpty(norm["OFERTA MKT"], norm["OFERTA_MKT"], norm["OFERTA"]);
@@ -153,6 +161,48 @@ export async function POST(req: Request) {
       telefone3 ? { rotulo: "Telefone 3", valor: telefone3 } : null,
     ].filter(Boolean) as { rotulo: string; valor: string }[];
     const site = norm["SITE"];
+
+    // Check for Mapa Parque Specific Data
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const externalData: Record<string, any> = {};
+    if (Object.keys(norm).some(k => k.includes("QT_MOVEL") || k.includes("MAPA_PARQUE"))) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const parseIntSafe = (v: any) => {
+        const clean = String(v || "").replace(/\D/g, "");
+        return parseInt(clean, 10) || 0;
+      };
+
+      externalData.mapaParque = {
+        qtMovelTerm: parseIntSafe(norm["QT_MOVEL_TERM"]),
+        qtMovelPen: parseIntSafe(norm["QT_MOVEL_PEN"]),
+        qtMovelM2m: parseIntSafe(norm["QT_MOVEL_M2M"]),
+        qtBasicaFibra: parseIntSafe(norm["QT_BASICA_TERM_FIBRA"]),
+        qtBasicaMetalico: parseIntSafe(norm["QT_BASICA_TERM_METALICO"]),
+        qtBasicaBl: parseIntSafe(norm["QT_BASICA_BL"]),
+        qtBlFtth: parseIntSafe(norm["QT_BL_FTTH"]),
+        qtBlFttc: parseIntSafe(norm["QT_BL_FTTC"]),
+        qtBasicaTv: parseIntSafe(norm["QT_BASICA_TV"]),
+        qtBasicaOutros: parseIntSafe(norm["QT_BASICA_OUTROS"]),
+        qtBasicaLinhas: parseIntSafe(norm["QT_BASICA_LINAS"]),
+        qtAvancadaDados: parseIntSafe(norm["QT_AVANCADA_DADOS"]),
+        avancadaVoz: parseIntSafe(norm["AVANCADA_VOZ"]),
+        qtVivoTech: parseIntSafe(norm["QT_VIVO_TECH"]),
+        qtVvn: parseIntSafe(norm["QT_VVN"]),
+        dataFimVtech: norm["DATA_FIM_VTECH"],
+        flgTrocaVtech: norm["FLG_TROCA_VTECH"],
+        flgPqDigital: norm["FLG_PQ_DIGITAL"],
+        flgCliBiometrado: norm["FLG_CLI_BIOMETRADO"],
+        qtdSfaFiliais: parseIntSafe(norm["QTD_SFA_FILIAIS"]),
+        tpProduto: norm["TP_PRODUTO"],
+        nomerede: norm["NOMEREDE"],
+        nmContatoSfa: norm["NM_CONTATO_SFA"],
+        emailContatoSfa: norm["EMAIL_CONTATO_PRINCIPAL_SFA"],
+        celularContatoSfa: norm["CELULAR_CONTATO_PRINCIPAL_SFA"],
+        telComercialSiebel: norm["TEL_COMERCIAL_SIEBEL"],
+        telCelularSiebel: norm["TEL_CELULAR_SIEBEL"],
+        telResidencialSiebel: norm["TEL_RESIDENCIAL_SIEBEL"],
+      };
+    }
 
     // Evitar duplicados por documento + campanha
     if (cnpj) {
@@ -202,6 +252,7 @@ export async function POST(req: Request) {
         vlFatPresumido: vlFatPresumido || undefined,
         cnae: cnae || undefined,
         raw: norm,
+        externalData: Object.keys(externalData).length > 0 ? externalData : undefined,
         // quando não atribuir, grava explicitamente null para que filtros de estoque encontrem
         consultorId: assignmentType === "none" ? null : consultorEscolhido ?? null,
         status: LeadStatus.NOVO,
