@@ -127,7 +127,12 @@ export default function CampanhaDetailPage() {
     });
     setDistribuirLoading(false);
     if (!res.ok) {
-      setDistribuirMessage("Erro ao distribuir.");
+      try {
+        const err = await res.json();
+        setDistribuirMessage(err.message || "Erro ao distribuir.");
+      } catch {
+        setDistribuirMessage("Erro ao distribuir.");
+      }
       return;
     }
     const json = await res.json();
@@ -208,11 +213,10 @@ export default function CampanhaDetailPage() {
                   key={value}
                   type="button"
                   onClick={() => setDistribuirQuantidade(value)}
-                  className={`rounded-full border px-3 py-1 uppercase ${
-                    distribuirQuantidade === value
+                  className={`rounded-full border px-3 py-1 uppercase ${distribuirQuantidade === value
                       ? "border-slate-900 bg-slate-900 text-white"
                       : "border-slate-200 bg-white text-slate-600"
-                  }`}
+                    }`}
                 >
                   {value}
                 </button>

@@ -18,15 +18,42 @@ export async function GET() {
 
   const { role, id: userId } = session.user;
 
-  // Master e Gerente Sênior veem tudo
-  let whereClause = {};
+  // Defaults: Master/GS sees all
+  let whereClause: any = {};
 
   if (role === Role.GERENTE_NEGOCIOS) {
-    whereClause = { businessManagerId: userId };
+    // GN sees offices they manage via ManagerOffice or direct businessManagerId
+    // We need to fetch the user's managed offices first to get the IDs
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { managedOffices: true },
+    });
+
+    const managedOfficeIds = user?.managedOffices.map(mo => mo.officeRecordId) || [];
+
+    // Also include if they are directly set as businessManagerId (legacy/fallback)
+    whereClause = {
+      OR: [
+        { businessManagerId: userId },
+        { id: { in: managedOfficeIds } }
+      ]
+    };
   } else if (role === Role.PROPRIETARIO) {
-    whereClause = { ownerId: userId };
+    // Proprietário sees only their owned office(s)
+    // Check both 'ownedOffices' relation and 'ownerId' field on OfficeRecord
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { ownedOffices: true },
+    });
+    const ownedIds = user?.ownedOffices.map(o => o.id) || [];
+
+    whereClause = {
+      OR: [
+        { ownerId: userId },
+        { id: { in: ownedIds } }
+      ]
+    };
   } else if (role !== Role.MASTER && role !== Role.GERENTE_SENIOR) {
-    // Consultor não vê lista de escritórios (ou vê só o dele? Normalmente não precisa listar na admin)
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
 
@@ -62,7 +89,9 @@ export async function POST(req: Request) {
 
   const { role, id: userId } = session.user;
 
-  // Apenas Master, Gerente Sênior e Gerente de Negócios podem criar escritórios
+  // Master, Senior, GN can create. Proprietarios usually cannot create their own office? 
+  // Maybe Proprietarios receive an Invite but usually Admin creates the office.
+  // Sticking to MASTER, GS, GN for now.
   if (role !== Role.MASTER && role !== Role.GERENTE_SENIOR && role !== Role.GERENTE_NEGOCIOS) {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
@@ -76,17 +105,9 @@ export async function POST(req: Request) {
   const notes = normalizeOptionalString(body.notes);
   const active = typeof body.active === "boolean" ? body.active : true;
 
-  // Se for GN criando, ele automaticamente se torna o businessManager se não especificado (ou força?)
-  // Se for Master/GS, pode definir quem quiser.
   const seniorManagerId = normalizeOptionalString(body.seniorManagerId);
-  let businessManagerId = normalizeOptionalString(body.businessManagerId);
+  const businessManagerId = normalizeOptionalString(body.businessManagerId);
   const ownerId = normalizeOptionalString(body.ownerId);
-
-  if (role === Role.GERENTE_NEGOCIOS) {
-    // Força o GN atual como gestor do escritório que ele está criando
-    businessManagerId = userId;
-    // Pode ou não definir seniorManagerId? Geralmente herda ou deixa null.
-  }
 
   if (!name) {
     return NextResponse.json({ error: "Nome do escritório é obrigatório." }, { status: 400 });
@@ -102,36 +123,74 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Código já está em uso." }, { status: 409 });
   }
 
-  const office = await prisma.officeRecord.create({
-    data: {
-      name,
-      code,
-      region,
-      uf,
-      city,
-      notes,
-      active,
-      ...(seniorManagerId ? { seniorManager: { connect: { id: seniorManagerId } } } : {}),
-      ...(businessManagerId ? { businessManager: { connect: { id: businessManagerId } } } : {}),
-      ...(ownerId ? { owner: { connect: { id: ownerId } } } : {}),
-    },
-    select: {
-      id: true,
-      name: true,
-      code: true,
-      region: true,
-      uf: true,
-      city: true,
-      notes: true,
-      active: true,
-      seniorManagerId: true,
-      businessManagerId: true,
-      ownerId: true,
-      seniorManager: { select: { id: true, name: true, email: true } },
-      businessManager: { select: { id: true, name: true, email: true } },
-      owner: { select: { id: true, name: true, email: true } },
-      createdAt: true,
-    },
+  // Transaction to create office and link GN if needed
+  const office = await prisma.$transaction(async (tx) => {
+    const newOffice = await tx.officeRecord.create({
+      data: {
+        name,
+        code,
+        region,
+        uf,
+        city,
+        notes,
+        active,
+        ...(seniorManagerId ? { seniorManager: { connect: { id: seniorManagerId } } } : {}),
+        // businessManagerId might be set here, but we also want to add to ManagerOffice table for GN
+        ...(businessManagerId ? { businessManager: { connect: { id: businessManagerId } } } : {}),
+        ...(ownerId ? { owner: { connect: { id: ownerId } } } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        region: true,
+        uf: true,
+        city: true,
+        notes: true,
+        active: true,
+        seniorManagerId: true,
+        businessManagerId: true,
+        ownerId: true,
+        seniorManager: { select: { id: true, name: true, email: true } },
+        businessManager: { select: { id: true, name: true, email: true } },
+        owner: { select: { id: true, name: true, email: true } },
+        createdAt: true,
+      },
+    });
+
+    // If Creator is GN, link them to the office in ManagerOffice table if not already
+    if (role === Role.GERENTE_NEGOCIOS) {
+      // Link creator GN to this office
+      await tx.managerOffice.create({
+        data: {
+          managerId: userId,
+          officeRecordId: newOffice.id
+        }
+      });
+
+      // If a different businessManagerId was passed, also link them?
+      // For now, assume if GN creates, they manage it.
+    }
+
+    // Also, if businessManagerId was explicitly passed (even by Master), we should link in ManagerOffice
+    if (businessManagerId) {
+      // Check if exists to avoid duplicate if same as userId above
+      const exists = await tx.managerOffice.findUnique({
+        where: {
+          managerId_officeRecordId: {
+            managerId: businessManagerId,
+            officeRecordId: newOffice.id
+          }
+        }
+      });
+      if (!exists) {
+        await tx.managerOffice.create({
+          data: { managerId: businessManagerId, officeRecordId: newOffice.id }
+        });
+      }
+    }
+
+    return newOffice;
   });
 
   return NextResponse.json(

@@ -9,8 +9,8 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
     try {
         const session = await getServerSession(authOptions);
-        // Only MASTER and GERENTE_SENIOR can generate campaigns
-        const allowedRoles: string[] = [Role.MASTER, Role.GERENTE_SENIOR];
+        // Expanded roles: MASTER, GERENTE_SENIOR, GERENTE_NEGOCIOS, PROPRIETARIO
+        const allowedRoles: string[] = [Role.MASTER, Role.GERENTE_SENIOR, Role.GERENTE_NEGOCIOS, Role.PROPRIETARIO];
 
         if (!session?.user || !allowedRoles.includes(session.user.role || "")) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -33,6 +33,31 @@ export async function POST(req: Request) {
 
         if (!officeRecord) {
             return NextResponse.json({ message: "Escritório inválido" }, { status: 400 });
+        }
+
+        // Permission Check for GN/Proprietario
+        if (session.user.role === Role.PROPRIETARIO) {
+            // Proprietario can only generate for their own office (ownedOffices is a relation, need to validade)
+            // But session.user usually doesn't have deep relations. Let's fetch user.
+            const userCheck = await prisma.user.findUnique({
+                where: { id: session.user.id },
+                include: { ownedOffices: true }
+            });
+            const isOwner = userCheck?.ownedOffices.some(o => o.id === officeId) || userCheck?.officeRecordId === officeId;
+            if (!isOwner) {
+                return NextResponse.json({ message: "Permissão negada: Você não é proprietário deste escritório." }, { status: 403 });
+            }
+        }
+
+        if (session.user.role === Role.GERENTE_NEGOCIOS) {
+            const userCheck = await prisma.user.findUnique({
+                where: { id: session.user.id },
+                include: { managedOffices: true } // managedOffices is ManagerOffice[], so we check officeRecordId
+            });
+            const isManager = userCheck?.managedOffices.some(mo => mo.officeRecordId === officeId);
+            if (!isManager) {
+                return NextResponse.json({ message: "Permissão negada: Você não gerencia este escritório." }, { status: 403 });
+            }
         }
 
         // 1. Build Query from Filters

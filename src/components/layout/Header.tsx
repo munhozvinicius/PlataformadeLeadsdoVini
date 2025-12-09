@@ -23,15 +23,12 @@ export function Header({ userName, userRole, onOpenProfile }: HeaderProps) {
                     <nav className="hidden md:flex items-center gap-4 text-sm font-medium">
                         <a href="/admin/dashboard" className="text-slate-400 hover:text-white transition-colors">Home</a>
                         <a href="/admin/distribuicao" className="text-slate-400 hover:text-neon-pink transition-colors">Gestão de Campanhas e Leads</a>
-                        <a href="/admin/users" className="text-slate-400 hover:text-neon-blue transition-colors">Gestão de Usuários</a>
+                        <a href="/admin/acessos" className="text-slate-400 hover:text-neon-green transition-colors">Acessos e Escritórios</a>
                         {(userRole === "MASTER" || userRole === "GERENTE_SENIOR" || userRole === "GERENTE_NEGOCIOS") && (
                             <a href="/admin/comunicados" className="text-slate-400 hover:text-neon-pink transition-colors">Comunicados</a>
                         )}
                         {(userRole === "MASTER" || userRole === "GERENTE_SENIOR") && (
-                            <>
-                                <a href="/admin/offices" className="text-slate-400 hover:text-neon-green transition-colors">Gestão de Escritórios</a>
-                                <a href="/admin/inteligencia" className="text-slate-400 hover:text-neon-blue transition-colors">Inteligência Mapa Parque</a>
-                            </>
+                            <a href="/admin/inteligencia" className="text-slate-400 hover:text-neon-blue transition-colors">Inteligência Mapa Parque</a>
                         )}
                         <a href="/board" className="text-slate-400 hover:text-neon-yellow transition-colors">Area de Trabalho</a>
                     </nav>
@@ -60,6 +57,6 @@ export function Header({ userName, userRole, onOpenProfile }: HeaderProps) {
 
                 <LogoutButton />
             </div>
-        </header>
+        </header >
     );
 }
