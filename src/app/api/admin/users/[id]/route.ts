@@ -111,14 +111,14 @@ export async function GET(req: Request, { params }: { params: { id?: string } })
     return NextResponse.json({ message: "Sessão inválida" }, { status: 401 });
   }
 
-  const managedOfficeIds = sessionRole === Role.GERENTE_NEGOCIOS ? await getManagedOfficeIds(session.user.id) : [];
+  const sessionManagedOfficeIds = sessionRole === Role.GERENTE_NEGOCIOS ? await getManagedOfficeIds(session.user.id) : [];
 
   if (
     !canAccessTarget(
       sessionRole,
       sessionUser.id,
       extractOfficeCodes(sessionUser.offices),
-      managedOfficeIds,
+      sessionManagedOfficeIds,
       {
         id: targetUser.id,
         role: targetUser.role,
