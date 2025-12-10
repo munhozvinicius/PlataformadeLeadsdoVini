@@ -200,10 +200,11 @@ export default function CampanhaDetailPage() {
       setUploadMessage(`Sucesso! ${data.imported} leads importados.`);
       await load();
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      alert("Erro: " + err.message);
-      setUploadMessage("Erro: " + err.message);
+      const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
+      alert("Erro: " + errorMessage);
+      setUploadMessage("Erro: " + errorMessage);
     } finally {
       setUploading(false);
       e.target.value = "";

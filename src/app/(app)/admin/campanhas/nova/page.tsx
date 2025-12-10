@@ -76,8 +76,9 @@ export default function NovaCampanhaPage() {
             const data = await res.json();
             router.push(`/admin/campanhas/${data.id}`);
 
-        } catch (err: any) {
-            setMessage(err.message);
+        } catch (err: unknown) {
+            const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
+            setMessage(errorMessage);
         } finally {
             setLoading(false);
         }
