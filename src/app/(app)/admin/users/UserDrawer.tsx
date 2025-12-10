@@ -372,8 +372,6 @@ export default function UserDrawer({
                   value={selectedOfficeId ?? ""}
                   onChange={(event) => {
                     setSelectedOfficeId(event.target.value);
-                    const officeOption = offices.find((office) => office.id === event.target.value);
-                    setSingleOffice(mapOfficeCodeToEnum(officeOption?.code) ?? "");
                   }}
                   className="w-full bg-black border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-neon-blue focus:ring-1 focus:ring-neon-blue outline-none transition-all"
                 >
