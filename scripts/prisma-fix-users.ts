@@ -42,11 +42,20 @@ async function ensureOfficeRecords(): Promise<Map<Office, string>> {
   const offices = (Object.values(Office) as Office[]).filter((value) => typeof value === "string");
   for (const office of offices) {
     const name = OFFICE_NAMES[office] ?? office;
-    const record = await prisma.officeRecord.upsert({
-      where: { code: office },
-      create: { office, code: office, name },
-      update: { name, office },
-    });
+    const existing = await prisma.officeRecord.findUnique({ where: { code: office } });
+    let record = existing;
+    if (existing) {
+      if (existing.name !== name || existing.office !== office) {
+        record = await prisma.officeRecord.update({
+          where: { code: office },
+          data: { name, office },
+        });
+      }
+    } else {
+      record = await prisma.officeRecord.create({
+        data: { office, code: office, name },
+      });
+    }
     officeMap.set(office, record.id);
   }
   return officeMap;

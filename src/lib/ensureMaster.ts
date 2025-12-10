@@ -13,11 +13,20 @@ async function ensureOffices() {
   const records: Record<Office, { id: string }> = {} as Record<Office, { id: string }>;
   for (const office of offices) {
     const code = slugifyOfficeCode(office.name);
-    const record = await prisma.officeRecord.upsert({
-      where: { code },
-      update: { name: office.name },
-      create: { code, office: office.office, name: office.name },
-    });
+    const existing = await prisma.officeRecord.findUnique({ where: { code } });
+    let record = existing;
+    if (existing) {
+      if (existing.name !== office.name || existing.office !== office.office) {
+        record = await prisma.officeRecord.update({
+          where: { code },
+          data: { name: office.name, office: office.office },
+        });
+      }
+    } else {
+      record = await prisma.officeRecord.create({
+        data: { code, office: office.office, name: office.name },
+      });
+    }
     records[office.office] = record;
   }
   return records;

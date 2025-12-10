@@ -71,12 +71,21 @@ async function main() {
   const officeIds = {};
   for (const office of offices) {
     const code = office.office || office.name;
-    const o = await prisma.officeRecord.upsert({
-      where: { code },
-      update: { name: office.name, office: office.office },
-      create: { office: office.office, code, name: office.name },
-    });
-    officeIds[office.office] = o.id;
+    const existing = await prisma.officeRecord.findUnique({ where: { code } });
+    let record = existing;
+    if (existing) {
+      if (existing.name !== office.name || existing.office !== office.office) {
+        record = await prisma.officeRecord.update({
+          where: { code },
+          data: { name: office.name, office: office.office },
+        });
+      }
+    } else {
+      record = await prisma.officeRecord.create({
+        data: { office: office.office, code, name: office.name },
+      });
+    }
+    officeIds[office.office] = record.id;
   }
 
   const connectOffice = (code) => {
