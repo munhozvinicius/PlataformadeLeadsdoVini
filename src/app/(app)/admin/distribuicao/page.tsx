@@ -155,9 +155,9 @@ export default function DistribuicaoPage() {
       const formData = new FormData();
       formData.append("nome", newCampName);
       formData.append("descricao", newCampDesc);
-      formData.append("gnId", newCampGN);
-      formData.append("gsId", newCampGS);
-      formData.append("ownerId", newCampOwner);
+      if (newCampGN) formData.append("gnId", newCampGN);
+      if (newCampGS) formData.append("gsId", newCampGS);
+      if (newCampOwner) formData.append("ownerId", newCampOwner);
       selectedOfficeIds.forEach(id => formData.append("officeIds", id));
       formData.append("tipo", newCampTipo);
       formData.append("file", campaignFile);

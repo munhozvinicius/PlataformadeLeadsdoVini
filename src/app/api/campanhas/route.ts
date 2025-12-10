@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Prisma, LeadStatus, CampaignType } from "@prisma/client";
+import { Prisma, LeadStatus, CampaignType, Role } from "@prisma/client";
 import * as XLSX from "xlsx";
 
 function stringOrEmpty(value: unknown) {
@@ -37,21 +37,27 @@ export async function POST(req: NextRequest) {
     try {
         const session = await getServerSession(authOptions);
         if (!session?.user) {
-            return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+            return NextResponse.json({ message: "Unauthorized (no session)" }, { status: 401, headers: { "x-debug": "no-session" } });
+        }
+        if (!session.user.role) {
+            return NextResponse.json({ message: "Unauthorized (no role)" }, { status: 401, headers: { "x-debug": "no-role" } });
+        }
+        if (session.user.role === Role.CONSULTOR) {
+            return NextResponse.json({ message: "Forbidden for consultants" }, { status: 403, headers: { "x-debug": "consultor" } });
         }
 
         const formData = await req.formData();
-        const nome = formData.get("nome") as string;
-        const descricao = formData.get("descricao") as string;
-        const gnId = formData.get("gnId") as string;
-        const gsId = formData.get("gsId") as string;
-        const ownerId = formData.get("ownerId") as string;
-        const file = formData.get("file") as File;
+        const nome = formData.get("nome") as string | null;
+        const descricao = (formData.get("descricao") as string | null) ?? null;
+        const gnId = (formData.get("gnId") as string | null) ?? null;
+        const gsId = (formData.get("gsId") as string | null) ?? null;
+        const ownerId = (formData.get("ownerId") as string | null) ?? null;
+        const file = formData.get("file") as File | null;
         const tipoRaw = (formData.get("tipo") as string | null)?.trim().toUpperCase();
         const tipo = tipoRaw === "VISAO_PARQUE" ? CampaignType.VISAO_PARQUE : CampaignType.COCKPIT;
 
         if (!nome) {
-            return NextResponse.json({ message: "Nome da campanha é obrigatório" }, { status: 400 });
+            return NextResponse.json({ message: "Nome da campanha é obrigatório" }, { status: 400, headers: { "x-debug": "missing-nome" } });
         }
 
         // Prepare Campaign Data
