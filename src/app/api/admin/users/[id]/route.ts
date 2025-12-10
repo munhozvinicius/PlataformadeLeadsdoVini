@@ -7,7 +7,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Office, Role, Profile, Prisma } from "@prisma/client";
 import { canManageUserRole, canManageUsers } from "@/lib/authRoles";
-import { assignUserOffices, normalizeOfficeCodes, hasOfficeOverlap, getManagedOfficeIds } from "@/lib/userOffice";
+import { assignUserOffices, normalizeOfficeCodes, hasOfficeOverlap, getManagedOfficeIds, assignManagedOffices } from "@/lib/userOffice";
 
 const USER_SELECT = {
   id: true,
