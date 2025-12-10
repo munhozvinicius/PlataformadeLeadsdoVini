@@ -34,7 +34,7 @@ export default function NovaCampanhaPage() {
             }
 
             // Load Offices if MASTER/GS
-            if (["MASTER", "GERENTE_SENIOR"].includes(session.user.role)) {
+            if (["MASTER", "GERENTE_SENIOR"].includes(session?.user?.role || "")) {
                 fetch("/api/admin/offices")
                     .then(res => res.json())
                     .then(data => {
