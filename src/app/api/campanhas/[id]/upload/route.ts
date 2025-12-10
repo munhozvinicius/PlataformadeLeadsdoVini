@@ -92,12 +92,7 @@ export async function POST(
             return NextResponse.json({ message: "Arquivo vazio." }, { status: 400 });
         }
 
-        // Validate Header based on Type
-        const firstRow = normalizeRow(jsonData[0]);
-        const keys = Object.keys(firstRow);
-
         // Check layout validity (Optional, for now just logging debug if needed or skipping)
-        // const isValidLayout = ... (Removed unused variable to fix lint)
         if (campanha.type === CampaignType.COCKPIT) {
             // Logic kept for reference if we enable strict checks later
         } else if (campanha.type === CampaignType.MAPA_PARQUE) {
