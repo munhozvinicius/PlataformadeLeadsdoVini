@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Prisma, LeadStatus, CampaignType, Role } from "@prisma/client";
+import { Prisma, LeadStatus, CampaignType } from "@prisma/client";
 import * as XLSX from "xlsx";
 
 function stringOrEmpty(value: unknown) {
@@ -41,9 +41,6 @@ export async function POST(req: NextRequest) {
         }
         if (!session.user.role) {
             return NextResponse.json({ message: "Unauthorized (no role)" }, { status: 401, headers: { "x-debug": "no-role" } });
-        }
-        if (session.user.role === Role.CONSULTOR) {
-            return NextResponse.json({ message: "Forbidden for consultants" }, { status: 403, headers: { "x-debug": "consultor" } });
         }
 
         const formData = await req.formData();
