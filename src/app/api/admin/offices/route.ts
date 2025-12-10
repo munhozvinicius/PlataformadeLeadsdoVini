@@ -54,6 +54,7 @@ export async function GET() {
   const countsMap = new Map<string, { total: number; proprietarios: number; consultores: number }>();
   officeIds.forEach((id) => countsMap.set(id, { total: 0, proprietarios: 0, consultores: 0 }));
   groupedCounts.forEach((entry) => {
+    if (!entry.officeRecordId) return;
     const bucket = countsMap.get(entry.officeRecordId) ?? { total: 0, proprietarios: 0, consultores: 0 };
     bucket.total += entry._count._all;
     if (entry.role === Role.PROPRIETARIO) bucket.proprietarios += entry._count._all;
