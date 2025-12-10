@@ -21,7 +21,11 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         include: {
             users: {
                 select: { id: true, name: true, role: true, email: true, active: true }
-            }
+            },
+            seniorManager: { select: { id: true, name: true, email: true } },
+            businessManager: { select: { id: true, name: true, email: true } },
+            owner: { select: { id: true, name: true, email: true } },
+            _count: { select: { users: true } }
         }
     });
 
@@ -78,33 +82,49 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
 
     try {
-        const { name, code, active, uf, city, region, notes } = body;
+        const { name, code, active, uf, city, region, notes, seniorManagerId, businessManagerId, ownerId } = body;
 
         const updated = await prisma.officeRecord.update({
             where: { id: officeId },
             data: {
-                name,
-                code,
-                active,
-                uf,
-                city,
-                region,
-                notes,
-                // Updating relations if provided (mainly for Master/GS/GN)
-                // Note: GN managing the office implies they are the businessManager usually?
-                // But the form allows setting specific managers.
-                // We keep it flexible but secure.
+                ...(name ? { name } : {}),
+                ...(code ? { code } : {}),
+                ...(active === undefined ? {} : { active }),
+                ...(uf !== undefined ? { uf } : {}),
+                ...(city !== undefined ? { city } : {}),
+                ...(region !== undefined ? { region } : {}),
+                ...(notes !== undefined ? { notes } : {}),
+                ...(seniorManagerId !== undefined
+                    ? seniorManagerId
+                        ? { seniorManager: { connect: { id: seniorManagerId } } }
+                        : { seniorManager: { disconnect: true } }
+                    : {}),
+                ...(businessManagerId !== undefined
+                    ? businessManagerId
+                        ? {
+                            businessManager: { connect: { id: businessManagerId } },
+                            managers: {
+                                upsert: {
+                                    where: {
+                                        managerId_officeRecordId: {
+                                            managerId: businessManagerId,
+                                            officeRecordId: officeId,
+                                        },
+                                    },
+                                    create: { managerId: businessManagerId },
+                                    update: {},
+                                },
+                            },
+                        }
+                        : { businessManager: { disconnect: true } }
+                    : {}),
+                ...(ownerId !== undefined
+                    ? ownerId
+                        ? { owner: { connect: { id: ownerId } } }
+                        : { owner: { disconnect: true } }
+                    : {}),
             }
         });
-
-        // Handle Manager Assignments separate or together?
-        // Ideally we should handle connections. 
-        // For simplicity reusing the logic from create? 
-        // Prisma update allows nested connects.
-
-        // However, for this iteration, let's stick to basic updates.
-        // If the user wants to assign a manager, they can do it via User edit or we add logic here.
-        // given the UI likely sends simple data:
 
         return NextResponse.json(updated);
 

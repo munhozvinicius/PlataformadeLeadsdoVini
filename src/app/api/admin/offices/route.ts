@@ -34,15 +34,58 @@ export async function GET() {
 
   const offices = await prisma.officeRecord.findMany({
     where,
-    select: {
-      id: true,
-      code: true,
-      name: true,
-      createdAt: true,
+    include: {
+      seniorManager: { select: { id: true, name: true, email: true } },
+      businessManager: { select: { id: true, name: true, email: true } },
+      owner: { select: { id: true, name: true, email: true } },
     },
-    orderBy: { name: "asc" },
+    orderBy: { createdAt: "desc" },
   });
-  return NextResponse.json(offices);
+
+  const officeIds = offices.map((o) => o.id);
+  const groupedCounts = officeIds.length
+    ? await prisma.user.groupBy({
+        by: ["officeRecordId", "role"],
+        _count: { _all: true },
+        where: { officeRecordId: { in: officeIds } },
+      })
+    : [];
+
+  const countsMap = new Map<string, { total: number; proprietarios: number; consultores: number }>();
+  officeIds.forEach((id) => countsMap.set(id, { total: 0, proprietarios: 0, consultores: 0 }));
+  groupedCounts.forEach((entry) => {
+    const bucket = countsMap.get(entry.officeRecordId) ?? { total: 0, proprietarios: 0, consultores: 0 };
+    bucket.total += entry._count._all;
+    if (entry.role === Role.PROPRIETARIO) bucket.proprietarios += entry._count._all;
+    if (entry.role === Role.CONSULTOR) bucket.consultores += entry._count._all;
+    countsMap.set(entry.officeRecordId, bucket);
+  });
+
+  const response = offices.map((office) => {
+    const counts = countsMap.get(office.id) ?? { total: 0, proprietarios: 0, consultores: 0 };
+    return {
+      id: office.id,
+      code: office.code,
+      name: office.name,
+      region: office.region,
+      uf: office.uf,
+      city: office.city,
+      notes: office.notes,
+      active: office.active,
+      seniorManagerId: office.seniorManagerId,
+      businessManagerId: office.businessManagerId,
+      ownerId: office.ownerId,
+      seniorManager: office.seniorManager,
+      businessManager: office.businessManager,
+      owner: office.owner,
+      createdAt: office.createdAt,
+      totalUsers: counts.total,
+      totalProprietarios: counts.proprietarios,
+      totalConsultores: counts.consultores,
+    };
+  });
+
+  return NextResponse.json(response);
 }
 
 
@@ -58,20 +101,28 @@ export async function POST(req: Request) {
   if (!name) {
     return NextResponse.json({ message: "Nome do escritório é obrigatório" }, { status: 400 });
   }
-  const code = slugifyOfficeCode(name);
+  const code = (body.code ?? "").toString().trim() || slugifyOfficeCode(name);
+  const data: Parameters<typeof prisma.officeRecord.create>[0]["data"] = {
+    code,
+    name,
+    region: body.region?.toString().trim() || null,
+    uf: body.uf?.toString().trim().toUpperCase() || null,
+    city: body.city?.toString().trim() || null,
+    notes: body.notes?.toString().trim() || null,
+    active: typeof body.active === "boolean" ? body.active : true,
+  };
 
-  const office = await prisma.officeRecord.create({
-    data: {
-      code,
-      name,
-      // If creator is GN, automatically associate them as a manager
-      ...(session.user.role === Role.GERENTE_NEGOCIOS ? {
-        businessManager: { connect: { id: session.user.id } },
-        managers: {
-          create: { managerId: session.user.id }
-        }
-      } : {})
-    },
-  });
+  if (body.seniorManagerId) data.seniorManager = { connect: { id: body.seniorManagerId } };
+  if (body.businessManagerId) data.businessManager = { connect: { id: body.businessManagerId } };
+  if (body.ownerId) data.owner = { connect: { id: body.ownerId } };
+
+  if (session.user.role === Role.GERENTE_NEGOCIOS) {
+    data.businessManager = { connect: { id: session.user.id } };
+    data.managers = {
+      create: { managerId: session.user.id },
+    };
+  }
+
+  const office = await prisma.officeRecord.create({ data });
   return NextResponse.json(office, { status: 201 });
 }

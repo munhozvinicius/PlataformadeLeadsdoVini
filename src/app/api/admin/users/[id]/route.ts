@@ -237,12 +237,6 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
     updates.office = normalizedOfficeIds[0];
   }
 
-  if (finalRole === Role.PROPRIETARIO && sessionRole === Role.GERENTE_NEGOCIOS) {
-    if (!targetOfficeRecordId || !managedOfficeIds.includes(targetOfficeRecordId)) {
-      return NextResponse.json({ message: "GN só pode gerenciar proprietário dos seus escritórios" }, { status: 403 });
-    }
-  }
-
   if (finalRole === Role.PROPRIETARIO && normalizedOfficeIds.length) {
     officesToAssign = [normalizedOfficeIds[0]];
     updates.office = normalizedOfficeIds[0];

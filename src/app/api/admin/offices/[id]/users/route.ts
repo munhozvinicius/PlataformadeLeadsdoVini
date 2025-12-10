@@ -1,68 +1,54 @@
-export const dynamic = "force-dynamic";
-
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 
-type Params = { params: { id: string } };
+export const dynamic = "force-dynamic";
 
-export async function GET(_req: Request, { params }: Params) {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+async function canViewOffice(officeId: string, userId: string, role: Role) {
+  if (role === Role.MASTER || role === Role.GERENTE_SENIOR) return true;
+  if (role === Role.GERENTE_NEGOCIOS) {
+    const manager = await prisma.managerOffice.findFirst({
+      where: { managerId: userId, officeRecordId: officeId },
+      select: { id: true },
+    });
+    return Boolean(manager);
+  }
+  return false;
+}
 
-    const { role, id: userId } = session.user;
-    const officeId = params.id;
+export async function GET(_req: Request, { params }: { params: { id: string } }) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
 
-    if (!officeId) {
-        return NextResponse.json({ error: "Escritório inválido." }, { status: 400 });
-    }
+  const officeId = params.id;
+  const role = session.user.role;
 
-    // RBAC
-    if (role === Role.MASTER || role === Role.GERENTE_SENIOR) {
-        // Allowed
-    } else if (role === Role.GERENTE_NEGOCIOS) {
-        // Check if user manages this office
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            include: { managedOffices: true }
-        });
+  const allowed = await canViewOffice(officeId, session.user.id, role);
+  if (!allowed) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
+  }
 
-        // Check via ManagerOffice relation OR the legacy businessManagerId field on the OfficeRecord
-        const office = await prisma.officeRecord.findUnique({
-            where: { id: officeId },
-            select: { businessManagerId: true }
-        });
+  const [proprietarios, consultores] = await Promise.all([
+    prisma.user.findMany({
+      where: { officeRecordId: officeId, role: Role.PROPRIETARIO },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.user.findMany({
+      where: { officeRecordId: officeId, role: Role.CONSULTOR },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        owner: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { name: "asc" },
+    }),
+  ]);
 
-        const managesViaTable = user?.managedOffices.some(mo => mo.officeRecordId === officeId);
-        const managesViaField = office?.businessManagerId === userId;
-
-        if (!managesViaTable && !managesViaField) {
-            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
-        }
-    } else {
-        // Proprietario/Consultor cannot see this list in this context
-        return NextResponse.json({ message: "Forbidden" }, { status: 403 });
-    }
-
-    const [proprietarios, consultores] = await Promise.all([
-        prisma.user.findMany({
-            where: { officeRecordId: officeId, role: Role.PROPRIETARIO },
-            select: { id: true, name: true, email: true },
-            orderBy: { name: "asc" },
-        }),
-        prisma.user.findMany({
-            where: { officeRecordId: officeId, role: Role.CONSULTOR },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                owner: { select: { id: true, name: true, email: true } },
-            },
-            orderBy: { name: "asc" },
-        }),
-    ]);
-
-    return NextResponse.json({ proprietarios, consultores });
+  return NextResponse.json({ proprietarios, consultores });
 }

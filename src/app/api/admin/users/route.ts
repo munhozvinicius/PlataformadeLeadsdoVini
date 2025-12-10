@@ -204,25 +204,25 @@ export async function POST(req: Request) {
     if (role === Role.GERENTE_SENIOR) {
       targetOffices.push(...(Object.values(Office) as Office[]));
     } else if (role === Role.GERENTE_NEGOCIOS) {
+      // GN pode ser criado sem escritório; se vierem IDs válidos, conecta.
       const officeRecordIds =
         managedOfficeRecordIds.length > 0
           ? managedOfficeRecordIds
           : targetOfficeRecordId
             ? [targetOfficeRecordId]
             : [];
-      if (!officeRecordIds.length) {
-        return NextResponse.json({ message: "GERENTE_NEGOCIOS precisa de ao menos um escritório" }, { status: 400 });
-      }
+
       // opcional: associa office enum legacy se existir mapeamento
       targetOffices.push(...normalizedOffices);
-      // conecta managed offices via OfficeRecord
-      const validOffices = await prisma.officeRecord.findMany({
-        where: { id: { in: officeRecordIds } },
-        select: { id: true },
-      });
-      if (!validOffices.length) {
-        return NextResponse.json({ message: "Escritório inválido para GERENTE_NEGOCIOS" }, { status: 400 });
+
+      let validOffices: { id: string }[] = [];
+      if (officeRecordIds.length) {
+        validOffices = await prisma.officeRecord.findMany({
+          where: { id: { in: officeRecordIds } },
+          select: { id: true },
+        });
       }
+
       const managerUser = await prisma.user.create({
         data: {
           name,
@@ -235,9 +235,13 @@ export async function POST(req: Request) {
           ...(ownerConnect ? { owner: ownerConnect } : {}),
           ...(seniorConnect ? { senior: seniorConnect } : {}),
           active: typeof active === "boolean" ? active : true,
-          managedOffices: {
-            create: validOffices.map((o) => ({ officeRecordId: o.id })),
-          },
+          ...(validOffices.length
+            ? {
+                managedOffices: {
+                  create: validOffices.map((o) => ({ officeRecordId: o.id })),
+                },
+              }
+            : {}),
         },
         select: USER_SELECT,
       });

@@ -361,6 +361,9 @@ export function OfficesTab() {
                                     <th className="px-3 py-2 font-semibold">UF</th>
                                     <th className="px-3 py-2 font-semibold">Cidade</th>
                                     <th className="px-3 py-2 font-semibold">Ativo</th>
+                                    <th className="px-3 py-2 font-semibold">Ger. Sênior</th>
+                                    <th className="px-3 py-2 font-semibold">Ger. Negócios</th>
+                                    <th className="px-3 py-2 font-semibold">Proprietário</th>
                                     <th className="px-3 py-2 font-semibold">Proprietários</th>
                                     <th className="px-3 py-2 font-semibold">Consultores</th>
                                     <th className="px-3 py-2 font-semibold">Total usuários</th>
@@ -378,9 +381,12 @@ export function OfficesTab() {
                                         <td className="px-3 py-2">
                                             <Badge active={office.active} />
                                         </td>
-                                        <td className="px-3 py-2 text-slate-600">{office.totalProprietarios}</td>
-                                        <td className="px-3 py-2 text-slate-600">{office.totalConsultores}</td>
-                                        <td className="px-3 py-2 text-slate-600">{office.totalUsers}</td>
+                                        <td className="px-3 py-2 text-slate-600">{office.seniorManager?.name ?? "-"}</td>
+                                        <td className="px-3 py-2 text-slate-600">{office.businessManager?.name ?? "-"}</td>
+                                        <td className="px-3 py-2 text-slate-600">{office.owner?.name ?? "-"}</td>
+                                        <td className="px-3 py-2 text-slate-600">{office.totalProprietarios ?? 0}</td>
+                                        <td className="px-3 py-2 text-slate-600">{office.totalConsultores ?? 0}</td>
+                                        <td className="px-3 py-2 text-slate-600">{office.totalUsers ?? 0}</td>
                                         <td className="px-3 py-2 text-slate-600">{office.createdLabel}</td>
                                         <td className="px-3 py-2">
                                             <div className="flex flex-wrap gap-2 text-sm">
