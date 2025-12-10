@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
   const campaign = await prisma.campanha.create({
     data: {
       nome,
-      tipo: tipo === "VISAO_PARQUE" ? CampaignType.VISAO_PARQUE : CampaignType.COCKPIT,
+      tipo: tipo === "MAPA_PARQUE" ? CampaignType.MAPA_PARQUE : CampaignType.COCKPIT,
       descricao: descricao || null,
       objetivo: objetivo || null,
       vertical: vertical || null,
