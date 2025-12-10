@@ -42,7 +42,7 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
-  const officeIds = offices.map((o) => o.id);
+  const officeIds = offices.map((o) => o.id).filter((id): id is string => Boolean(id));
   const groupedCounts = officeIds.length
     ? await prisma.user.groupBy({
         by: ["officeRecordId", "role"],
