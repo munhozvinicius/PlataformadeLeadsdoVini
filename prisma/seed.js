@@ -1,13 +1,42 @@
 /* eslint-disable no-console */
 const { PrismaClient, Role, Office, Profile } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
+require("dotenv").config({ path: ".env.local" });
 
 const prisma = new PrismaClient();
 
 const rawUsers = [
   {
     office: Office.SAFE_TI,
-    name: "JULIANA DE JESUS BARBOSA",
+    name: "VINICUS MUNHOZ",
+    email: "munhoz.vinicius@gmail.com",
+    role: Role.MASTER,
+    password: "Theforce85!!",
+  },
+  {
+    office: Office.SAFE_TI,
+    name: "JULIANA RIZO",
+    email: "juliana.rizo@telefonica.com",
+    role: Role.MASTER,
+    password: "Vivo@2025",
+  },
+  {
+    office: Office.SAFE_TI,
+    name: "VINICIUS MARTINS",
+    email: "vinicius.martins@telefonica.com",
+    role: Role.GERENTE_NEGOCIOS,
+    password: "Vivo@2025",
+  },
+  {
+    office: Office.SAFE_TI,
+    name: "CARLOS JUDICE",
+    email: "carlosjudice@safeti.com.br",
+    role: Role.PROPRIETARIO,
+    password: "Vivo@2025",
+  },
+  {
+    office: Office.SAFE_TI,
+    name: "JULIANA BARBOSA",
     email: "julianabarbosa@safeti.com.br",
     role: Role.CONSULTOR,
     password: "Vivo@2025",
@@ -15,25 +44,19 @@ const rawUsers = [
   },
   {
     office: Office.SAFE_TI,
-    name: "CARLOS EDUARDO JUDICE MARIA",
-    email: "carlosjudice@safeti.com.br",
-    role: Role.PROPRIETARIO,
-    password: "Vivo@2025",
-  },
-  {
-    office: Office.JLC_TECH,
-    name: "JULIANA LOSEVICIENE CARVALHO",
-    email: "juliana@jlctech.com.br",
-    role: Role.PROPRIETARIO,
-    password: "Vivo@2025",
-  },
-  {
-    office: Office.JLC_TECH,
-    name: "JOAO LUCAS PEREIRA DOS SANTOS",
-    email: "joaolucas@jlctech.com.br",
+    name: "MARCELO ADAO",
+    email: "adao@safeti.com.br",
     role: Role.CONSULTOR,
     password: "Vivo@2025",
-    ownerEmail: "juliana@jlctech.com.br",
+    ownerEmail: "carlosjudice@safeti.com.br",
+  },
+  {
+    office: Office.SAFE_TI,
+    name: "KAREN LUNGA",
+    email: "vendas2@safe-ti.com.br",
+    role: Role.CONSULTOR,
+    password: "Vivo@2025",
+    ownerEmail: "carlosjudice@safeti.com.br",
   },
 ];
 
@@ -114,6 +137,34 @@ async function main() {
         profile: u.role,
         office: u.office,
         owner: ownerId ? { connect: { id: ownerId } } : undefined,
+        ...officeConnection,
+      },
+    });
+  }
+
+  // Demais papéis (MASTER, GERENTE_NEGOCIOS etc.)
+  for (const u of rawUsers.filter(
+    (u) => u.role !== Role.PROPRIETARIO && u.role !== Role.CONSULTOR
+  )) {
+    const hashed = await bcrypt.hash(u.password, 10);
+    const officeConnection = connectOffice(u.office);
+    await prisma.user.upsert({
+      where: { email: u.email },
+      update: {
+        name: u.name,
+        password: hashed,
+        role: u.role,
+        profile: u.role,
+        office: u.office,
+        ...officeConnection,
+      },
+      create: {
+        name: u.name,
+        email: u.email,
+        password: hashed,
+        role: u.role,
+        profile: u.role,
+        office: u.office,
         ...officeConnection,
       },
     });
