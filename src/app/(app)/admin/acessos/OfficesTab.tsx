@@ -319,86 +319,84 @@ export function OfficesTab() {
     if (!canManage) return null;
 
     return (
-        <div className="max-w-6xl mx-auto space-y-6">
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div className="max-w-6xl mx-auto space-y-6 text-white">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between bg-pic-dark border border-pic-zinc rounded-xl p-4 shadow-lg shadow-black/30">
                 <div>
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Gestão</p>
-                    <h1 className="text-3xl font-semibold text-slate-900">Escritórios</h1>
-                    <p className="text-sm text-slate-500">
-                        Gerencie os escritórios e sua hierarquia de gerentes e proprietários.
-                    </p>
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-neon-pink">Gestão</p>
+                    <h1 className="text-3xl font-bold text-white">Escritórios</h1>
+                    <p className="text-sm text-slate-400">Hierarquia GS → GN → Proprietário → Consultor.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                     <button
                         onClick={fetchOffices}
-                        className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-100"
+                        className="rounded-lg border border-slate-700 bg-black/60 px-4 py-2 text-sm font-semibold text-slate-200 hover:border-neon-blue hover:text-white transition-colors"
                     >
                         Atualizar
                     </button>
                     <button
                         onClick={openCreateModal}
-                        className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                        className="rounded-lg bg-neon-blue px-4 py-2 text-sm font-bold text-black shadow-lg shadow-neon-blue/30 hover:scale-[1.01] transition-transform"
                     >
                         Novo escritório
                     </button>
                 </div>
             </div>
 
-            <div className="rounded-xl border bg-white p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-lg font-semibold text-slate-900">Escritórios cadastrados</h2>
+            <div className="rounded-xl border border-pic-zinc bg-pic-dark shadow-lg shadow-black/30">
+                <div className="flex items-center justify-between px-4 pt-4">
+                    <h2 className="text-lg font-semibold text-white">Escritórios cadastrados</h2>
                 </div>
-                {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
+                {error ? <p className="mb-3 text-sm text-red-400 px-4">{error}</p> : null}
                 {loading ? (
-                    <p className="text-sm text-slate-500">Carregando escritórios...</p>
+                    <p className="text-sm text-slate-400 px-4 pb-4">Carregando escritórios...</p>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="min-w-full text-sm">
                             <thead>
-                                <tr className="bg-slate-50 text-left text-slate-600">
-                                    <th className="px-3 py-2 font-semibold">Nome</th>
-                                    <th className="px-3 py-2 font-semibold">Código</th>
-                                    <th className="px-3 py-2 font-semibold">UF</th>
-                                    <th className="px-3 py-2 font-semibold">Cidade</th>
-                                    <th className="px-3 py-2 font-semibold">Ativo</th>
-                                    <th className="px-3 py-2 font-semibold">Ger. Sênior</th>
-                                    <th className="px-3 py-2 font-semibold">Ger. Negócios</th>
-                                    <th className="px-3 py-2 font-semibold">Proprietário</th>
-                                    <th className="px-3 py-2 font-semibold">Proprietários</th>
-                                    <th className="px-3 py-2 font-semibold">Consultores</th>
-                                    <th className="px-3 py-2 font-semibold">Total usuários</th>
-                                    <th className="px-3 py-2 font-semibold">Criado em</th>
-                                    <th className="px-3 py-2 font-semibold">Ações</th>
+                                <tr className="bg-black/50 text-left text-slate-300 uppercase tracking-[0.15em] text-[11px]">
+                                    <th className="px-3 py-3 font-semibold">Nome</th>
+                                    <th className="px-3 py-3 font-semibold">Código</th>
+                                    <th className="px-3 py-3 font-semibold">UF</th>
+                                    <th className="px-3 py-3 font-semibold">Cidade</th>
+                                    <th className="px-3 py-3 font-semibold">Ativo</th>
+                                    <th className="px-3 py-3 font-semibold">Ger. Sênior</th>
+                                    <th className="px-3 py-3 font-semibold">Ger. Negócios</th>
+                                    <th className="px-3 py-3 font-semibold">Proprietário</th>
+                                    <th className="px-3 py-3 font-semibold">Proprietários</th>
+                                    <th className="px-3 py-3 font-semibold">Consultores</th>
+                                    <th className="px-3 py-3 font-semibold">Total usuários</th>
+                                    <th className="px-3 py-3 font-semibold">Criado em</th>
+                                    <th className="px-3 py-3 font-semibold text-right">Ações</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {tableRows.map((office) => (
-                                    <tr key={office.id} className="border-b last:border-b-0">
-                                        <td className="px-3 py-2 font-medium text-slate-900">{office.name}</td>
-                                        <td className="px-3 py-2 text-slate-600">{office.code}</td>
-                                        <td className="px-3 py-2 text-slate-600">{office.uf ?? "-"}</td>
-                                        <td className="px-3 py-2 text-slate-600">{office.city ?? "-"}</td>
+                                    <tr key={office.id} className="border-b border-pic-zinc/60 last:border-b-0 hover:bg-white/5 transition-colors">
+                                        <td className="px-3 py-3 font-semibold text-white">{office.name}</td>
+                                        <td className="px-3 py-3 text-slate-300 font-mono">{office.code}</td>
+                                        <td className="px-3 py-3 text-slate-400">{office.uf ?? "-"}</td>
+                                        <td className="px-3 py-3 text-slate-400">{office.city ?? "-"}</td>
                                         <td className="px-3 py-2">
                                             <Badge active={office.active} />
                                         </td>
-                                        <td className="px-3 py-2 text-slate-600">{office.seniorManager?.name ?? "-"}</td>
-                                        <td className="px-3 py-2 text-slate-600">{office.businessManager?.name ?? "-"}</td>
-                                        <td className="px-3 py-2 text-slate-600">{office.owner?.name ?? "-"}</td>
-                                        <td className="px-3 py-2 text-slate-600">{office.totalProprietarios ?? 0}</td>
-                                        <td className="px-3 py-2 text-slate-600">{office.totalConsultores ?? 0}</td>
-                                        <td className="px-3 py-2 text-slate-600">{office.totalUsers ?? 0}</td>
-                                        <td className="px-3 py-2 text-slate-600">{office.createdLabel}</td>
-                                        <td className="px-3 py-2">
-                                            <div className="flex flex-wrap gap-2 text-sm">
+                                        <td className="px-3 py-3 text-slate-300">{office.seniorManager?.name ?? "-"}</td>
+                                        <td className="px-3 py-3 text-slate-300">{office.businessManager?.name ?? "-"}</td>
+                                        <td className="px-3 py-3 text-slate-300">{office.owner?.name ?? "-"}</td>
+                                        <td className="px-3 py-3 text-slate-300">{office.totalProprietarios ?? 0}</td>
+                                        <td className="px-3 py-3 text-slate-300">{office.totalConsultores ?? 0}</td>
+                                        <td className="px-3 py-3 text-slate-300">{office.totalUsers ?? 0}</td>
+                                        <td className="px-3 py-3 text-slate-400">{office.createdLabel}</td>
+                                        <td className="px-3 py-3 text-right">
+                                            <div className="flex flex-wrap gap-2 text-sm justify-end">
                                                 <button
                                                     onClick={() => openDetails(office)}
-                                                    className="rounded-lg border border-slate-200 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50"
+                                                    className="rounded-lg border border-slate-700 px-3 py-1 font-semibold text-slate-200 hover:border-neon-blue hover:text-white transition-colors"
                                                 >
                                                     Detalhes
                                                 </button>
                                                 <button
                                                     onClick={() => openEditModal(office)}
-                                                    className="rounded-lg bg-slate-900 px-3 py-1 font-semibold text-white hover:bg-slate-800"
+                                                    className="rounded-lg bg-neon-blue px-3 py-1 font-semibold text-black hover:scale-[1.02] transition-transform shadow-sm shadow-neon-blue/30"
                                                 >
                                                     Editar
                                                 </button>

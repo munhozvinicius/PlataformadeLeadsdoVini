@@ -18,13 +18,6 @@ export type OfficeOption = {
   code: string;
 };
 
-const mapOfficeCodeToEnum = (code?: string): Office | null => {
-  if (!code) return null;
-  const normalized = code.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
-  const values = Object.values(Office) as string[];
-  return values.includes(normalized) ? (normalized as Office) : null;
-};
-
 export type DrawerMode = "create" | "edit";
 
 export type UserDrawerPayload = {
@@ -101,8 +94,7 @@ export default function UserDrawer({
   const [role, setRole] = useState<Role>(Role.PROPRIETARIO);
   const [password, setPassword] = useState("");
   const [selectedOfficeId, setSelectedOfficeId] = useState<string | null>(null);
-  const [selectedOffices, setSelectedOffices] = useState<Office[]>([]);
-  const [singleOffice, setSingleOffice] = useState<Office | "">("");
+  const [selectedManagedOfficeIds, setSelectedManagedOfficeIds] = useState<string[]>([]);
   const [ownerId, setOwnerId] = useState("");
   const [active, setActive] = useState(true);
   const [error, setError] = useState("");
@@ -138,13 +130,6 @@ export default function UserDrawer({
     return owners.filter((owner) => owner.officeRecordId === selectedOfficeId);
   }, [owners, selectedOfficeId]);
 
-  const officeOptions = useMemo(() => {
-    const list = offices
-      .map((office) => mapOfficeCodeToEnum(office.code))
-      .filter((code): code is Office => Boolean(code));
-    return Array.from(new Set(list));
-  }, [offices]);
-
   useEffect(() => {
     if (!open) {
       setError("");
@@ -164,11 +149,13 @@ export default function UserDrawer({
         ? currentUserOfficeRecordId
         : user?.officeRecord?.id ?? offices[0]?.id ?? null;
     setSelectedOfficeId(defaultOfficeId);
-    const defaultOfficeCode = offices.find((office) => office.id === defaultOfficeId)?.code;
-    setSingleOffice(mapOfficeCodeToEnum(defaultOfficeCode) ?? "");
-    setSelectedOffices([]);
+    if (isGN) {
+      setSelectedManagedOfficeIds(user?.officeRecord?.id ? [user.officeRecord.id] : defaultOfficeId ? [defaultOfficeId] : []);
+    } else {
+      setSelectedManagedOfficeIds([]);
+    }
     setOwnerId(currentUserIsOwner ? currentUserId ?? "" : user?.owner?.id ?? "");
-  }, [open, user, offices, currentUserIsOwner, currentUserOfficeRecordId, currentUserId, availableRoles]);
+  }, [open, user, offices, currentUserIsOwner, currentUserOfficeRecordId, currentUserId, availableRoles, isGN]);
 
   useEffect(() => {
     if (ownerId && ownersForOffice.every((owner) => owner.id !== ownerId)) {
@@ -211,13 +198,8 @@ export default function UserDrawer({
       name: name.trim(),
       email: email.trim(),
       role,
-      officeIds: isGS
-        ? []
-        : isGN
-          ? selectedOffices
-          : isSingleOffice && singleOffice
-            ? [singleOffice]
-            : [],
+      officeIds: [],
+      managedOfficeIds: isGN ? selectedManagedOfficeIds : [],
       ownerId: requiresOwner ? ownerIdToSend : null,
       seniorId: showSenior
         ? currentUserRole === Role.GERENTE_SENIOR
@@ -367,18 +349,19 @@ export default function UserDrawer({
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Escritórios</label>
                 <select
                   multiple
-                  value={selectedOffices}
+                  value={selectedManagedOfficeIds}
                   onChange={(event) => {
-                    const values = Array.from(event.target.selectedOptions).map(
-                      (option) => option.value as Office
-                    );
-                    setSelectedOffices(values);
+                    const values = Array.from(event.target.selectedOptions).map((option) => option.value);
+                    setSelectedManagedOfficeIds(values);
+                    if (!selectedOfficeId && values.length) {
+                      setSelectedOfficeId(values[0]);
+                    }
                   }}
                   className="w-full bg-black border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-neon-blue focus:ring-1 focus:ring-neon-blue outline-none transition-all"
                 >
-                  {officeOptions.map((officeCode) => (
-                    <option key={officeCode} value={officeCode} className="bg-slate-900 text-white">
-                      {officeCode}
+                  {offices.map((officeOption) => (
+                    <option key={officeOption.id} value={officeOption.id} className="bg-slate-900 text-white">
+                      {officeOption.name} ({officeOption.code})
                     </option>
                   ))}
                 </select>
