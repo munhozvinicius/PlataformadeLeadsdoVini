@@ -50,7 +50,7 @@ export async function POST(req: Request) {
   const campanhaNome = formData.get("campanhaNome") as string | null;
   const campanhaTipoRaw = (formData.get("campanhaTipo") as string | null)?.toUpperCase().trim();
   const campanhaTipo =
-    campanhaTipoRaw === "VISAO_PARQUE" ? CampaignType.VISAO_PARQUE : CampaignType.COCKPIT;
+    campanhaTipoRaw === "MAPA_PARQUE" ? CampaignType.MAPA_PARQUE : CampaignType.COCKPIT;
   const originalFileName = file?.name ?? "arquivo.xlsx";
 
   if (!file) {

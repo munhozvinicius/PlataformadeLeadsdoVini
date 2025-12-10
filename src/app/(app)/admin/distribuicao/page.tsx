@@ -54,7 +54,7 @@ export default function DistribuicaoPage() {
   const [newCampGN, setNewCampGN] = useState("");
   const [newCampGS, setNewCampGS] = useState("");
   const [newCampOwner, setNewCampOwner] = useState("");
-  const [newCampTipo, setNewCampTipo] = useState<"COCKPIT" | "VISAO_PARQUE">("COCKPIT");
+  const [newCampTipo, setNewCampTipo] = useState<"COCKPIT" | "MAPA_PARQUE">("COCKPIT");
   const [selectedOfficeIds, setSelectedOfficeIds] = useState<string[]>([]);
   const [campaignFile, setCampaignFile] = useState<File | null>(null);
   const [creating, setCreating] = useState(false);
@@ -608,10 +608,10 @@ export default function DistribuicaoPage() {
                 <select
                   className="w-full bg-black/30 border border-white/20 rounded-lg px-3 py-3 text-white focus:border-neon-blue outline-none text-sm"
                   value={newCampTipo}
-                  onChange={e => setNewCampTipo(e.target.value as "COCKPIT" | "VISAO_PARQUE")}
+                  onChange={e => setNewCampTipo(e.target.value as "COCKPIT" | "MAPA_PARQUE")}
                 >
                   <option value="COCKPIT">Cockpit</option>
-                  <option value="VISAO_PARQUE">Base Visão Parque</option>
+                  <option value="MAPA_PARQUE">Base Visão Parque</option>
                 </select>
               </div>
             </div>

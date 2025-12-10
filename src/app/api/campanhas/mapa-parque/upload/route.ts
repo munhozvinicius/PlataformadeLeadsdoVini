@@ -96,7 +96,7 @@ export async function POST(req: Request) {
                     createdById: session.user.id,
                     totalLeads: jsonData.length,
                     remainingLeads: jsonData.length,
-                    tipo: CampaignType.VISAO_PARQUE,
+                    tipo: CampaignType.MAPA_PARQUE,
                     officeRecords: {
                         connect: officeIds.map(id => ({ id }))
                     }
