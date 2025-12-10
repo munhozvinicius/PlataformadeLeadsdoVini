@@ -173,7 +173,7 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
     return NextResponse.json({ message: "Sessão inválida" }, { status: 401 });
   }
 
-  const managedOfficeIds = sessionRole === Role.GERENTE_NEGOCIOS ? await getManagedOfficeIds(session.user.id) : [];
+  const sessionManagedOfficeIds = sessionRole === Role.GERENTE_NEGOCIOS ? await getManagedOfficeIds(session.user.id) : [];
 
   if (!canManageUsers(sessionRole)) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -184,7 +184,7 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
       sessionRole,
       sessionUser.id,
       extractOfficeCodes(sessionUser.offices),
-      managedOfficeIds,
+      sessionManagedOfficeIds,
       {
         id: targetUser.id,
         role: targetUser.role,
