@@ -166,7 +166,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     const now = computeLastActivityDate();
-    await prisma.$transaction(
+    await Promise.all(
       updates.map((entry) =>
         prisma.lead.updateMany({
           where: { id: { in: entry.leadIds } },

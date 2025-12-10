@@ -41,6 +41,7 @@ export default function CampaignManagementPage() {
     dataInicio: "",
     dataFim: "",
     office: "",
+    tipo: "COCKPIT",
   });
 
   useEffect(() => {
@@ -85,6 +86,7 @@ export default function CampaignManagementPage() {
       dataInicio: "",
       dataFim: "",
       office: "",
+      tipo: "COCKPIT",
     });
     await loadCampaigns();
   }
@@ -171,6 +173,17 @@ export default function CampaignManagementPage() {
               onChange={(e) => setCampaignForm((prev) => ({ ...prev, dataFim: e.target.value }))}
               className="w-full rounded-lg border px-3 py-2 text-sm"
             />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-slate-600">Tipo de campanha</label>
+            <select
+              value={campaignForm.tipo}
+              onChange={(e) => setCampaignForm((prev) => ({ ...prev, tipo: e.target.value }))}
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+            >
+              <option value="COCKPIT">Cockpit</option>
+              <option value="VISAO_PARQUE">Base Visão Parque</option>
+            </select>
           </div>
         </div>
         <button

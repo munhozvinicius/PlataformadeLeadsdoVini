@@ -54,6 +54,7 @@ export default function DistribuicaoPage() {
   const [newCampGN, setNewCampGN] = useState("");
   const [newCampGS, setNewCampGS] = useState("");
   const [newCampOwner, setNewCampOwner] = useState("");
+  const [newCampTipo, setNewCampTipo] = useState<"COCKPIT" | "VISAO_PARQUE">("COCKPIT");
   const [selectedOfficeIds, setSelectedOfficeIds] = useState<string[]>([]);
   const [campaignFile, setCampaignFile] = useState<File | null>(null);
   const [creating, setCreating] = useState(false);
@@ -158,6 +159,7 @@ export default function DistribuicaoPage() {
       formData.append("gsId", newCampGS);
       formData.append("ownerId", newCampOwner);
       selectedOfficeIds.forEach(id => formData.append("officeIds", id));
+      formData.append("tipo", newCampTipo);
       formData.append("file", campaignFile);
 
       const res = await fetch("/api/campanhas", {
@@ -171,6 +173,7 @@ export default function DistribuicaoPage() {
         setNewCampName("");
         setCampaignFile(null);
         setSelectedOfficeIds([]);
+        setNewCampTipo("COCKPIT");
         // Refresh Dashboard
         loadInfo();
         setActiveTab("dashboard");
@@ -593,6 +596,17 @@ export default function DistribuicaoPage() {
                 >
                   <option value="">Selecione...</option>
                   {usersOwner.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase text-slate-500">Tipo de Campanha</label>
+                <select
+                  className="w-full bg-black/30 border border-white/20 rounded-lg px-3 py-3 text-white focus:border-neon-blue outline-none text-sm"
+                  value={newCampTipo}
+                  onChange={e => setNewCampTipo(e.target.value as "COCKPIT" | "VISAO_PARQUE")}
+                >
+                  <option value="COCKPIT">Cockpit</option>
+                  <option value="VISAO_PARQUE">Base Visão Parque</option>
                 </select>
               </div>
             </div>

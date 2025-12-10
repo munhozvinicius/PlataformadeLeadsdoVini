@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Role, Prisma, LeadStatus } from "@prisma/client";
+import { Role, Prisma, LeadStatus, CampaignType } from "@prisma/client";
 import * as XLSX from "xlsx";
 
 function stringOrEmpty(value: unknown) {
@@ -44,6 +44,8 @@ export async function POST(req: Request) {
         const gsId = formData.get("gsId") as string;
         const ownerId = formData.get("ownerId") as string;
         const file = formData.get("file") as File;
+        const tipoRaw = (formData.get("tipo") as string | null)?.trim().toUpperCase();
+        const tipo = tipoRaw === "VISAO_PARQUE" ? CampaignType.VISAO_PARQUE : CampaignType.COCKPIT;
 
         if (!nome) {
             return NextResponse.json({ message: "Nome da campanha é obrigatório" }, { status: 400 });
@@ -58,6 +60,7 @@ export async function POST(req: Request) {
             assignedLeads: 0,
             remainingLeads: 0,
             totalLeads: 0,
+            tipo,
         };
 
         if (gnId) campaignData.gnId = gnId;
@@ -85,17 +88,20 @@ export async function POST(req: Request) {
                 },
             });
         } else {
-            // If updating, should we merge offices?
-            if (officeIds.length > 0) {
-                await prisma.campanha.update({
-                    where: { id: campanha.id },
-                    data: {
-                        officeRecords: {
-                            connect: officeIds.map(id => ({ id }))
-                        }
-                    }
-                });
-            }
+            // Update tipo and optionally connect offices
+            await prisma.campanha.update({
+                where: { id: campanha.id },
+                data: {
+                    tipo,
+                    ...(officeIds.length > 0
+                        ? {
+                              officeRecords: {
+                                  connect: officeIds.map(id => ({ id }))
+                              }
+                          }
+                        : {}),
+                }
+            });
         }
 
         let importedCount = 0;

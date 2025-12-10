@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Role } from "@prisma/client";
+import { Role, CampaignType } from "@prisma/client";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -53,12 +53,13 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { nome, descricao, objetivo, vertical, dataInicio, dataFim, office } = body;
+  const { nome, descricao, objetivo, vertical, dataInicio, dataFim, office, tipo } = body;
   if (!nome) return NextResponse.json({ message: "Nome é obrigatório" }, { status: 400 });
 
   const campaign = await prisma.campanha.create({
     data: {
       nome,
+      tipo: tipo === "VISAO_PARQUE" ? CampaignType.VISAO_PARQUE : CampaignType.COCKPIT,
       descricao: descricao || null,
       objetivo: objetivo || null,
       vertical: vertical || null,

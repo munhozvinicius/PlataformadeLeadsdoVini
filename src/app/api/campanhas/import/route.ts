@@ -7,7 +7,7 @@ import * as XLSX from "xlsx";
 import { unzipSync } from "fflate";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Role, LeadStatus } from "@prisma/client";
+import { Role, LeadStatus, CampaignType } from "@prisma/client";
 
 function stringOrEmpty(value: unknown) {
   if (value === undefined || value === null) return "";
@@ -48,6 +48,9 @@ export async function POST(req: Request) {
   const multiConsultants = formData.getAll("multiConsultants[]").filter(Boolean) as string[];
   const campanhaId = formData.get("campanhaId") as string | null;
   const campanhaNome = formData.get("campanhaNome") as string | null;
+  const campanhaTipoRaw = (formData.get("campanhaTipo") as string | null)?.toUpperCase().trim();
+  const campanhaTipo =
+    campanhaTipoRaw === "VISAO_PARQUE" ? CampaignType.VISAO_PARQUE : CampaignType.COCKPIT;
   const originalFileName = file?.name ?? "arquivo.xlsx";
 
   if (!file) {
@@ -69,9 +72,17 @@ export async function POST(req: Request) {
     });
     if (existing) {
       campanhaIdToUse = existing.id;
+      if (existing.tipo !== campanhaTipo) {
+        await prisma.campanha.update({ where: { id: existing.id }, data: { tipo: campanhaTipo } });
+      }
     } else {
       const created = await prisma.campanha.create({
-        data: { nome: normalizedCampaignName, descricao: normalizedCampaignName, createdById: session.user.id },
+        data: {
+          nome: normalizedCampaignName,
+          descricao: normalizedCampaignName,
+          createdById: session.user.id,
+          tipo: campanhaTipo,
+        },
       });
       campanhaIdToUse = created.id;
     }

@@ -36,6 +36,11 @@ enum LeadStatus {
   PERDIDO
 }
 
+enum CampaignType {
+  COCKPIT
+  VISAO_PARQUE
+}
+
 enum ActivityChannel {
   TELEFONE
   WHATSAPP
@@ -97,6 +102,7 @@ model Campanha {
   regiaoCidade   String?
   observacoes    String?
   status         String?   @default("ATIVA")
+  tipo           CampaignType @default(COCKPIT)
   office         Office?
   officeIDs      String[]  @db.ObjectId
   officeRecords  OfficeRecord[] @relation("CampanhaOffices", fields: [officeIDs], references: [id])
