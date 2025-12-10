@@ -84,7 +84,7 @@ export async function POST(req: Request) {
 
             campanha = await prisma.campanha.update({
                 where: { id: campanha.id },
-                data: { ...dataToUpdate, tipo: CampaignType.VISAO_PARQUE }
+                data: { ...dataToUpdate, tipo: CampaignType.MAPA_PARQUE }
             });
         } else {
             // Create Campaign
