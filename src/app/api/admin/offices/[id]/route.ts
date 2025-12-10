@@ -126,6 +126,31 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
             }
         });
 
+        const postOps: Promise<unknown>[] = [];
+        if (ownerId) {
+            postOps.push(
+                prisma.user.update({
+                    where: { id: ownerId },
+                    data: { officeRecord: { connect: { id: officeId } } },
+                })
+            );
+        }
+        if (businessManagerId) {
+            postOps.push(
+                prisma.managerOffice.upsert({
+                    where: {
+                        managerId_officeRecordId: {
+                            managerId: businessManagerId,
+                            officeRecordId: officeId,
+                        },
+                    },
+                    create: { managerId: businessManagerId, officeRecordId: officeId },
+                    update: {},
+                })
+            );
+        }
+        await Promise.all(postOps);
+
         return NextResponse.json(updated);
 
     } catch (error) {

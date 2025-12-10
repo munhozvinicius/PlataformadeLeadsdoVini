@@ -125,5 +125,29 @@ export async function POST(req: Request) {
   }
 
   const office = await prisma.officeRecord.create({ data });
+
+  // Sync linked users to this office when provided
+  const postOps: Promise<unknown>[] = [];
+  if (body.ownerId) {
+    postOps.push(
+      prisma.user.update({
+        where: { id: body.ownerId },
+        data: { officeRecord: { connect: { id: office.id } } },
+      })
+    );
+  }
+  if (body.businessManagerId && session.user.role !== Role.GERENTE_NEGOCIOS) {
+    postOps.push(
+      prisma.managerOffice.upsert({
+        where: {
+          managerId_officeRecordId: { managerId: body.businessManagerId, officeRecordId: office.id },
+        },
+        create: { managerId: body.businessManagerId, officeRecordId: office.id },
+        update: {},
+      })
+    );
+  }
+  await Promise.all(postOps);
+
   return NextResponse.json(office, { status: 201 });
 }

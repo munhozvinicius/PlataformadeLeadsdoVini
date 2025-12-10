@@ -411,66 +411,66 @@ export function OfficesTab() {
             </div>
 
             {modalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4" onMouseDown={closeModal}>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4" onMouseDown={closeModal}>
                     <div
-                        className="w-full max-w-3xl rounded-xl bg-white p-6 shadow-xl"
+                        className="w-full max-w-3xl rounded-xl bg-pic-dark border border-pic-zinc p-6 shadow-[0_10px_50px_rgba(0,0,0,0.6)]"
                         onMouseDown={(event) => event.stopPropagation()}
                     >
                         <div className="flex items-center justify-between mb-4">
                             <div>
-                                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Escritório</p>
-                                <h3 className="text-xl font-semibold text-slate-900">
+                                <p className="text-[10px] uppercase tracking-[0.25em] text-neon-pink">Escritório</p>
+                                <h3 className="text-2xl font-bold text-white">
                                     {modalMode === "create" ? "Novo escritório" : "Editar escritório"}
                                 </h3>
                             </div>
-                            <button className="text-slate-500 hover:text-slate-900" onClick={closeModal}>
+                            <button className="text-slate-400 hover:text-white" onClick={closeModal}>
                                 Fechar
                             </button>
                         </div>
                         <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-2">
-                                <label className="text-xs text-slate-600">Nome *</label>
+                                <label className="text-xs text-slate-400">Nome *</label>
                                 <input
                                     value={form.name}
                                     onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                                    className="w-full rounded-lg border border-slate-700 bg-black px-3 py-2 text-sm text-white"
                                     placeholder="Ex: Safe TI"
                                 />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-xs text-slate-600">Código</label>
+                                <label className="text-xs text-slate-400">Código</label>
                                 <input
                                     value={form.code}
                                     onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value }))}
-                                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                                    className="w-full rounded-lg border border-slate-700 bg-black px-3 py-2 text-sm text-white"
                                     placeholder="Ex: SAFE_TI"
                                 />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-xs text-slate-600">Região</label>
+                                <label className="text-xs text-slate-400">Região</label>
                                 <input
                                     value={form.region}
                                     onChange={(e) => setForm((prev) => ({ ...prev, region: e.target.value }))}
-                                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                                    className="w-full rounded-lg border border-slate-700 bg-black px-3 py-2 text-sm text-white"
                                     placeholder="Ex: Interior"
                                 />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-xs text-slate-600">UF</label>
+                                <label className="text-xs text-slate-400">UF</label>
                                 <input
                                     value={form.uf}
                                     onChange={(e) => setForm((prev) => ({ ...prev, uf: e.target.value.toUpperCase() }))}
-                                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                                    className="w-full rounded-lg border border-slate-700 bg-black px-3 py-2 text-sm text-white"
                                     placeholder="SP"
                                     maxLength={2}
                                 />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-xs text-slate-600">Cidade</label>
+                                <label className="text-xs text-slate-400">Cidade</label>
                                 <input
                                     value={form.city}
                                     onChange={(e) => setForm((prev) => ({ ...prev, city: e.target.value }))}
-                                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                                    className="w-full rounded-lg border border-slate-700 bg-black px-3 py-2 text-sm text-white"
                                     placeholder="Ribeirão Preto"
                                 />
                             </div>
@@ -480,20 +480,20 @@ export function OfficesTab() {
                                     type="checkbox"
                                     checked={form.active}
                                     onChange={(e) => setForm((prev) => ({ ...prev, active: e.target.checked }))}
-                                    className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                                    className="h-4 w-4 rounded border-slate-600 text-neon-blue focus:ring-neon-blue"
                                 />
-                                <label htmlFor="active" className="text-sm text-slate-700">
+                                <label htmlFor="active" className="text-sm text-slate-200">
                                     Ativo
                                 </label>
                             </div>
                         </div>
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-3 mt-6">
                             <div className="flex flex-col gap-1">
-                                <label className="text-xs font-medium text-slate-500">Gerente Sênior</label>
+                                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Gerente Sênior</label>
                                 <select
                                     value={form.seniorManagerId}
                                     onChange={(e) => setForm((prev) => ({ ...prev, seniorManagerId: e.target.value }))}
-                                    className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100"
+                                    className="h-10 rounded-lg border border-slate-700 bg-black px-3 text-sm outline-none text-white focus:border-neon-blue focus:ring-2 focus:ring-neon-blue/30"
                                 >
                                     <option value="">Nenhum</option>
                                     {seniorManagers.map((user) => (
@@ -505,11 +505,11 @@ export function OfficesTab() {
                             </div>
 
                             <div className="flex flex-col gap-1">
-                                <label className="text-xs font-medium text-slate-500">Gerente de Negócios</label>
+                                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Gerente de Negócios</label>
                                 <select
                                     value={form.businessManagerId}
                                     onChange={(e) => setForm((prev) => ({ ...prev, businessManagerId: e.target.value }))}
-                                    className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100"
+                                    className="h-10 rounded-lg border border-slate-700 bg-black px-3 text-sm outline-none text-white focus:border-neon-blue focus:ring-2 focus:ring-neon-blue/30"
                                 >
                                     <option value="">Nenhum</option>
                                     {businessManagers.map((user) => (
@@ -521,11 +521,11 @@ export function OfficesTab() {
                             </div>
 
                             <div className="flex flex-col gap-1">
-                                <label className="text-xs font-medium text-slate-500">Proprietário</label>
+                                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Proprietário</label>
                                 <select
                                     value={form.ownerId}
                                     onChange={(e) => setForm((prev) => ({ ...prev, ownerId: e.target.value }))}
-                                    className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100"
+                                    className="h-10 rounded-lg border border-slate-700 bg-black px-3 text-sm outline-none text-white focus:border-neon-blue focus:ring-2 focus:ring-neon-blue/30"
                                 >
                                     <option value="">Nenhum</option>
                                     {owners.map((user) => (
@@ -537,28 +537,28 @@ export function OfficesTab() {
                             </div>
                         </div>
                         <div className="mt-4 space-y-2">
-                            <label className="text-xs text-slate-600">Observações</label>
+                            <label className="text-xs text-slate-400">Observações</label>
                             <textarea
                                 value={form.notes}
                                 onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                                className="w-full rounded-lg border border-slate-700 bg-black px-3 py-2 text-sm text-white"
                                 rows={3}
                             />
                         </div>
-                        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+                        {error ? <p className="mt-3 text-sm text-red-400">{error}</p> : null}
                         <div className="mt-6 flex items-center justify-end gap-3">
                             {modalMode === "edit" && editingId ? (
                                 <button
                                     type="button"
                                     onClick={handleDeleteOffice}
-                                    className="mr-auto rounded-full border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                                    className="mr-auto rounded-full border border-red-500/50 px-4 py-2 text-sm font-medium text-red-400 hover:bg-red-900/20"
                                 >
                                     Excluir escritório
                                 </button>
                             ) : null}
                             <button
                                 onClick={closeModal}
-                                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                                className="rounded-lg border border-slate-700 bg-black px-4 py-2 text-sm font-semibold text-slate-200 hover:border-neon-blue"
                                 type="button"
                             >
                                 Cancelar
@@ -566,7 +566,7 @@ export function OfficesTab() {
                             <button
                                 onClick={submitOffice}
                                 disabled={submitting}
-                                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                                className="rounded-lg bg-neon-blue px-4 py-2 text-sm font-bold text-black hover:scale-[1.02] transition-transform disabled:opacity-50"
                                 type="button"
                             >
                                 {submitting ? "Salvando..." : "Salvar"}
