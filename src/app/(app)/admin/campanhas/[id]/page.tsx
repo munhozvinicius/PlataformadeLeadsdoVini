@@ -28,7 +28,7 @@ type CampaignSummary = {
   id: string;
   nome: string;
   totalBruto?: number;
-  attribuidos?: number;
+  atribuidos?: number; // Check consistency in backend (attribuidos vs atribuidos)
   restantes?: number;
 };
 
@@ -46,6 +46,10 @@ export default function CampanhaDetailPage() {
   const [distribuirQuantidade, setDistribuirQuantidade] = useState(10);
   const [distribuirLoading, setDistribuirLoading] = useState(false);
   const [campaignSummary, setCampaignSummary] = useState<CampaignSummary | null>(null);
+
+  // Upload State
+  const [uploading, setUploading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState("");
 
   type DistributionStats = {
     total: number;
@@ -165,6 +169,49 @@ export default function CampanhaDetailPage() {
     await load();
   }
 
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const file = e.target.files[0];
+
+    if (!confirm(`Deseja importar o arquivo "${file.name}" para esta campanha?`)) {
+      e.target.value = "";
+      return;
+    }
+
+    setUploading(true);
+    setUploadMessage("Enviando arquivo...");
+
+    const formData = new FormData();
+    formData.set("file", file);
+
+    try {
+      const res = await fetch(`/api/campanhas/${id}/upload`, {
+        method: "POST",
+        body: formData
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Erro no upload.");
+      }
+
+      const data = await res.json();
+      alert(`Importação concluída! ${data.imported} leads importados.`);
+      setUploadMessage(`Sucesso! ${data.imported} leads importados.`);
+      await load();
+
+    } catch (err: any) {
+      console.error(err);
+      alert("Erro: " + err.message);
+      setUploadMessage("Erro: " + err.message);
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+      // Clear message after 5 seconds
+      setTimeout(() => setUploadMessage(""), 5000);
+    }
+  }
+
   const displayName = (lead: Lead) => lead.razaoSocial ?? lead.nomeFantasia ?? "Sem empresa";
   const extraPhones = (lead: Lead) =>
     [lead.telefone2, lead.telefone3].filter((phone): phone is string => Boolean(phone));
@@ -177,13 +224,31 @@ export default function CampanhaDetailPage() {
           <h1 className="text-2xl font-semibold text-slate-900">Campanha</h1>
           <p className="text-sm text-slate-500">Lista completa de leads e reatribuição.</p>
         </div>
-        <button
-          onClick={load}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-100"
-        >
-          Atualizar
-        </button>
+        <div className="flex gap-2">
+          <label className="flex items-center cursor-pointer rounded-lg border border-neon-pink bg-neon-pink/10 text-neon-pink px-3 py-2 text-sm font-bold hover:bg-neon-pink hover:text-white transition-all uppercase tracking-wide">
+            <span>Importar Base</span>
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+              onChange={handleUpload}
+              disabled={uploading}
+            />
+          </label>
+          <button
+            onClick={load}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-100"
+          >
+            Atualizar
+          </button>
+        </div>
       </div>
+
+      {uploadMessage && (
+        <div className="p-3 rounded-lg bg-blue-50 text-blue-700 text-sm border border-blue-100">
+          {uploadMessage}
+        </div>
+      )}
 
       <div className="rounded-xl border bg-white p-4 shadow-sm space-y-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">

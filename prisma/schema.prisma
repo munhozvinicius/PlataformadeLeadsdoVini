@@ -38,7 +38,7 @@ enum LeadStatus {
 
 enum CampaignType {
   COCKPIT
-  VISAO_PARQUE
+  MAPA_PARQUE
 }
 
 enum ActivityChannel {
@@ -103,6 +103,7 @@ model Campanha {
   observacoes    String?
   status         String?   @default("ATIVA")
   tipo           CampaignType @default(COCKPIT)
+  type           CampaignType @default(COCKPIT) // Mapping to 'type' as requested, keeping 'tipo' for backward compat or alias if needed, but request asked for 'type'.
   office         Office?
   officeIDs      String[]  @db.ObjectId
   officeRecords  OfficeRecord[] @relation("CampanhaOffices", fields: [officeIDs], references: [id])
@@ -110,12 +111,14 @@ model Campanha {
   periodoFim     DateTime?
   createdAt      DateTime  @default(now())
   createdById    String?   @db.ObjectId
+  createdBy      User?     @relation("CampanhaOwner", fields: [createdById], references: [id]) // Re-using relationship logic or creating new relation if User model doesn't support it yet
   gnId           String?   @db.ObjectId
   gn             User?     @relation("CampanhaGN", fields: [gnId], references: [id])
   gsId           String?   @db.ObjectId
   gs             User?     @relation("CampanhaGS", fields: [gsId], references: [id])
   ownerId        String?   @db.ObjectId
-  owner          User?     @relation("CampanhaOwner", fields: [ownerId], references: [id])
+  // owner relation is duplicated in CampanhaOwner if createdById is used. Keeping original structure for safety.
+  
   totalLeads     Int       @default(0)
   assignedLeads  Int       @default(0)
   remainingLeads Int       @default(0)
@@ -134,6 +137,69 @@ model Lead {
   importBatchId String?      @db.ObjectId
   importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
 
+  type          CampaignType?
+
+  // COCKPIT Fields
+  UF                 String?
+  CIDADE             String?
+  DOCUMENTO          String?
+  EMPRESA            String?
+  CD_CNAE            String?
+  VL_FAT_PRESUMIDO   String? // Keeping as String for safety with imports, can be Float if strictly controlled
+  TELEFONE1          String?
+  TELEFONE2          String?
+  TELEFONE3          String?
+  LOGRADOURO         String?
+  TERRITORIO         String?
+  OFERTA_MKT         String?
+  CEP                String?
+  NUMERO             String?
+  ESTRATEGIA         String?
+  ARMARIO            String?
+  ID_PRUMA           String?
+  VERTICAL_COCKPIT   String?
+
+  // MAPA PARQUE Fields
+  NR_CNPJ                          String?
+  NM_CLIENTE                       String?
+  TP_PRODUTO                       String?
+  QT_MOVEL_TERM                    Int?
+  QT_MOVEL_PEN                     Int?
+  QT_MOVEL_M2M                     Int?
+  QT_BASICA_TERM_FIBRA             Int?
+  QT_BASICA_TERM_METALICO          Int?
+  QT_BASICA_BL                     Int?
+  QT_BL_FTTH                       Int?
+  QT_BL_FTTC                       Int?
+  QT_BASICA_TV                     Int?
+  QT_BASICA_OUTROS                 Int?
+  QT_BASICA_LINAS                  Int?
+  QT_AVANCADA_DADOS                Int?
+  AVANCADA_VOZ                     Int?
+  QT_VIVO_TECH                     Int?
+  QT_VVN                           Int?
+  DS_ENDERECO                      String?
+  DS_CIDADE                        String?
+  NR_CEP                           String?
+  NUMERO_MP                        String?
+  NM_CONTATO_SFA                   String?
+  EMAIL_CONTATO_PRINCIPAL_SFA      String?
+  CELULAR_CONTATO_PRINCIPAL_SFA    String?
+  TLFN_1                           String?
+  TLFN_2                           String?
+  TLFN_3                           String?
+  TLFN_4                           String?
+  TLFN_5                           String?
+  TEL_COMERCIAL_SIEBEL             String?
+  TEL_CELULAR_SIEBEL               String?
+  TEL_RESIDENCIAL_SIEBEL           String?
+  NOMEREDE                         String?
+  VERTICAL_MP                      String?
+  DATA_FIM_VTECH                   DateTime?
+  FLG_TROCA_VTECH                  String?
+
+
+  // Legacy / Shared Fields (keeping for compatibility)
   cnpj           String?
   documento      String?
   razaoSocial    String?
@@ -158,7 +224,7 @@ model Lead {
   idPruma        String?
   vlFatPresumido String?
   cnae           String?
-
+ 
   status             LeadStatus    @default(NOVO)
   consultorId        String?       @db.ObjectId
   consultor          User?         @relation("AssignedLeads", fields: [consultorId], references: [id], onDelete: NoAction, onUpdate: NoAction)

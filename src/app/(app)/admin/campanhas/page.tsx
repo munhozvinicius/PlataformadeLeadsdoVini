@@ -55,10 +55,10 @@ export default function CampanhasPage() {
         </div>
         <div className="flex gap-2">
           <Link
-            href="/admin/campanhas/nova-mapa-parque"
+            href="/admin/campanhas/nova"
             className="rounded-lg border border-neon-pink bg-neon-pink/10 text-neon-pink px-3 py-2 text-sm font-bold hover:bg-neon-pink hover:text-white transition-all uppercase tracking-wide"
           >
-            + Mapa Parque
+            + Nova Campanha
           </Link>
           <button
             onClick={load}
