@@ -1,11 +1,11 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Role, Prisma, LeadStatus, CampaignType } from "@prisma/client";
+import { Prisma, LeadStatus, CampaignType } from "@prisma/client";
 import * as XLSX from "xlsx";
 
 function stringOrEmpty(value: unknown) {
@@ -33,10 +33,10 @@ function firstNonEmpty(...values: (string | undefined)[]) {
     return values.find((value) => value && value.length > 0) ?? "";
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
     try {
         const session = await getServerSession(authOptions);
-        if (!session?.user || session.user.role === Role.CONSULTOR) {
+        if (!session?.user) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
         }
 
