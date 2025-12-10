@@ -6,8 +6,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Office, Role, Profile, Prisma } from "@prisma/client";
-import { canManageUsers } from "@/lib/authRoles";
-import { assignUserOffices, normalizeOfficeCodes, hasOfficeOverlap } from "@/lib/userOffice";
+import { canManageUserRole, canManageUsers } from "@/lib/authRoles";
+import { assignUserOffices, normalizeOfficeCodes, hasOfficeOverlap, getManagedOfficeIds } from "@/lib/userOffice";
 
 const USER_SELECT = {
   id: true,
@@ -32,29 +32,41 @@ function extractOwnerOffices(owner?: { offices?: { office: Office }[] }): Office
 }
 
 function canAccessTarget(
-  role: Role,
+  sessionRole: Role,
   sessionUserId: string,
   sessionOffices: Office[],
+  managedOfficeIds: string[],
   targetUser: {
     id: string;
+    role: Role;
     ownerId?: string | null;
+    officeRecordId?: string | null;
     offices: { office: Office }[];
-    owner?: { offices?: { office: Office }[] } | null;
+    owner?: { offices?: { office: Office }[]; officeRecordId?: string | null } | null;
   }
 ): boolean {
   const targetOffices = extractOfficeCodes(targetUser.offices);
-  if (role === Role.MASTER || role === Role.GERENTE_SENIOR) {
-    return true;
+  const inManagedOffice =
+    (targetUser.officeRecordId && managedOfficeIds.includes(targetUser.officeRecordId)) ||
+    (targetUser.owner?.officeRecordId && managedOfficeIds.includes(targetUser.owner.officeRecordId));
+
+  if (sessionRole === Role.MASTER) return true;
+  if (sessionRole === Role.GERENTE_SENIOR) {
+    return targetUser.role !== Role.MASTER;
   }
-  if (role === Role.GERENTE_NEGOCIOS) {
-    if (hasOfficeOverlap(sessionOffices, targetOffices)) return true;
+  if (sessionRole === Role.GERENTE_NEGOCIOS) {
+    if (targetUser.id === sessionUserId) return true;
+    const allowedRoles = [Role.PROPRIETARIO, Role.CONSULTOR];
+    if (!allowedRoles.includes(targetUser.role)) return false;
+    if (inManagedOffice) return true;
     const ownerOffices = extractOwnerOffices(targetUser.owner ?? undefined);
-    return hasOfficeOverlap(sessionOffices, ownerOffices);
+    return hasOfficeOverlap(sessionOffices, targetOffices) || hasOfficeOverlap(sessionOffices, ownerOffices);
   }
-  if (role === Role.PROPRIETARIO) {
-    return targetUser.id === sessionUserId || targetUser.ownerId === sessionUserId;
+  if (sessionRole === Role.PROPRIETARIO) {
+    if (targetUser.id === sessionUserId) return true;
+    return targetUser.ownerId === sessionUserId && targetUser.role === Role.CONSULTOR;
   }
-  if (role === Role.CONSULTOR) {
+  if (sessionRole === Role.CONSULTOR) {
     return targetUser.id === sessionUserId;
   }
   return false;
@@ -78,7 +90,8 @@ export async function GET(req: Request, { params }: { params: { id?: string } })
   const targetUser = await prisma.user.findUnique({
     where: { id: targetId },
     include: {
-      owner: { include: { offices: { select: { office: true } } } },
+      owner: { include: { offices: { select: { office: true } }, officeRecord: { select: { id: true } } } },
+      officeRecord: { select: { id: true } },
       offices: { select: { office: true } },
     },
   });
@@ -98,7 +111,26 @@ export async function GET(req: Request, { params }: { params: { id?: string } })
     return NextResponse.json({ message: "Sessão inválida" }, { status: 401 });
   }
 
-  if (!canAccessTarget(sessionRole, sessionUser.id, extractOfficeCodes(sessionUser.offices), targetUser)) {
+  const managedOfficeIds = sessionRole === Role.GERENTE_NEGOCIOS ? await getManagedOfficeIds(session.user.id) : [];
+
+  if (
+    !canAccessTarget(
+      sessionRole,
+      sessionUser.id,
+      extractOfficeCodes(sessionUser.offices),
+      managedOfficeIds,
+      {
+        id: targetUser.id,
+        role: targetUser.role,
+        ownerId: targetUser.ownerId,
+        officeRecordId: targetUser.officeRecord?.id ?? null,
+        offices: targetUser.offices,
+        owner: targetUser.owner
+          ? { offices: targetUser.owner.offices, officeRecordId: targetUser.owner.officeRecord?.id ?? null }
+          : undefined,
+      }
+    )
+  ) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
   }
 
@@ -124,7 +156,8 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
   const targetUser = await prisma.user.findUnique({
     where: { id: targetId },
     include: {
-      owner: { include: { offices: { select: { office: true } } } },
+      owner: { include: { offices: { select: { office: true } }, officeRecord: { select: { id: true } } } },
+      officeRecord: { select: { id: true } },
       offices: { select: { office: true } },
     },
   });
@@ -140,11 +173,30 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
     return NextResponse.json({ message: "Sessão inválida" }, { status: 401 });
   }
 
+  const managedOfficeIds = sessionRole === Role.GERENTE_NEGOCIOS ? await getManagedOfficeIds(session.user.id) : [];
+
   if (!canManageUsers(sessionRole)) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  if (!canAccessTarget(sessionRole, sessionUser.id, extractOfficeCodes(sessionUser.offices), targetUser)) {
+  if (
+    !canAccessTarget(
+      sessionRole,
+      sessionUser.id,
+      extractOfficeCodes(sessionUser.offices),
+      managedOfficeIds,
+      {
+        id: targetUser.id,
+        role: targetUser.role,
+        ownerId: targetUser.ownerId,
+        officeRecordId: targetUser.officeRecord?.id ?? null,
+        offices: targetUser.offices,
+        owner: targetUser.owner
+          ? { offices: targetUser.owner.offices, officeRecordId: targetUser.owner.officeRecord?.id ?? null }
+          : undefined,
+      }
+    )
+  ) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
   }
 
@@ -158,6 +210,14 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
   const updates: Prisma.UserUpdateInput = {};
   const finalRole = (role ?? targetUser.role) as Role;
   const targetOfficeRecordId = officeRecordId ?? targetUser.officeRecordId ?? null;
+  const isSelf = targetUser.id === session.user.id;
+
+  if (!canManageUserRole(sessionRole, targetUser.role, isSelf)) {
+    return NextResponse.json({ message: "Sem permissão para este usuário" }, { status: 403 });
+  }
+  if (role && !canManageUserRole(sessionRole, role, isSelf)) {
+    return NextResponse.json({ message: "Sem permissão para alterar para este perfil" }, { status: 403 });
+  }
 
   if (name) updates.name = name;
   if (email) updates.email = email;
@@ -175,6 +235,12 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
   if (finalRole === Role.GERENTE_NEGOCIOS && normalizedOfficeIds.length) {
     officesToAssign = normalizedOfficeIds;
     updates.office = normalizedOfficeIds[0];
+  }
+
+  if (finalRole === Role.PROPRIETARIO && sessionRole === Role.GERENTE_NEGOCIOS) {
+    if (!targetOfficeRecordId || !managedOfficeIds.includes(targetOfficeRecordId)) {
+      return NextResponse.json({ message: "GN só pode gerenciar proprietário dos seus escritórios" }, { status: 403 });
+    }
   }
 
   if (finalRole === Role.PROPRIETARIO && normalizedOfficeIds.length) {
@@ -195,6 +261,14 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
     });
     if (!owner || owner.role !== Role.PROPRIETARIO) {
       return NextResponse.json({ message: "Proprietário inválido" }, { status: 400 });
+    }
+    if (sessionRole === Role.GERENTE_NEGOCIOS) {
+      if (!targetOfficeRecordId || !managedOfficeIds.includes(targetOfficeRecordId)) {
+        return NextResponse.json({ message: "GN só pode gerenciar consultor de seus escritórios" }, { status: 403 });
+      }
+      if (owner.officeRecordId && !managedOfficeIds.includes(owner.officeRecordId)) {
+        return NextResponse.json({ message: "GN só pode associar consultor a proprietário do seu escritório" }, { status: 403 });
+      }
     }
     if (!targetOfficeRecordId) {
       return NextResponse.json({ message: "Consultor precisa de um escritório" }, { status: 400 });

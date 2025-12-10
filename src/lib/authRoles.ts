@@ -53,5 +53,24 @@ export function canAccessBoard(role?: RoleLike) {
 }
 
 export function canManageUsers(role?: RoleLike) {
-  return canAccessAdmin(role);
+  return isMaster(role) || isGerenteSenior(role) || isGerenteNegocios(role) || isProprietario(role);
+}
+
+export function canManageUserRole(sessionRole: RoleLike, targetRole: RoleLike, isSelf = false) {
+  if (isMaster(sessionRole)) return true;
+  if (isGerenteSenior(sessionRole)) return toRoleString(targetRole) !== AppRole.MASTER;
+  if (isGerenteNegocios(sessionRole)) {
+    const allowed = [AppRole.PROPRIETARIO, AppRole.CONSULTOR];
+    if (isSelf) return true;
+    return allowed.includes(toRoleString(targetRole) as AppRole);
+  }
+  if (isProprietario(sessionRole)) {
+    if (isSelf) return true;
+    return toRoleString(targetRole) === AppRole.CONSULTOR;
+  }
+  return false;
+}
+
+export function canManageOffices(role?: RoleLike) {
+  return isMaster(role) || isGerenteSenior(role) || isGerenteNegocios(role);
 }

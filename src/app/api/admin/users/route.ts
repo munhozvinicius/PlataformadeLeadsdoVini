@@ -6,8 +6,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Office, Role, Profile, Prisma } from "@prisma/client";
-import { canManageUsers, isProprietario } from "@/lib/authRoles";
-import { assignUserOffices, buildUsersFilter, getUserOfficeCodes, normalizeOfficeCodes } from "@/lib/userOffice";
+import { canManageUsers, canManageUserRole, isProprietario } from "@/lib/authRoles";
+import { assignUserOffices, buildUsersFilter, getUserOfficeCodes, normalizeOfficeCodes, getManagedOfficeIds } from "@/lib/userOffice";
 
 const USER_SELECT = {
   id: true,
@@ -150,7 +150,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Você não pode criar esse tipo de usuário" }, { status: 403 });
   }
 
-  if (isProprietario(sessionRole) && role !== Role.CONSULTOR) {
+  const targetRole = role as Role;
+  const gnManagedOffices = sessionRole === Role.GERENTE_NEGOCIOS ? await getManagedOfficeIds(session.user.id) : [];
+  if (!canManageUserRole(sessionRole, targetRole, false)) {
+    return NextResponse.json({ message: "Você não tem permissão para criar este perfil" }, { status: 403 });
+  }
+
+  if (isProprietario(sessionRole) && targetRole !== Role.CONSULTOR) {
     return NextResponse.json({ message: "Proprietário só pode criar consultores" }, { status: 403 });
   }
 
@@ -168,6 +174,14 @@ export async function POST(req: Request) {
     const owner = await prisma.user.findUnique({ where: { id: targetOwnerId } });
     if (!owner || owner.role !== Role.PROPRIETARIO) {
       return NextResponse.json({ message: "Proprietário inválido" }, { status: 400 });
+    }
+    if (sessionRole === Role.GERENTE_NEGOCIOS) {
+      if (!targetOfficeRecordId || !gnManagedOffices.includes(targetOfficeRecordId)) {
+        return NextResponse.json({ message: "GN só pode criar consultor em seus escritórios" }, { status: 403 });
+      }
+      if (owner.officeRecordId && !gnManagedOffices.includes(owner.officeRecordId)) {
+        return NextResponse.json({ message: "GN só pode associar consultor a proprietário do seu escritório" }, { status: 403 });
+      }
     }
     ownerConnect = { connect: { id: owner.id } };
     if (!targetOfficeRecordId) {
@@ -234,6 +248,11 @@ export async function POST(req: Request) {
     } else if (role === Role.PROPRIETARIO) {
       if (!targetOfficeRecordId && !normalizedOffices.length) {
         return NextResponse.json({ message: "Proprietário precisa de um escritório vinculado" }, { status: 400 });
+      }
+      if (sessionRole === Role.GERENTE_NEGOCIOS) {
+        if (!targetOfficeRecordId || !gnManagedOffices.includes(targetOfficeRecordId)) {
+          return NextResponse.json({ message: "GN só pode criar proprietário em seus escritórios" }, { status: 403 });
+        }
       }
       if (normalizedOffices.length) {
         targetOffices.push(normalizedOffices[0]);

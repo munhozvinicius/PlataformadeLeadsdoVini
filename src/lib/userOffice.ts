@@ -53,8 +53,12 @@ export async function assignManagedOffices(userId: string, officeRecordIds: stri
 }
 
 export async function buildUsersFilter(role: Role, userId: string): Promise<Prisma.UserWhereInput | undefined> {
-  if (role === Role.MASTER || role === Role.GERENTE_SENIOR) {
+  if (role === Role.MASTER) {
     return undefined;
+  }
+  if (role === Role.GERENTE_SENIOR) {
+    // Pode ver todos, exceto MASTER
+    return { role: { not: Role.MASTER } };
   }
   if (role === Role.GERENTE_NEGOCIOS) {
     const managedOfficeIds = await getManagedOfficeIds(userId);
@@ -71,12 +75,23 @@ export async function buildUsersFilter(role: Role, userId: string): Promise<Pris
     const ownerIds = owners.map((owner) => owner.id);
     return {
       OR: [
-        { officeRecordId: { in: managedOfficeIds } },
-        { ownerId: { in: ownerIds } },
+        { id: userId }, // sempre vê a si mesmo
+        {
+          AND: [
+            { role: { in: [Role.PROPRIETARIO, Role.CONSULTOR] } },
+            {
+              OR: [
+                { officeRecordId: { in: managedOfficeIds } },
+                { ownerId: { in: ownerIds } },
+              ]
+            }
+          ]
+        }
       ],
     };
   }
   if (role === Role.PROPRIETARIO) {
+    // Proprietário vê a si e consultores próprios
     return { OR: [{ id: userId }, { ownerId: userId }] };
   }
   return { id: userId };

@@ -66,6 +66,7 @@ export async function POST(req: Request) {
       name,
       // If creator is GN, automatically associate them as a manager
       ...(session.user.role === Role.GERENTE_NEGOCIOS ? {
+        businessManager: { connect: { id: session.user.id } },
         managers: {
           create: { managerId: session.user.id }
         }
