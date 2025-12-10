@@ -103,7 +103,6 @@ export default function UserDrawer({
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   const requiresOwner = ownerRoles.includes(role);
-  const isGS = role === Role.GERENTE_SENIOR;
   const isGN = role === Role.GERENTE_NEGOCIOS;
   const isSingleOffice = role === Role.PROPRIETARIO || role === Role.CONSULTOR;
   const showMultiOffice = isGN;
