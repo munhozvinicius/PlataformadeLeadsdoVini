@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
 
         // 2. Validate Role Permissions for Creation
         const allowedRolesForCreate = ["MASTER", "GERENTE_SENIOR", "GERENTE_NEGOCIOS", "PROPRIETARIO"];
-        if (!allowedRolesForCreate.includes(session.user.role)) {
+        if (!allowedRolesForCreate.includes(session.user.role || "")) {
             return NextResponse.json({ message: "Sem permissão para criar campanha." }, { status: 403 });
         }
 
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
         }
 
         // 4. Validate Office Restriction (GN & Proprietário can only create for their own office)
-        const isRestrictedRole = ["GERENTE_NEGOCIOS", "PROPRIETARIO"].includes(session.user.role);
+        const isRestrictedRole = ["GERENTE_NEGOCIOS", "PROPRIETARIO"].includes(session.user.role || "");
 
         // Assuming session.user.office is the reference enum or value. 
         // Need to ensure type compatibility. If session.user.office is enum, comparison is straight.
