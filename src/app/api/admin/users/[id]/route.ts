@@ -205,7 +205,7 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
   }
 
   const body = await req.json();
-  const { name, email, role, officeIds, ownerId, active, password, officeRecordId } = body;
+  const { name, email, role, officeIds, ownerId, active, password, officeRecordId, managedOfficeIds } = body;
 
   const updates: Prisma.UserUpdateInput = {};
   const finalRole = (role ?? targetUser.role) as Role;
@@ -230,11 +230,17 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
   }
 
   const normalizedOfficeIds = normalizeOfficeCodes(officeIds);
+  const managedOfficeRecordIds = Array.isArray(managedOfficeIds)
+    ? managedOfficeIds.filter((id: unknown): id is string => typeof id === "string" && id.trim().length > 0)
+    : [];
   let officesToAssign: Office[] | null = null;
 
-  if (finalRole === Role.GERENTE_NEGOCIOS && normalizedOfficeIds.length) {
-    officesToAssign = normalizedOfficeIds;
-    updates.office = normalizedOfficeIds[0];
+  if (finalRole === Role.GERENTE_NEGOCIOS) {
+    if (normalizedOfficeIds.length) {
+      officesToAssign = normalizedOfficeIds;
+      updates.office = normalizedOfficeIds[0];
+    }
+    // officeRecordId é prioridade para GN; se managedOfficeRecordIds vierem, atualizamos depois do update.
   }
 
   if (finalRole === Role.PROPRIETARIO && normalizedOfficeIds.length) {
@@ -308,6 +314,13 @@ export async function PATCH(req: Request, { params }: { params: { id?: string } 
 
     if (officesToAssign) {
       await assignUserOffices(targetId, officesToAssign);
+    }
+    if (finalRole === Role.GERENTE_NEGOCIOS && managedOfficeRecordIds.length) {
+      await assignManagedOffices(targetId, managedOfficeRecordIds);
+      await prisma.user.update({
+        where: { id: targetId },
+        data: { officeRecordId: managedOfficeRecordIds[0] },
+      });
     }
 
     return NextResponse.json(updated);
