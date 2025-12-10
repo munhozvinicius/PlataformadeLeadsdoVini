@@ -1,5 +1,7 @@
 
 import { PrismaClient, Role, Profile } from "@prisma/client";
+import * as dotenv from 'dotenv';
+dotenv.config({ path: '.env.script' });
 
 const prisma = new PrismaClient();
 
@@ -15,19 +17,13 @@ async function checkHierarchy() {
 
     const errors: string[] = [];
 
-    // Optional: Check specific user for debugging login
-    const debugEmail = process.env.DEBUG_EMAIL;
-    if (debugEmail) {
-        const debugUser = await prisma.user.findUnique({ where: { email: debugEmail } });
-        if (debugUser) {
-            console.log(`\n[DEBUG] User found: ${debugUser.email}`);
-            console.log(`[DEBUG] Role: ${debugUser.role}`);
-            console.log(`[DEBUG] Hash prefix: ${debugUser.password.substring(0, 7)}...`);
-            console.log(`[DEBUG] Hash length: ${debugUser.password.length}`);
-        } else {
-            console.log(`\n[DEBUG] User ${debugEmail} NOT FOUND.`);
-        }
-    }
+    // List all users to check hashes
+    const allUsers = await prisma.user.findMany({ select: { email: true, role: true, password: true } });
+    console.log(`\n[DEBUG] Found ${allUsers.length} users.`);
+    allUsers.forEach(u => {
+        const prefix = u.password ? u.password.substring(0, 10) : "NO_PASS";
+        console.log(`- ${u.email} [${u.role}]: ${prefix}... (len: ${u.password?.length})`);
+    });
 
     for (const user of users) {
         // Check Role vs Profile consistency
