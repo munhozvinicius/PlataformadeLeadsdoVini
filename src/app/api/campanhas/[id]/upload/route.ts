@@ -50,7 +50,7 @@ export async function POST(
 
         // Validate permissions for distribution/upload (Edit/Interact)
         const allowedRoles = ["MASTER", "GERENTE_SENIOR", "GERENTE_NEGOCIOS", "PROPRIETARIO"];
-        if (!allowedRoles.includes(session.user.role)) {
+        if (!allowedRoles.includes(session.user.role || "")) {
             return NextResponse.json({ message: "Sem permissão para processar bases." }, { status: 403 });
         }
 
@@ -64,11 +64,11 @@ export async function POST(
         }
 
         // Strict Office Check for GN/Proprietario
-        const isRestrictedRole = ["GERENTE_NEGOCIOS", "PROPRIETARIO"].includes(session.user.role);
+        const isRestrictedRole = ["GERENTE_NEGOCIOS", "PROPRIETARIO"].includes(session.user.role || "");
         if (isRestrictedRole) {
             const isOwner = campanha.createdById === session.user.id;
             // Assuming strict office match. If office is enum, we compare directly.
-            const isSameOffice = campanha.office === session.user.office;
+            const isSameOffice = campanha.office === (session.user.office || "");
 
             if (!isOwner && !isSameOffice) {
                 return NextResponse.json({ message: "Acesso negado a esta campanha." }, { status: 403 });
