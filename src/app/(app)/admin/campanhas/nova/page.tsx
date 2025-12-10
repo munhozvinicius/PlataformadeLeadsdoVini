@@ -46,7 +46,7 @@ export default function NovaCampanhaPage() {
                     .catch(err => console.error("Failed to load offices", err));
             } else {
                 // GN/Proprietario: set their office
-                setOffice(session.user.office);
+                setOffice(session?.user?.office || "");
             }
         }
     }, [status, session, router]);
