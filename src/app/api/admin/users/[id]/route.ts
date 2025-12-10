@@ -354,7 +354,8 @@ export async function DELETE(req: Request, { params }: { params: { id?: string }
   const targetUser = await prisma.user.findUnique({
     where: { id: targetId },
     include: {
-      owner: { include: { offices: { select: { office: true } } } },
+      owner: { include: { offices: { select: { office: true } }, officeRecord: { select: { id: true } } } },
+      officeRecord: { select: { id: true } },
       offices: { select: { office: true } },
     },
   });
@@ -370,7 +371,26 @@ export async function DELETE(req: Request, { params }: { params: { id?: string }
     return NextResponse.json({ message: "Sessão inválida" }, { status: 401 });
   }
 
-  if (!canAccessTarget(sessionRole, sessionUser.id, extractOfficeCodes(sessionUser.offices), targetUser)) {
+  const managedOfficeIds = sessionRole === Role.GERENTE_NEGOCIOS ? await getManagedOfficeIds(session.user.id) : [];
+
+  if (
+    !canAccessTarget(
+      sessionRole,
+      sessionUser.id,
+      extractOfficeCodes(sessionUser.offices),
+      managedOfficeIds,
+      {
+        id: targetUser.id,
+        role: targetUser.role,
+        ownerId: targetUser.ownerId,
+        officeRecordId: targetUser.officeRecord?.id ?? null,
+        offices: targetUser.offices,
+        owner: targetUser.owner
+          ? { offices: targetUser.owner.offices, officeRecordId: targetUser.owner.officeRecord?.id ?? null }
+          : undefined,
+      }
+    )
+  ) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
   }
 
