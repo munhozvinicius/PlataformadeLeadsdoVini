@@ -144,6 +144,10 @@ export default function DistribuicaoPage() {
 
   async function handleCreateCampaign(e: React.FormEvent) {
     e.preventDefault();
+    if (!selectedOfficeIds.length) {
+      setCreateMsg("Selecione pelo menos um escritório para a campanha.");
+      return;
+    }
     if (!campaignFile || !newCampName) {
       setCreateMsg("Preencha nome e selecione um arquivo.");
       return;
@@ -164,12 +168,13 @@ export default function DistribuicaoPage() {
 
       const res = await fetch("/api/campanhas", {
         method: "POST",
+        credentials: "include",
         body: formData
       });
 
+      const data = await res.json().catch(() => null);
       if (res.ok) {
-        const data = await res.json();
-        setCreateMsg(`Campanha criada com sucesso! ${data.importedCount} leads importados.`);
+        setCreateMsg(`Campanha criada com sucesso! ${data?.importedCount ?? 0} leads importados.`);
         setNewCampName("");
         setCampaignFile(null);
         setSelectedOfficeIds([]);
@@ -178,7 +183,7 @@ export default function DistribuicaoPage() {
         loadInfo();
         setActiveTab("dashboard");
       } else {
-        setCreateMsg("Erro ao criar campanha.");
+        setCreateMsg(data?.message ?? "Erro ao criar campanha.");
       }
     } catch {
       setCreateMsg("Erro no servidor.");
