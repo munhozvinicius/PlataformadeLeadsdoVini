@@ -15,6 +15,20 @@ async function checkHierarchy() {
 
     const errors: string[] = [];
 
+    // Optional: Check specific user for debugging login
+    const debugEmail = process.env.DEBUG_EMAIL;
+    if (debugEmail) {
+        const debugUser = await prisma.user.findUnique({ where: { email: debugEmail } });
+        if (debugUser) {
+            console.log(`\n[DEBUG] User found: ${debugUser.email}`);
+            console.log(`[DEBUG] Role: ${debugUser.role}`);
+            console.log(`[DEBUG] Hash prefix: ${debugUser.password.substring(0, 7)}...`);
+            console.log(`[DEBUG] Hash length: ${debugUser.password.length}`);
+        } else {
+            console.log(`\n[DEBUG] User ${debugEmail} NOT FOUND.`);
+        }
+    }
+
     for (const user of users) {
         // Check Role vs Profile consistency
         if (user.role !== (user.profile as unknown as Role)) {
