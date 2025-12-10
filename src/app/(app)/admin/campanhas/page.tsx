@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
@@ -19,6 +19,15 @@ export default function CampanhasPage() {
   const router = useRouter();
   const [campaigns, setCampaigns] = useState<CampaignSummary[]>([]);
 
+  const load = useCallback(async () => {
+    const res = await fetch("/api/campanhas/summary", { cache: "no-store" });
+    if (res.ok) {
+      setCampaigns(await res.json());
+    } else {
+      console.error("Failed to load campaigns summary", res.status);
+    }
+  }, []);
+
   useEffect(() => {
     if (status === "authenticated" && session?.user.role === "CONSULTOR") {
       router.replace("/board");
@@ -26,15 +35,16 @@ export default function CampanhasPage() {
   }, [status, session, router]);
 
   useEffect(() => {
-    load();
-  }, []);
-
-  async function load() {
-    const res = await fetch("/api/campanhas/summary", { cache: "no-store" });
-    if (res.ok) {
-      setCampaigns(await res.json());
+    if (status === "authenticated") {
+      load();
     }
-  }
+  }, [status, load]);
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace("/login");
+    }
+  }, [status, router]);
 
   return (
     <div className="space-y-4">
