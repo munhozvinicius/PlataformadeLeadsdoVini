@@ -20,7 +20,7 @@ async function canViewOffice(officeId: string, userId: string, role: Role) {
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
-  if (!session?.user) {
+  if (!session?.user || !session.user.role) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
