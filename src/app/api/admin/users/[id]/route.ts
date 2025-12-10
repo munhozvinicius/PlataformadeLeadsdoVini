@@ -56,7 +56,7 @@ function canAccessTarget(
   }
   if (sessionRole === Role.GERENTE_NEGOCIOS) {
     if (targetUser.id === sessionUserId) return true;
-    const allowedRoles = [Role.PROPRIETARIO, Role.CONSULTOR];
+    const allowedRoles: Role[] = [Role.PROPRIETARIO, Role.CONSULTOR];
     if (!allowedRoles.includes(targetUser.role)) return false;
     if (inManagedOffice) return true;
     const ownerOffices = extractOwnerOffices(targetUser.owner ?? undefined);
