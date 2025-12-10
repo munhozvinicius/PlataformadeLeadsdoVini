@@ -27,7 +27,10 @@ async function ensureOffices() {
         data: { code, office: office.office, name: office.name },
       });
     }
-    records[office.office] = record;
+    if (!record) {
+      throw new Error(`Failed to ensure office record for code ${code}`);
+    }
+    records[office.office] = { id: record.id };
   }
   return records;
 }
