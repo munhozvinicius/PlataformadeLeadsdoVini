@@ -38,7 +38,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "Unauthorized (no session)" }, { status: 401 });
     }
 
-    if (!session.user.role || !ALLOWED_ROLES_FOR_CREATE.includes(session.user.role as Role)) {
+    if (!session.user.role) {
+      return NextResponse.json({ message: "Sem permissão para criar campanha." }, { status: 403 });
+    }
+    const role = session.user.role as Role;
+    if (!ALLOWED_ROLES_FOR_CREATE.includes(role)) {
       return NextResponse.json({ message: "Sem permissão para criar campanha." }, { status: 403 });
     }
 
@@ -67,7 +71,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "Usuário não encontrado." }, { status: 404 });
     }
 
-    if (RESTRICTED_ROLES.has(session.user.role as Role) && currentUser.office !== officeValue) {
+    if (RESTRICTED_ROLES.has(role) && currentUser.office !== officeValue) {
       return NextResponse.json({ message: "Você só pode criar campanha para o seu escritório." }, { status: 403 });
     }
 
