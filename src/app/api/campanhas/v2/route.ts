@@ -105,7 +105,8 @@ export async function POST(req: NextRequest) {
           vertical: stringOrEmpty(normalized["VERTICAL"] || normalized["SETOR"]),
           status: LeadStatus.NOVO,
           isWorked: false,
-          raw: normalized,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          raw: normalized as any,
         });
       }
 
