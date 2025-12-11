@@ -117,7 +117,6 @@ export async function POST(req: NextRequest) {
         for (let i = 0; i < leadsData.length; i += BATCH_SIZE) {
           await prisma.lead.createMany({
             data: leadsData.slice(i, i + BATCH_SIZE),
-            skipDuplicates: true, // Optional: avoid crashing on dupes if valid
           });
         }
         totalLeads = leadsData.length;
