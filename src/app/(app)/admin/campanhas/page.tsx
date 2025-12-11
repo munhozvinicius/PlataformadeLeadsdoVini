@@ -18,6 +18,10 @@ export default function CampanhasPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [campaigns, setCampaigns] = useState<CampaignSummary[]>([]);
+  const canCreateCampaign = Boolean(
+    session?.user?.role &&
+      ["MASTER", "GERENTE_SENIOR", "GERENTE_NEGOCIOS", "PROPRIETARIO"].includes(session.user.role),
+  );
 
   const load = useCallback(async () => {
     const res = await fetch("/api/campanhas/summary", { cache: "no-store" });
@@ -54,12 +58,14 @@ export default function CampanhasPage() {
           <h1 className="text-2xl font-semibold text-slate-900">Campanhas</h1>
         </div>
         <div className="flex gap-2">
-          <Link
-            href="/admin/campanhas/nova"
-            className="rounded-lg border border-neon-pink bg-neon-pink/10 text-neon-pink px-3 py-2 text-sm font-bold hover:bg-neon-pink hover:text-white transition-all uppercase tracking-wide"
-          >
-            + Nova Campanha
-          </Link>
+          {canCreateCampaign && (
+            <Link
+              href="/admin/campanhas/nova"
+              className="rounded-lg border border-neon-pink bg-neon-pink/10 text-neon-pink px-3 py-2 text-sm font-bold hover:bg-neon-pink hover:text-white transition-all uppercase tracking-wide"
+            >
+              + Nova Campanha
+            </Link>
+          )}
           <button
             onClick={load}
             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-100"

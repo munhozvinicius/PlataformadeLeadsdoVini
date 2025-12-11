@@ -26,6 +26,7 @@ enum Profile {
 enum Office {
   SAFE_TI
   JLC_TECH
+  KING
 }
 
 enum LeadStatus {
@@ -102,29 +103,28 @@ model Campanha {
   regiaoCidade   String?
   observacoes    String?
   status         String?   @default("ATIVA")
+  type           CampaignType @default(COCKPIT)
   tipo           CampaignType @default(COCKPIT)
-  type           CampaignType @default(COCKPIT) // Mapping to 'type' as requested, keeping 'tipo' for backward compat or alias if needed, but request asked for 'type'.
-  office         Office?
+  office         Office    @default(SAFE_TI)
   officeIDs      String[]  @db.ObjectId
   officeRecords  OfficeRecord[] @relation("CampanhaOffices", fields: [officeIDs], references: [id])
   periodoInicio  DateTime?
   periodoFim     DateTime?
   createdAt      DateTime  @default(now())
   createdById    String?   @db.ObjectId
-  createdBy      User?     @relation("CampanhaOwner", fields: [createdById], references: [id]) // Re-using relationship logic or creating new relation if User model doesn't support it yet
+  createdBy      User?     @relation("CampanhaOwner", fields: [createdById], references: [id])
   gnId           String?   @db.ObjectId
   gn             User?     @relation("CampanhaGN", fields: [gnId], references: [id])
   gsId           String?   @db.ObjectId
   gs             User?     @relation("CampanhaGS", fields: [gsId], references: [id])
   ownerId        String?   @db.ObjectId
-  // owner relation is duplicated in CampanhaOwner if createdById is used. Keeping original structure for safety.
-  
+
   totalLeads     Int       @default(0)
   assignedLeads  Int       @default(0)
   remainingLeads Int       @default(0)
   isActive       Boolean   @default(true)
 
-  leadsBrutos      Lead[]            @relation("CampanhaLeads")
+  leads       Lead[]            @relation("CampanhaLeads")
   importBatches    ImportBatch[]
   activities       LeadActivity[]
   distributionLogs DistributionLog[] @relation("CampanhaDistributionLogs")
