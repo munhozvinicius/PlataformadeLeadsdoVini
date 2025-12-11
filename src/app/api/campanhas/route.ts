@@ -13,7 +13,7 @@ const ALLOWED_ROLES_FOR_CREATE: Role[] = [
   Role.PROPRIETARIO,
 ];
 
-const RESTRICTED_ROLES = new Set([Role.GERENTE_NEGOCIOS, Role.PROPRIETARIO]);
+const RESTRICTED_ROLES = new Set<Role>([Role.GERENTE_NEGOCIOS, Role.PROPRIETARIO]);
 
 function parseCampaignType(value: unknown): CampaignType | null {
   if (!value) return null;
