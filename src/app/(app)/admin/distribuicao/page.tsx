@@ -7,7 +7,7 @@ import { Users, BarChart3, RefreshCw, FileSpreadsheet, Plus, Trash2, Edit, Datab
 
 // Types
 type User = { id: string; name: string; email: string; role: string; escritorio: string };
-type Office = { id: string; name: string; code: string };
+type Office = { id: string; name: string; code: string; office?: string | null };
 type CampaignSummary = {
   id: string;
   nome: string;
@@ -144,12 +144,15 @@ export default function DistribuicaoPage() {
 
   async function handleCreateCampaign(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedOfficeIds.length) {
-      setCreateMsg("Selecione pelo menos um escritório para a campanha.");
-      return;
-    }
     if (!campaignFile || !newCampName) {
       setCreateMsg("Preencha nome e selecione um arquivo.");
+      return;
+    }
+    const primaryOfficeId = selectedOfficeIds[0];
+    const officeRecord = activeOffices.find((o) => o.id === primaryOfficeId);
+    const officeValue = officeRecord?.office || officeRecord?.code || "";
+    if (!officeValue) {
+      setCreateMsg("Selecione um escritório válido para a campanha.");
       return;
     }
     setCreating(true);
@@ -158,24 +161,24 @@ export default function DistribuicaoPage() {
     try {
       const formData = new FormData();
       formData.append("nome", newCampName);
-      formData.append("descricao", newCampDesc);
-      if (newCampGN) formData.append("gnId", newCampGN);
-      if (newCampGS) formData.append("gsId", newCampGS);
-      if (newCampOwner) formData.append("ownerId", newCampOwner);
-      selectedOfficeIds.forEach(id => formData.append("officeIds", id));
-      formData.append("tipo", newCampTipo);
+      if (newCampDesc) formData.append("descricao", newCampDesc);
+      formData.append("campaignType", newCampTipo);
+      formData.append("office", officeValue);
       formData.append("file", campaignFile);
 
-      const res = await fetch("/api/campanhas", {
+      const res = await fetch("/api/campanhas/v2", {
         method: "POST",
         credentials: "include",
         body: formData
       });
 
       const data = await res.json().catch(() => null);
-      if (res.ok) {
-        setCreateMsg(`Campanha criada com sucesso! ${data?.importedCount ?? 0} leads importados.`);
+      if (res.status === 201) {
+        const imported = typeof data?.totalLeads === "number" ? data.totalLeads : 0;
+        const successMessage = data?.message ?? "Campanha criada com sucesso.";
+        setCreateMsg(`${successMessage} ${imported} leads importados.`);
         setNewCampName("");
+        setNewCampDesc("");
         setCampaignFile(null);
         setSelectedOfficeIds([]);
         setNewCampTipo("COCKPIT");
