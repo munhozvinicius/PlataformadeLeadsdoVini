@@ -1,15 +1,13 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/mongodb";
-import Company from "@/models/Company";
+import { prisma } from "@/lib/prisma";
 import { companyAccessFilter, getSessionUser } from "@/lib/auth-helpers";
-import { Role } from "@prisma/client";
+import { Role, LeadStatus, Prisma } from "@prisma/client";
 
 type Params = { params: { id: string } };
 
 export async function PATCH(req: Request, { params }: Params) {
-  await connectToDatabase();
   const sessionUser = await getSessionUser();
   if (!sessionUser) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -18,24 +16,33 @@ export async function PATCH(req: Request, { params }: Params) {
   const body = await req.json();
   const { stage } = body;
 
-  const filter: Record<string, unknown> = { _id: params.id };
+  const where: Prisma.LeadWhereInput = { id: params.id };
+
   if (sessionUser.role === Role.MASTER) {
     // all good
   } else if (sessionUser.role === Role.PROPRIETARIO) {
-    Object.assign(filter, await companyAccessFilter(sessionUser));
+    Object.assign(where, await companyAccessFilter(sessionUser));
   } else {
-    filter.assignedTo = sessionUser.id;
+    where.consultorId = sessionUser.id;
   }
 
-  const company = await Company.findOne(filter);
+  // Check if lead exists and user has access
+  const company = await prisma.lead.findFirst({ where }); // Using findFirst instead of findUnique because we might filter by extra fields
+
   if (!company) {
     return NextResponse.json({ message: "Not found or unauthorized" }, { status: 404 });
   }
 
+  // Update
   if (stage) {
-    company.stage = stage;
+    const updatedCompany = await prisma.lead.update({
+      where: { id: company.id },
+      data: {
+        status: stage as LeadStatus,
+      },
+    });
+    return NextResponse.json(updatedCompany);
   }
 
-  await company.save();
   return NextResponse.json(company);
 }

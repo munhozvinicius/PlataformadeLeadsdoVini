@@ -1,33 +1,11 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import type { Types } from "mongoose";
-import { connectToDatabase } from "@/lib/mongodb";
+import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth-helpers";
-import Company from "@/models/Company";
-import LeadActivity from "@/models/LeadActivity";
-
-type LastActivity = {
-  channel?: string | null;
-  createdAt?: Date | string;
-};
-
-type LastActivityAgg = { _id: Types.ObjectId; activity: LastActivity };
-type ExportCompany = {
-  _id: Types.ObjectId;
-  empresa?: string;
-  documento?: string;
-  vertical?: string;
-  stage?: string;
-  campaign?: Types.ObjectId;
-  assignedTo?: { name?: string; email?: string };
-  lastActivityAt?: Date | string;
-  lastOutcomeLabel?: string;
-  lastOutcomeNote?: string;
-};
+import { Prisma } from "@prisma/client";
 
 export async function GET(req: Request) {
-  await connectToDatabase();
   const sessionUser = await getSessionUser();
   if (!sessionUser || sessionUser.role !== "MASTER") {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -36,32 +14,52 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const campaignId = searchParams.get("campaignId");
 
-  const filter: Record<string, unknown> = {};
-  if (campaignId) filter.campaign = campaignId;
+  const where: Prisma.LeadWhereInput = {};
+  if (campaignId) where.campanhaId = campaignId;
 
-  const companies = (await Company.find(filter)
-    .populate("assignedTo", "name email")
-    .select(
-      "empresa documento vertical stage campaign assignedTo lastActivityAt lastOutcomeLabel lastOutcomeNote"
-    )
-    .lean()) as ExportCompany[];
-
-  const companyIds = companies.map((c) => c._id);
-
-  const lastActivitiesAgg: LastActivityAgg[] = await LeadActivity.aggregate([
-    { $match: { company: { $in: companyIds } } },
-    { $sort: { createdAt: -1 } },
-    {
-      $group: {
-        _id: "$company",
-        activity: { $first: "$$ROOT" },
+  // Fetch leads
+  const leads = await prisma.lead.findMany({
+    where,
+    include: {
+      consultor: {
+        select: {
+          name: true,
+          email: true,
+        },
+      },
+      campanha: {
+        select: {
+          nome: true,
+        },
       },
     },
-  ]);
+  });
 
-  const activityMap = new Map<string, LastActivity>();
-  for (const item of lastActivitiesAgg) {
-    activityMap.set(item._id.toString(), item.activity);
+  const leadIds = leads.map((l) => l.id);
+
+  // Fetch latest activities for these leads
+  // Prisma doesn't support 'distinct' with 'orderBy' perfectly in all generic ways for "last per group" efficiently in one simple query without raw SQL or distinct on specific fields if DB supports it.
+  // Postgres supports distinct on.
+  // We can use distinct: ['leadId'], orderBy: [{ leadId: 'asc' }, { createdAt: 'desc' }]
+  const lastActivities = await prisma.leadActivity.findMany({
+    where: {
+      leadId: { in: leadIds },
+    },
+    distinct: ["leadId"],
+    orderBy: [
+      { leadId: "asc" },
+      { createdAt: "desc" },
+    ],
+    select: {
+      leadId: true,
+      channel: true,
+      createdAt: true,
+    },
+  });
+
+  const activityMap = new Map();
+  for (const item of lastActivities) {
+    activityMap.set(item.leadId, item);
   }
 
   const header = [
@@ -69,7 +67,7 @@ export async function GET(req: Request) {
     "documento",
     "vertical",
     "stage",
-    "campaignId",
+    "campaignNome",
     "consultorNome",
     "consultorEmail",
     "lastActivityAt",
@@ -79,21 +77,21 @@ export async function GET(req: Request) {
     "ultimaAtividadeCriadaEm",
   ];
 
-  const rows = companies.map((company) => {
-    const lastActivity = activityMap.get(company._id.toString());
+  const rows = leads.map((lead) => {
+    const lastActivity = activityMap.get(lead.id);
     return [
-      company.empresa ?? "",
-      company.documento ?? "",
-      company.vertical ?? "",
-      company.stage ?? "",
-      company.campaign?.toString() ?? "",
-      company.assignedTo?.name ?? "",
-      company.assignedTo?.email ?? "",
-      company.lastActivityAt ? new Date(company.lastActivityAt).toISOString() : "",
-      company.lastOutcomeLabel ?? "",
-      company.lastOutcomeNote ?? "",
-      lastActivity?.channel ?? "",
-      lastActivity?.createdAt ? new Date(lastActivity.createdAt).toISOString() : "",
+      lead.EMPRESA || lead.razaoSocial || "",
+      lead.documento || lead.DOCUMENTO || "",
+      lead.vertical || lead.VERTICAL_COCKPIT || "",
+      lead.status || "", // renamed from stage
+      lead.campanha?.nome || "",
+      lead.consultor?.name || "",
+      lead.consultor?.email || "",
+      lead.lastActivityAt ? lead.lastActivityAt.toISOString() : "",
+      lead.lastOutcomeLabel || "",
+      lead.lastOutcomeNote || "",
+      lastActivity?.channel || "",
+      lastActivity?.createdAt ? lastActivity.createdAt.toISOString() : "",
     ].join(";");
   });
 

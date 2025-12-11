@@ -88,7 +88,7 @@ export async function PATCH(req: Request, { params }: Params) {
     where: { id: params.id },
     data: {
       ...dataUpdate,
-      historico: status ? (historicoAtual as Prisma.JsonArray) : (lead.historico as Prisma.JsonValue),
+      historico: status ? (historicoAtual as Prisma.InputJsonValue) : (lead.historico ?? Prisma.JsonNull),
     },
   });
 

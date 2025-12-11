@@ -2,10 +2,9 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
-import { connectToDatabase } from "@/lib/mongodb";
+import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth-helpers";
-import Company from "@/models/Company";
-import mongoose from "mongoose";
+import { LeadStatus, Prisma } from "@prisma/client";
 
 type NormalizedRow = Record<string, unknown>;
 
@@ -24,7 +23,6 @@ function stringOrEmpty(value: unknown) {
 }
 
 export async function POST(req: Request) {
-  await connectToDatabase();
   const sessionUser = await getSessionUser();
   if (!sessionUser || sessionUser.role !== "MASTER") {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -33,7 +31,7 @@ export async function POST(req: Request) {
   const formData = await req.formData();
   const file = formData.get("file") as File | null;
   const campaignId = formData.get("campaignId") as string | null;
-    const assignedToUserId = formData.get("assignedToUserId") as string | null;
+  const assignedToUserId = formData.get("assignedToUserId") as string | null;
 
   if (!file || !campaignId || !assignedToUserId) {
     return NextResponse.json({ message: "Missing file or fields" }, { status: 400 });
@@ -64,34 +62,51 @@ export async function POST(req: Request) {
     const cidade = stringOrEmpty(normalized["CIDADE"]);
     const uf = stringOrEmpty(normalized["UF"]);
 
-    const existing = await Company.findOne({ documento, campaign: campaignId });
+    // Check existing by documento AND campaign
+    const existing = await prisma.lead.findFirst({
+      where: {
+        documento,
+        campanhaId: campaignId,
+      },
+    });
+
     if (existing) {
-      existing.empresa = empresa;
-      existing.vertical = vertical;
-      existing.telefone1 = telefone1;
-      existing.telefone2 = telefone2;
-      existing.telefone3 = telefone3;
-      existing.cidade = cidade;
-      existing.uf = uf;
-      existing.assignedTo = new mongoose.Types.ObjectId(assignedToUserId);
-      existing.raw = normalized;
-      await existing.save();
+      await prisma.lead.update({
+        where: { id: existing.id },
+        data: {
+          EMPRESA: empresa, // Mapped to EMPRESA as empresa doesn't exist in schema
+          razaoSocial: empresa, // Also map to razaoSocial for fallback?
+          vertical,
+          telefone1,
+          telefone2,
+          telefone3,
+          cidade,
+          estado: uf, // mapping uf to estado if that's the intention
+          consultorId: assignedToUserId, // renamed field
+          raw: normalized as Prisma.InputJsonValue, // Prisma Json type
+        },
+      });
       updated += 1;
     } else {
-      await Company.create({
-        empresa,
-        documento,
-        vertical,
-        telefone1,
-        telefone2,
-        telefone3,
-        cidade,
-        uf,
-        raw: normalized,
-        campaign: campaignId,
-        assignedTo: new mongoose.Types.ObjectId(assignedToUserId),
-        stage: "NOVO",
-        isWorked: false,
+      await prisma.lead.create({
+        data: {
+          EMPRESA: empresa,
+          razaoSocial: empresa,
+          documento,
+          vertical,
+          telefone1,
+          telefone2,
+          telefone3,
+          cidade,
+          estado: uf,
+          raw: normalized as Prisma.InputJsonValue,
+          campanhaId: campaignId,
+          consultorId: assignedToUserId,
+          status: LeadStatus.NOVO,
+          isWorked: false,
+
+          // COCKPIT fields populated above mapped from normalized input
+        },
       });
       created += 1;
     }
