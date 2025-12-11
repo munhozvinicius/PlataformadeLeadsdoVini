@@ -270,7 +270,7 @@ export async function POST(
       return NextResponse.json({ message: "Campanha não encontrada." }, { status: 404 });
     }
 
-    const restrictedRole = [Role.GERENTE_NEGOCIOS, Role.PROPRIETARIO];
+    const restrictedRole: Role[] = [Role.GERENTE_NEGOCIOS, Role.PROPRIETARIO];
     if (restrictedRole.includes(currentUser.role)) {
       const isCreator = campanha.createdById === currentUser.id;
       const isSameOffice = campanha.office === currentUser.office;
