@@ -15,6 +15,12 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ message: "Unauthorized (no session)" }, { status: 401 });
         }
 
+        console.log("DEBUG: POST /api/campanhas");
+        console.log("DEBUG: User ID:", session.user.id);
+        console.log("DEBUG: User Role:", session.user.role);
+        console.log("DEBUG: User Office:", (session.user as any).office); // Check if office exists
+
+
         // 2. Validate Role Permissions for Creation
         const allowedRolesForCreate = ["MASTER", "GERENTE_SENIOR", "GERENTE_NEGOCIOS", "PROPRIETARIO"];
         if (!allowedRolesForCreate.includes(session.user.role || "")) {
