@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
         console.log("DEBUG: POST /api/campanhas");
         console.log("DEBUG: User ID:", session.user.id);
         console.log("DEBUG: User Role:", session.user.role);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         console.log("DEBUG: User Office:", (session.user as any).office); // Check if office exists
 
 
