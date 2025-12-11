@@ -102,9 +102,9 @@ function hasRequiredHeaders(columnNames: Set<string>, required: string[]) {
 
 function parseNumber(value?: string) {
   if (!value) return undefined;
-  const cleaned = value.replace(/\./g, "").replace(",", ".");
-  const parsed = Number(cleaned);
-  return Number.isNaN(parsed) ? undefined : parsed;
+  const cleaned = value.replace(/[^0-9,.-]/g, "");
+  if (!cleaned) return undefined;
+  return cleaned;
 }
 
 function parseInteger(value?: string) {
