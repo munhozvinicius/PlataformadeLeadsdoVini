@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
 
       for (const row of rows) {
         // Simple normalization
-        const normalized: Record<string, any> = {};
+        const normalized: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(row)) {
           normalized[k.trim().toUpperCase()] = v;
         }
