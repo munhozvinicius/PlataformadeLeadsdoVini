@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "mongodb"
-  url      = env("MONGO_URL_MONGODB_URI")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 enum Role {
@@ -51,19 +51,19 @@ enum ActivityChannel {
 }
 
 model User {
-  id           String        @id @default(auto()) @map("_id") @db.ObjectId
+  id           String        @id @default(cuid())
   name         String
   email        String        @unique
   password     String
   role         Role
   profile      Profile
   office       Office
-  officeRecordId String?       @map("officeId") @db.ObjectId
+  officeRecordId String?     @map("officeId")
   officeRecord   OfficeRecord? @relation("OfficeUsers", fields: [officeRecordId], references: [id])
-  ownerId      String?       @db.ObjectId
+  ownerId      String?
   owner        User?         @relation("OwnerConsultor", fields: [ownerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   consultores  User[]        @relation("OwnerConsultor")
-  seniorId     String?       @db.ObjectId
+  seniorId     String?
   senior       User?         @relation("SeniorToGN", fields: [seniorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   managers     User[]        @relation("SeniorToGN")
   offices      UserOffice[]
@@ -93,7 +93,7 @@ model User {
 }
 
 model Campanha {
-  id             String    @id @default(auto()) @map("_id") @db.ObjectId
+  id             String    @id @default(cuid())
   nome           String
   descricao      String?
   parceiro       String?
@@ -106,19 +106,19 @@ model Campanha {
   type           CampaignType @default(COCKPIT)
   tipo           CampaignType @default(COCKPIT)
   office         Office    @default(SAFE_TI)
-  officeIDs      String[]  @db.ObjectId
-  officeRecords  OfficeRecord[] @relation("CampanhaOffices", fields: [officeIDs], references: [id])
+  officeIDs      String[]  
+  officeRecords  OfficeRecord[] @relation("CampanhaOffices")
   periodoInicio  DateTime?
   periodoFim     DateTime?
   createdAt      DateTime  @default(now())
-  createdById    String?   @db.ObjectId
+  createdById    String?
   createdBy      User?     @relation("CampanhaOwner", fields: [createdById], references: [id])
-  gnId           String?   @db.ObjectId
+  gnId           String?
   gn             User?     @relation("CampanhaGN", fields: [gnId], references: [id])
-  gsId           String?   @db.ObjectId
+  gsId           String?
   gs             User?     @relation("CampanhaGS", fields: [gsId], references: [id])
-  ownerId        String?   @db.ObjectId
-
+  ownerId        String?
+  
   totalLeads     Int       @default(0)
   assignedLeads  Int       @default(0)
   remainingLeads Int       @default(0)
@@ -131,10 +131,10 @@ model Campanha {
 }
 
 model Lead {
-  id            String       @id @default(auto()) @map("_id") @db.ObjectId
-  campanhaId    String       @db.ObjectId
+  id            String       @id @default(cuid())
+  campanhaId    String
   campanha      Campanha     @relation("CampanhaLeads", fields: [campanhaId], references: [id])
-  importBatchId String?      @db.ObjectId
+  importBatchId String?
   importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
 
   type          CampaignType?
@@ -145,7 +145,7 @@ model Lead {
   DOCUMENTO          String?
   EMPRESA            String?
   CD_CNAE            String?
-  VL_FAT_PRESUMIDO   String? // Keeping as String for safety with imports, can be Float if strictly controlled
+  VL_FAT_PRESUMIDO   String?
   TELEFONE1          String?
   TELEFONE2          String?
   TELEFONE3          String?
@@ -199,7 +199,7 @@ model Lead {
   FLG_TROCA_VTECH                  String?
 
 
-  // Legacy / Shared Fields (keeping for compatibility)
+  // Legacy / Shared Fields
   cnpj           String?
   documento      String?
   razaoSocial    String?
@@ -226,15 +226,15 @@ model Lead {
   cnae           String?
  
   status             LeadStatus    @default(NOVO)
-  consultorId        String?       @db.ObjectId
+  consultorId        String?
   consultor          User?         @relation("AssignedLeads", fields: [consultorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  ownerId            String?       @db.ObjectId
+  ownerId            String?
   owner              User?         @relation("LeadOwner", fields: [ownerId], references: [id])
-  officeId           String?       @db.ObjectId
+  officeId           String?
   officeRecord       OfficeRecord? @relation(fields: [officeId], references: [id])
   escritorio         Office        @default(SAFE_TI)
   assignedToId        String?
-  previousConsultants String[]     @default([])
+  previousConsultants String[]
   lastActivityDate    DateTime?
   historico          Json?
   raw                Json?
@@ -269,13 +269,17 @@ model Lead {
   notes      LeadNote[]
   losses     LeadLoss[]
   histories  LeadHistory[]  @relation("LeadToHistories")
+
+  @@index([campanhaId])
+  @@index([consultorId])
+  @@index([status])
 }
 
 model LeadEvent {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  leadId    String   @db.ObjectId
+  id        String   @id @default(cuid())
+  leadId    String
   lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  userId    String   @db.ObjectId
+  userId    String
   user      User     @relation("UserLeadEvents", fields: [userId], references: [id], onDelete: Cascade)
   type      String
   payload   Json?
@@ -286,8 +290,8 @@ model LeadEvent {
 }
 
 model LeadEnrichmentSuggestion {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  leadId    String   @db.ObjectId
+  id        String   @id @default(cuid())
+  leadId    String
   lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
   type      String
   source    String
@@ -300,7 +304,7 @@ model LeadEnrichmentSuggestion {
 }
 
 model OfficeRecord {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  id        String   @id @default(cuid())
   name      String
   code      String   @unique
   region    String?
@@ -308,11 +312,11 @@ model OfficeRecord {
   city      String?
   notes     String?
   active    Boolean  @default(true)
-  seniorManagerId   String? @db.ObjectId
+  seniorManagerId   String?
   seniorManager     User?   @relation("OfficeSeniorManager", fields: [seniorManagerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  businessManagerId String? @db.ObjectId
+  businessManagerId String?
   businessManager   User?   @relation("OfficeBusinessManager", fields: [businessManagerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  ownerId           String? @db.ObjectId
+  ownerId           String?
   owner             User?   @relation("OfficeOwner", fields: [ownerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   office    Office?  @map("office")
@@ -320,17 +324,16 @@ model OfficeRecord {
   managers  ManagerOffice[] @relation("ManagerOffices")
   leads     Lead[]
   
-  campanhaIDs String[]   @db.ObjectId
-  campanhas   Campanha[] @relation("CampanhaOffices", fields: [campanhaIDs], references: [id])
+  campanhas   Campanha[] @relation("CampanhaOffices")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model ManagerOffice {
-  id             String       @id @default(auto()) @map("_id") @db.ObjectId
-  managerId      String       @db.ObjectId
-  officeRecordId String       @db.ObjectId
+  id             String       @id @default(cuid())
+  managerId      String
+  officeRecordId String
 
   manager      User         @relation("ManagerOffices", fields: [managerId], references: [id], onDelete: Cascade)
   officeRecord OfficeRecord @relation("ManagerOffices", fields: [officeRecordId], references: [id], onDelete: Cascade)
@@ -339,8 +342,8 @@ model ManagerOffice {
 }
 
 model UserOffice {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId    String   @db.ObjectId
+  id        String   @id @default(cuid())
+  userId    String
   office    Office
 
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -349,12 +352,12 @@ model UserOffice {
 }
 
 model LeadActivity {
-  id             String           @id @default(auto()) @map("_id") @db.ObjectId
-  leadId         String           @db.ObjectId
+  id             String           @id @default(cuid())
+  leadId         String
   lead           Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  userId         String           @db.ObjectId
+  userId         String
   user           User             @relation("UserLeadActivities", fields: [userId], references: [id])
-  campaignId     String           @db.ObjectId
+  campaignId     String
   campaign       Campanha         @relation(fields: [campaignId], references: [id])
   activityType   String
   channel        ActivityChannel?
@@ -374,10 +377,10 @@ model LeadActivity {
 }
 
 model ImportBatch {
-  id                  String   @id @default(auto()) @map("_id") @db.ObjectId
+  id                  String   @id @default(cuid())
   nomeArquivoOriginal String
   fileName            String?
-  campaignId          String   @db.ObjectId
+  campaignId          String
   campaign            Campanha @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   totalLeads          Int
   importedLeads       Int      @default(0)
@@ -386,17 +389,17 @@ model ImportBatch {
   duplicatedLeads     Int      @default(0)
   status              String   @default("completed")
   errorMessage        String?
-  criadoPorId         String?  @db.ObjectId
+  criadoPorId         String?
   criadoPor           User?    @relation("UserImportBatches", fields: [criadoPorId], references: [id])
   createdAt           DateTime @default(now())
   leads               Lead[]
 }
 
 model DistributionLog {
-  id           String   @id @default(auto()) @map("_id") @db.ObjectId
-  campaignId   String   @db.ObjectId
-  adminId      String   @db.ObjectId
-  consultantId String   @db.ObjectId
+  id           String   @id @default(cuid())
+  campaignId   String
+  adminId      String
+  consultantId String
   leadIds      String[]
   rulesApplied String?
   createdAt    DateTime @default(now())
@@ -407,11 +410,11 @@ model DistributionLog {
 }
 
 model LeadHistory {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  leadId    String   @db.ObjectId
+  id        String   @id @default(cuid())
+  leadId    String
   lead      Lead     @relation("LeadToHistories", fields: [leadId], references: [id])
   action    String
-  userId    String   @db.ObjectId
+  userId    String
   user      User     @relation("UserLeadHistory", fields: [userId], references: [id])
   notes     String?
   fromUserId String?
@@ -422,10 +425,10 @@ model LeadHistory {
 }
 
 model LeadNote {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  leadId    String   @db.ObjectId
+  id        String   @id @default(cuid())
+  leadId    String
   lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  userId    String   @db.ObjectId
+  userId    String
   user      User     @relation(fields: [userId], references: [id])
   tipo      String
   conteudo  String
@@ -436,10 +439,10 @@ model LeadNote {
 }
 
 model LeadLoss {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  leadId        String   @db.ObjectId
+  id            String   @id @default(cuid())
+  leadId        String
   lead          Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  userId        String   @db.ObjectId
+  userId        String
   user          User     @relation(fields: [userId], references: [id])
   motivo        String
   justificativa String
@@ -450,22 +453,22 @@ model LeadLoss {
 }
 
 model Announcement {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  id          String   @id @default(cuid())
   title       String
   message     String
   imageUrl    String?
   active      Boolean  @default(true)
-  createdById String   @db.ObjectId
+  createdById String
   createdBy   User     @relation("CreatedAnnouncements", fields: [createdById], references: [id])
   createdAt   DateTime @default(now())
   readers     AnnouncementRead[]
 }
 
 model AnnouncementRead {
-  id             String       @id @default(auto()) @map("_id") @db.ObjectId
-  announcementId String       @db.ObjectId
+  id             String       @id @default(cuid())
+  announcementId String
   announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
-  userId         String       @db.ObjectId
+  userId         String
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   readAt         DateTime     @default(now())
 
@@ -473,7 +476,7 @@ model AnnouncementRead {
 }
 
 model IntelligenceData {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  id        String   @id @default(cuid())
   cnpj      String   @unique
   
   // Client Info
@@ -501,7 +504,7 @@ model IntelligenceData {
   loginConsultor       String?
   adabasMovel          String?
   adabasFixa           String?
-  officeName           String? // Extracted from file
+  officeName           String?
   
   // Vivo Plant (Numeric for filtering)
   qtMovelTerm          Int @default(0)
@@ -542,12 +545,12 @@ model IntelligenceData {
   history              IntelligenceHistory[]
   
   updatedAt            DateTime @default(now())
-  lastImportId         String? // Batch ID
+  lastImportId         String?
 }
 
 model IntelligenceHistory {
-  id                String   @id @default(auto()) @map("_id") @db.ObjectId
-  intelligenceDataId String  @db.ObjectId
+  id                String   @id @default(cuid())
+  intelligenceDataId String
   intelligenceData  IntelligenceData @relation(fields: [intelligenceDataId], references: [id], onDelete: Cascade)
   cnpj              String
   
