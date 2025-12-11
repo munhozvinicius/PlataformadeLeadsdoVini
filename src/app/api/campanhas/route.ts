@@ -4,16 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { CampaignType, Office, Role } from "@prisma/client";
-
-const ALLOWED_ROLES_FOR_CREATE: Role[] = [
-  Role.MASTER,
-  Role.GERENTE_SENIOR,
-  Role.GERENTE_NEGOCIOS,
-  Role.PROPRIETARIO,
-];
-
-const RESTRICTED_ROLES = new Set<Role>([Role.GERENTE_NEGOCIOS, Role.PROPRIETARIO]);
+import { CampaignType, Office } from "@prisma/client";
 
 function parseCampaignType(value: unknown): CampaignType | null {
   if (!value) return null;
@@ -33,46 +24,22 @@ function parseOffice(value: unknown): Office | null {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-
-    if (!session?.user) {
-      return NextResponse.json({ message: "Unauthorized (no session)" }, { status: 401 });
+    if (!session?.user || !session.user.email) {
+      console.error("[API /campanhas] Sem sessão válida", session);
+      return NextResponse.json({ message: "Não autenticado." }, { status: 401 });
     }
 
-    if (!session.user.role) {
-      return NextResponse.json({ message: "Sem permissão para criar campanha." }, { status: 403 });
-    }
-    const role = session.user.role as Role;
-    if (!ALLOWED_ROLES_FOR_CREATE.includes(role)) {
-      return NextResponse.json({ message: "Sem permissão para criar campanha." }, { status: 403 });
-    }
-
-    const body = await req.json();
-    const nome = (() => {
-      if (!body.nome) return "";
-      return String(body.nome).trim();
-    })();
-    const descricao = body.descricao ? String(body.descricao).trim() : undefined;
+    const body = await req.json().catch(() => ({}));
+    const nome = typeof body.nome === "string" ? body.nome.trim() : "";
+    const descricao = typeof body.descricao === "string" ? body.descricao.trim() : undefined;
     const campaignType = parseCampaignType(body.type);
     const officeValue = parseOffice(body.office);
 
     if (!nome || !campaignType || !officeValue) {
       return NextResponse.json(
-        { message: "Nome, tipo (Cockpit/Mapa_Parque) e escritório válidos são obrigatórios." },
+        { message: "Nome, tipo e escritório são obrigatórios." },
         { status: 400 },
       );
-    }
-
-    const currentUser = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { id: true, office: true },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json({ message: "Usuário não encontrado." }, { status: 404 });
-    }
-
-    if (RESTRICTED_ROLES.has(role) && currentUser.office !== officeValue) {
-      return NextResponse.json({ message: "Você só pode criar campanha para o seu escritório." }, { status: 403 });
     }
 
     const campanha = await prisma.campanha.create({
@@ -82,13 +49,16 @@ export async function POST(req: NextRequest) {
         type: campaignType,
         tipo: campaignType,
         office: officeValue,
-        createdById: currentUser.id,
+        ...(session.user.id ? { createdById: session.user.id } : {}),
       },
     });
 
     return NextResponse.json(campanha, { status: 201 });
   } catch (error) {
-    console.error("Error creating campaign:", error);
-    return NextResponse.json({ message: "Internal Server Error" }, { status: 500 });
+    console.error("[API /campanhas] Erro ao criar campanha", error);
+    return NextResponse.json(
+      { message: "Erro interno ao criar campanha." },
+      { status: 500 },
+    );
   }
 }

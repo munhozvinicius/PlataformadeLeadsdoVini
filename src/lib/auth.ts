@@ -24,6 +24,7 @@ export const authOptions: NextAuthOptions = {
             id: true,
             name: true,
             email: true,
+            office: true,
             role: true,
             profile: true,
             password: true,
@@ -43,6 +44,7 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           role: user.role,
           profile: user.profile,
+          office: user.office,
           ownerId: user.ownerId ?? null,
           seniorId: user.seniorId ?? null,
           officeIds: user.offices.map((entry) => entry.office),
@@ -53,49 +55,61 @@ export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
   callbacks: {
     async jwt({ token, user }) {
-        if (user) {
-          const typedUser = user as {
-            id: string;
-            role?: Role;
-            profile?: Profile;
-            ownerId?: string | null;
-            seniorId?: string | null;
-            officeIds?: Office[];
-          };
-          token.id = typedUser.id;
-          if (typedUser.role) {
-            token.role = typedUser.role;
-          }
-          if (typedUser.profile) {
-            token.profile = typedUser.profile;
-          }
-          if (typedUser.ownerId) {
-            token.ownerId = typedUser.ownerId;
-          }
-          if (typedUser.seniorId) {
-            token.seniorId = typedUser.seniorId;
-          }
-          if (typedUser.officeIds) {
-            token.officeIds = typedUser.officeIds;
-          }
+      if (user) {
+        const typedUser = user as {
+          id: string;
+          role?: Role;
+          profile?: Profile;
+          email?: string | null;
+          office?: Office | null;
+          ownerId?: string | null;
+          seniorId?: string | null;
+          officeIds?: Office[];
+        };
+        token.id = typedUser.id;
+        if (typedUser.role) {
+          token.role = typedUser.role;
         }
-        return token;
-      },
+        if (typedUser.profile) {
+          token.profile = typedUser.profile;
+        }
+        token.email = typedUser.email ?? token.email;
+        token.office = typedUser.office ?? token.office;
+        if (typedUser.ownerId) {
+          token.ownerId = typedUser.ownerId;
+        }
+        if (typedUser.seniorId) {
+          token.seniorId = typedUser.seniorId;
+        }
+        if (typedUser.officeIds) {
+          token.officeIds = typedUser.officeIds;
+        }
+      }
+      return token;
+    },
     async session({ session, token }) {
-        if (session.user) {
-          const id = token.id as string | undefined;
-          const role = token.role as Role | undefined;
-          const profile = token.profile as Profile | undefined;
-          const ownerId = token.ownerId as string | undefined;
-          const seniorId = token.seniorId as string | undefined;
-          const officeIds = token.officeIds as Office[] | undefined;
-          if (id) session.user.id = id;
-          if (role) session.user.role = role;
-          if (profile) session.user.profile = profile;
-          if (ownerId) session.user.ownerId = ownerId;
-          if (seniorId) session.user.seniorId = seniorId;
-          if (officeIds) session.user.officeIds = officeIds;
+      if (session.user) {
+        const id = token.id as string | undefined;
+        const role = token.role as Role | undefined;
+        const profile = token.profile as Profile | undefined;
+        const ownerId = token.ownerId as string | undefined;
+        const seniorId = token.seniorId as string | undefined;
+        const officeIds = token.officeIds as Office[] | undefined;
+        const email = token.email as string | null | undefined;
+        const office = token.office as Office | null | undefined;
+        if (id) session.user.id = id;
+        if (role) session.user.role = role;
+        if (profile) session.user.profile = profile;
+        if (ownerId) session.user.ownerId = ownerId;
+        if (seniorId) session.user.seniorId = seniorId;
+        if (officeIds) session.user.officeIds = officeIds;
+        if (email !== undefined) {
+          session.user.email = email;
         }
+        if (office !== undefined) {
+          session.user.office = office;
+        }
+      }
       return session;
     },
   },

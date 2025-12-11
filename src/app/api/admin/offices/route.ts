@@ -68,6 +68,7 @@ export async function GET() {
       id: office.id,
       code: office.code,
       name: office.name,
+      office: office.office ?? null,
       region: office.region,
       uf: office.uf,
       city: office.city,
