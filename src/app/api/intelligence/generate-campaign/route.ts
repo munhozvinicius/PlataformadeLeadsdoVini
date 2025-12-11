@@ -110,7 +110,7 @@ export async function POST(req: Request) {
                 objetivo: tower, // Storing "Tower" in "Objetivo" field
                 createdById: session.user.id,
                 ownerId: officeRecord.ownerId, // Link to Office Owner
-                office: officeRecord.office,   // Link to Office Enum
+                office: officeRecord.office ?? undefined,   // Link to Office Enum
                 totalLeads: targets.length,
                 remainingLeads: targets.length,
                 status: "ATIVA",
