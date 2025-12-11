@@ -15,9 +15,9 @@ export default function LoginPage() {
   const sessionUser = session?.user;
 
   useEffect(() => {
-    if (status === "authenticated" && sessionUser) {
-      router.replace("/");
-    }
+    // if (status === "authenticated" && sessionUser) {
+    //   router.replace("/");
+    // }
   }, [status, sessionUser, router]);
 
   async function handleSubmit(e: FormEvent) {
