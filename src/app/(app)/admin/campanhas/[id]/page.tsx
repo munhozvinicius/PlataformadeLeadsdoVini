@@ -187,7 +187,8 @@ export default function CampanhaDetailPage() {
     try {
       const res = await fetch(`/api/campanhas/${id}/upload`, {
         method: "POST",
-        body: formData
+        body: formData,
+        credentials: "include",
       });
 
       if (!res.ok) {

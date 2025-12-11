@@ -71,6 +71,7 @@ export default function NovaCampanhaMapaParquePage() {
             const res = await fetch("/api/campanhas/mapa-parque/upload", {
                 method: "POST",
                 body: formData,
+                credentials: "include",
             });
 
             const data = await res.json();

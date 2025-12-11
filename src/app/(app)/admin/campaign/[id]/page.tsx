@@ -423,6 +423,7 @@ export default function CampaignDetailPage() {
       const res = await fetch("/api/campanhas/import", {
         method: "POST",
         body: formData,
+        credentials: "include",
       });
       if (res.ok) {
         setImportState("processing");
