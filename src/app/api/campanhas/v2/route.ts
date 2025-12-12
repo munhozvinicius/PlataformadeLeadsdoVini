@@ -26,6 +26,8 @@ function parseOffice(value: unknown): Office | null {
   return valid ? (raw as Office) : null;
 }
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -36,24 +38,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "Não autenticado." }, { status: 401 });
     }
 
-    // Role check: Only Master, GS, GN, Owner (Consultant already blocked by middleware usually, but checking here too)
+    // Role check: Strict MASTER and GS only
     const role = session.user.role;
-    console.log("DEBUG: User Role:", role, "Email:", session.user.email);
-    console.log("DEBUG: Role enum value (CONSULTOR):", Role.CONSULTOR);
+    console.log("DEBUG: User Role:", role);
 
-    // TEMPORARY: DISABLING ROLE CHECK TO RULE OUT LOGIC ERROR
-    /*
-    if (role === Role.CONSULTOR) {
-      console.log("DEBUG: Access Denied. Role is CONSULTOR.");
-      return NextResponse.json({ 
-        message: `Sem permissão. Seu cargo identificado é: ${role}. Contate o suporte.`,
-        debug: { role, email: session.user.email }
+    const ALLOWED_ROLES = [Role.MASTER, Role.GERENTE_SENIOR];
+
+    if (!role || !ALLOWED_ROLES.includes(role)) {
+      console.log(`DEBUG: Access Denied. Role ${role} is not in allowed list: ${ALLOWED_ROLES.join(", ")}`);
+      return NextResponse.json({
+        message: `Acesso negado. Apenas MASTER e GS podem criar campanhas. Seu cargo: ${role}`,
+        debug: { role, allowed: ALLOWED_ROLES }
       }, { status: 403 });
     }
-    */
-    console.log("DEBUG: Role check skipped. Proceeding to formData.");
 
-    const formData = await req.formData();
+    console.log("DEBUG: Role authorized. Proceeding to formData.");
+
+    // Parse Body
+    let formData;
+    try {
+      formData = await req.formData();
+    } catch (e) {
+      console.error("DEBUG: Failed to parse formData", e);
+      return NextResponse.json({ message: "Erro ao ler dados do formulário." }, { status: 400 });
+    }
+
     console.log("DEBUG: formData parsed successfully.");
     const nome = formData.get("nome")?.toString().trim();
     const descricao = formData.get("descricao")?.toString().trim();
