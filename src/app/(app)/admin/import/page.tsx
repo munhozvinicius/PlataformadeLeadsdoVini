@@ -181,7 +181,7 @@ export default function CampaignManagementPage() {
               onChange={(e) => setCampaignForm((prev) => ({ ...prev, tipo: e.target.value }))}
               className="w-full rounded-lg border px-3 py-2 text-sm"
             >
-              <option value="COCKPIT">Cockpit</option>
+              <option value="COCKPIT">Portalinfo Cockpit</option>
               <option value="MAPA_PARQUE">Base Visão Parque</option>
             </select>
           </div>

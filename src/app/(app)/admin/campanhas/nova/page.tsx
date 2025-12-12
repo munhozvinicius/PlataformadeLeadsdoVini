@@ -179,7 +179,7 @@ export default function NovaCampanhaPage() {
       </div>
       <div className="bg-white rounded-2xl border p-6 shadow-sm space-y-6">
         <p className="text-sm text-slate-500">
-          Crie campanhas com base Cockpit ou Base Visão Parque e carregue a planilha diretamente.
+          Crie campanhas com base Portalinfo Cockpit ou Base Visão Parque e carregue a planilha diretamente.
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
@@ -208,7 +208,7 @@ export default function NovaCampanhaPage() {
                 onChange={(e) => setType(e.target.value as "COCKPIT" | "MAPA_PARQUE")}
                 className="w-full border rounded-lg px-3 py-2 text-sm"
               >
-                <option value="COCKPIT">Cockpit (Leads)</option>
+                <option value="COCKPIT">Portalinfo Cockpit (Leads)</option>
                 <option value="MAPA_PARQUE">Base Visão Parque</option>
               </select>
             </div>

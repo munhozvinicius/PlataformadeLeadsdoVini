@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "fix:master": "tsx fix-master.ts",
+    "reset:portalinfo": "tsx scripts/reset-portalinfo-cockpit.ts",
     "prisma:seed": "node prisma/seed.js",
     "postinstall": "prisma generate"
   },
@@ -41,6 +42,7 @@
     "eslint-config-next": "14.2.15",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }

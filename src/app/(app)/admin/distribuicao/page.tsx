@@ -626,7 +626,7 @@ export default function DistribuicaoPage() {
                   value={newCampTipo}
                   onChange={e => setNewCampTipo(e.target.value as "COCKPIT" | "MAPA_PARQUE")}
                 >
-                  <option value="COCKPIT">Cockpit</option>
+                  <option value="COCKPIT">Portalinfo Cockpit</option>
                   <option value="MAPA_PARQUE">Base Visão Parque</option>
                 </select>
               </div>

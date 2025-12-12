@@ -10,6 +10,8 @@ import { CampaignType, LeadStatus, Office } from "@prisma/client";
 
 type NormalizedRow = Record<string, string>;
 
+const PORTALINFO_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
 const COCKPIT_KEYS = {
   UF: ["UF"],
   CIDADE: ["CIDADE"],
@@ -122,6 +124,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { message: "Informe nome, tipo (COCKPIT ou MAPA_PARQUE), escritório e anexe o arquivo (.xlsx ou .csv)." },
         { status: 400 },
+      );
+    }
+
+    if (file.size > PORTALINFO_MAX_UPLOAD_BYTES) {
+      return NextResponse.json(
+        { message: "Arquivo muito grande. A base Portalinfo Cockpit aceita até 10MB." },
+        { status: 413 },
       );
     }
 

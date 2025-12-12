@@ -14,7 +14,10 @@ const ALLOWED_ROLES_FOR_UPLOAD: Role[] = [
   Role.PROPRIETARIO,
 ];
 
-const COCKPIT_HEADERS = [
+const PORTALINFO_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+// Portalinfo Cockpit layout (nova base)
+const PORTALINFO_HEADERS = [
   "UF",
   "CIDADE",
   "DOCUMENTO",
@@ -100,6 +103,22 @@ function hasRequiredHeaders(columnNames: Set<string>, required: string[]) {
   return required.every((header) => columnNames.has(normalizeKey(header)));
 }
 
+const COCKPIT_ALIASES: Record<string, string[]> = {
+  DOCUMENTO: ["DOCUMENTO", "CNPJ"],
+  EMPRESA: ["EMPRESA", "RAZAO_SOCIAL", "RAZÃO_SOCIAL", "NOME_FANTASIA"],
+  CEP: ["CEP", "NR_CEP"],
+  TERRITORIO: ["TERRITORIO", "TERRITÓRIO"],
+  OFERTA_MKT: ["OFERTA MKT", "OFERTA_MKT", "OFERTA"],
+};
+
+function pickNormalized(norm: Record<string, string>, keys: string[]) {
+  for (const key of keys) {
+    const v = norm[normalizeKey(key)];
+    if (v) return v;
+  }
+  return "";
+}
+
 function parseNumber(value?: string) {
   if (!value) return undefined;
   const cleaned = value.replace(/[^0-9,.-]/g, "");
@@ -127,6 +146,8 @@ function buildCockpitLead(
 ): Prisma.LeadCreateManyInput {
   const telefoneValues = [norm["TELEFONE1"], norm["TELEFONE2"], norm["TELEFONE3"]].filter(Boolean);
   const emails = [norm["EMAIL"], norm["EMAIL_CONTATO_PRINCIPAL_SFA"]].filter(Boolean);
+  const documento = pickNormalized(norm, COCKPIT_ALIASES.DOCUMENTO);
+  const empresa = pickNormalized(norm, COCKPIT_ALIASES.EMPRESA);
   return {
     campanhaId,
     importBatchId: batchId,
@@ -135,8 +156,8 @@ function buildCockpitLead(
     isWorked: false,
     UF: norm["UF"] || undefined,
     CIDADE: norm["CIDADE"] || undefined,
-    DOCUMENTO: norm["DOCUMENTO"] || undefined,
-    EMPRESA: norm["EMPRESA"] || undefined,
+    DOCUMENTO: documento || norm["DOCUMENTO"] || undefined,
+    EMPRESA: empresa || norm["EMPRESA"] || undefined,
     CD_CNAE: norm["CD_CNAE"] || norm["CNAE"] || undefined,
     VL_FAT_PRESUMIDO: parseNumber(norm["VL_FAT_PRESUMIDO"] || norm["VL FAT PRESUMIDO"]),
     TELEFONE1: norm["TELEFONE1"] || undefined,
@@ -144,15 +165,15 @@ function buildCockpitLead(
     TELEFONE3: norm["TELEFONE3"] || undefined,
     LOGRADOURO: norm["LOGRADOURO"] || undefined,
     NUMERO: norm["NUMERO"] || undefined,
-    CEP: norm["CEP"] || norm["NR_CEP"] || undefined,
-    TERRITORIO: norm["TERRITORIO"] || undefined,
-    OFERTA_MKT: norm["OFERTA MKT"] || norm["OFERTA_MKT"] || undefined,
+    CEP: pickNormalized(norm, COCKPIT_ALIASES.CEP) || undefined,
+    TERRITORIO: pickNormalized(norm, COCKPIT_ALIASES.TERRITORIO) || undefined,
+    OFERTA_MKT: pickNormalized(norm, COCKPIT_ALIASES.OFERTA_MKT) || undefined,
     ESTRATEGIA: norm["ESTRATEGIA"] || undefined,
     ARMARIO: norm["ARMARIO"] || undefined,
     ID_PRUMA: norm["ID PRUMA"] || undefined,
     VERTICAL_COCKPIT: norm["VERTICAL"] || undefined,
-    razaoSocial: norm["RAZAO_SOCIAL"] || norm["EMPRESA"] || undefined,
-    nomeFantasia: norm["NOME_FANTASIA"] || norm["EMPRESA"] || undefined,
+    razaoSocial: empresa || norm["RAZAO_SOCIAL"] || norm["EMPRESA"] || undefined,
+    nomeFantasia: norm["NOME_FANTASIA"] || empresa || norm["EMPRESA"] || undefined,
     cidade: norm["CIDADE"] || undefined,
     estado: norm["ESTADO"] || norm["UF"] || undefined,
     telefone: telefoneValues[0] || undefined,
@@ -288,6 +309,13 @@ export async function POST(
       return NextResponse.json({ message: "Arquivo não fornecido." }, { status: 400 });
     }
 
+    if (file.size > PORTALINFO_MAX_UPLOAD_BYTES) {
+      return NextResponse.json(
+        { message: "Arquivo muito grande. A base Portalinfo Cockpit aceita até 10MB." },
+        { status: 413 },
+      );
+    }
+
     const buffer = await file.arrayBuffer();
     const workbook = XLSX.read(buffer, { type: "buffer" });
     const firstSheetName = workbook.SheetNames[0];
@@ -300,12 +328,15 @@ export async function POST(
 
     const headerNames = new Set(Object.keys(rows[0]).map((key) => normalizeKey(key)));
     const requiredHeaders =
-      campanha.type === CampaignType.COCKPIT ? COCKPIT_HEADERS : MAPA_PARQUE_HEADERS;
+      campanha.type === CampaignType.COCKPIT ? PORTALINFO_HEADERS : MAPA_PARQUE_HEADERS;
 
     if (!hasRequiredHeaders(headerNames, requiredHeaders)) {
       return NextResponse.json(
         {
-          message: `O arquivo não possui o layout esperado para ${campanha.type === CampaignType.COCKPIT ? "Cockpit" : "Mapa Parque"}.`,
+          message:
+            campanha.type === CampaignType.COCKPIT
+              ? "O arquivo não segue o layout Portalinfo Cockpit (UF, CIDADE, DOCUMENTO, EMPRESA...)."
+              : "O arquivo não possui o layout esperado para Mapa Parque.",
         },
         { status: 400 },
       );
@@ -326,9 +357,14 @@ export async function POST(
       .map((row) => {
         const normalized = normalizeRow(row);
         if (campanha.type === CampaignType.COCKPIT) {
-          if (!normalized["DOCUMENTO"] && !normalized["EMPRESA"]) {
-            return null;
-          }
+          // Só descarta se realmente não há informação relevante (sem doc, sem empresa e sem telefones)
+          const hasInfo =
+            pickNormalized(normalized, COCKPIT_ALIASES.DOCUMENTO) ||
+            pickNormalized(normalized, COCKPIT_ALIASES.EMPRESA) ||
+            normalized["TELEFONE1"] ||
+            normalized["TELEFONE2"] ||
+            normalized["TELEFONE3"];
+          if (!hasInfo) return null;
           return buildCockpitLead(normalized, campanha.id, batch.id);
         }
         if (!normalized["NR_CNPJ"] && !normalized["NM_CLIENTE"]) {
