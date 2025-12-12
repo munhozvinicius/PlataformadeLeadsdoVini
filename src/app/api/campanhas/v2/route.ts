@@ -6,7 +6,7 @@ import { getServerSession } from "next-auth";
 import * as XLSX from "xlsx";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { CampaignType, LeadStatus, Office, Role } from "@prisma/client";
+import { CampaignType, LeadStatus, Office } from "@prisma/client";
 
 type NormalizedRow = Record<string, string>;
 
@@ -95,14 +95,11 @@ function pick(row: NormalizedRow, keys: string[]) {
   return "";
 }
 
-type SessionResult =
-  | { session: NonNullable<Awaited<ReturnType<typeof getServerSession>>> }
-  | { error: { status: number; body: Record<string, unknown> } };
+type SessionResult = { session: NonNullable<Awaited<ReturnType<typeof getServerSession>>> } | { error: { status: number; body: Record<string, unknown> } };
 
 async function getSessionOrFail(): Promise<SessionResult> {
   const session = await getServerSession(authOptions);
   if (!session?.user) return { error: { status: 401, body: { message: "Não autenticado." } } };
-  if (session.user.role !== Role.MASTER) return { error: { status: 403, body: { message: "Apenas MASTER pode criar campanhas." } } };
   return { session };
 }
 
