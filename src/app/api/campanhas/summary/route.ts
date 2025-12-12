@@ -68,6 +68,9 @@ export async function GET() {
       restantes,
       consultoresReceberam: consultores.length,
       estoque: restantes,
+      totalLeads: totalBruto,
+      remainingLeads: restantes,
+      assignedLeads: atribuidos,
     });
   }
 

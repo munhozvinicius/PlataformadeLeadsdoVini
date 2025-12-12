@@ -106,7 +106,6 @@ model Campanha {
   type           CampaignType @default(COCKPIT)
   tipo           CampaignType @default(COCKPIT)
   office         Office    @default(SAFE_TI)
-  officeIDs      String[]  
   officeRecords  OfficeRecord[] @relation("CampanhaOffices")
   periodoInicio  DateTime?
   periodoFim     DateTime?

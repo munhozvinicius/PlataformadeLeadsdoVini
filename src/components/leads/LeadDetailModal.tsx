@@ -114,6 +114,27 @@ const lossMotivos = [
   "Outro",
 ] as const;
 
+const InfoItem = ({
+  label,
+  value,
+  treatMissingAsZero = false,
+}: {
+  label: string;
+  value: React.ReactNode;
+  treatMissingAsZero?: boolean;
+}) => {
+  const missing = value === null || value === undefined || value === "";
+  const display = missing ? (treatMissingAsZero ? "0" : "-") : value;
+  return (
+    <div className="space-y-1">
+      <p className="text-[10px] text-slate-500">{label}</p>
+      <p className={`font-mono font-bold ${missing && treatMissingAsZero ? "text-red-400" : "text-white"}`}>
+        {display}
+      </p>
+    </div>
+  );
+};
+
 export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
   const [tab, setTab] = useState<"home" | "tratativa" | "produtos">("home");
 
@@ -370,147 +391,150 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
                 <div className="space-y-6">
                   {/* MAPA PARQUE LAYOUT CHECK */}
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                  {(lead.externalData as any)?.mapaParque ? (
-                    (() => {
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      const mp = (lead.externalData as any).mapaParque;
+                  {(() => {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const raw = ((lead as any).raw ?? {}) as Record<string, unknown>;
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const l: any = lead as any;
+                    const isMapaParque = l.type === "MAPA_PARQUE" || l.NR_CNPJ || raw.NR_CNPJ || raw.NM_CLIENTE;
+                    if (isMapaParque) {
+                      const formatDate = (value: unknown) => {
+                        if (!value) return "-";
+                        const d = new Date(value as string);
+                        return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleDateString("pt-BR");
+                      };
+                      const mp = {
+                        cnpj: l.NR_CNPJ ?? l.cnpj ?? raw.NR_CNPJ ?? raw.CNPJ ?? null,
+                        nome: l.NM_CLIENTE ?? l.razaoSocial ?? raw.NM_CLIENTE ?? raw.CLIENTE ?? null,
+                        endereco: l.DS_ENDERECO ?? l.logradouro ?? raw.DS_ENDERECO ?? null,
+                        cidade: l.DS_CIDADE ?? l.cidade ?? raw.DS_CIDADE ?? null,
+                        cep: l.NR_CEP ?? l.cep ?? raw.NR_CEP ?? null,
+                        numero: l.NUMERO_MP ?? l.numero ?? raw.NUMERO_MP ?? raw.NUMERO ?? null,
+                        vertical: l.VERTICAL_MP ?? l.vertical ?? raw.VERTICAL ?? null,
+                        qtdSfaFiliais: l.QTD_SFA_FILIAIS ?? raw.QTD_SFA_FILIAIS ?? null,
+                        flgCliBiometrado: l.FLG_CLI_BIOMETRADO ?? raw.FLG_CLI_BIOMETRADO ?? null,
+                        nomeRede: l.NOMEREDE ?? raw.NOMEREDE ?? null,
+                        // Contatos
+                        nmContatoSfa: l.NM_CONTATO_SFA ?? raw.NM_CONTATO_SFA ?? null,
+                        emailContatoSfa: l.EMAIL_CONTATO_PRINCIPAL_SFA ?? raw.EMAIL_CONTATO_PRINCIPAL_SFA ?? null,
+                        celularContatoSfa: l.CELULAR_CONTATO_PRINCIPAL_SFA ?? raw.CELULAR_CONTATO_PRINCIPAL_SFA ?? null,
+                        tlfn1: l.TLFN_1 ?? raw.TLFN_1 ?? null,
+                        tlfn2: l.TLFN_2 ?? raw.TLFN_2 ?? null,
+                        tlfn3: l.TLFN_3 ?? raw.TLFN_3 ?? null,
+                        tlfn4: l.TLFN_4 ?? raw.TLFN_4 ?? null,
+                        tlfn5: l.TLFN_5 ?? raw.TLFN_5 ?? null,
+                        telComercialSiebel: l.TEL_COMERCIAL_SIEBEL ?? raw.TEL_COMERCIAL_SIEBEL ?? null,
+                        telCelularSiebel: l.TEL_CELULAR_SIEBEL ?? raw.TEL_CELULAR_SIEBEL ?? null,
+                        telResidencialSiebel: l.TEL_RESIDENCIAL_SIEBEL ?? raw.TEL_RESIDENCIAL_SIEBEL ?? null,
+                        // Planta Vivo
+                        tpProduto: l.TP_PRODUTO ?? raw.TP_PRODUTO ?? null,
+                        qtMovelTerm: l.QT_MOVEL_TERM ?? raw.QT_MOVEL_TERM ?? null,
+                        qtMovelPen: l.QT_MOVEL_PEN ?? raw.QT_MOVEL_PEN ?? null,
+                        qtMovelM2m: l.QT_MOVEL_M2M ?? raw.QT_MOVEL_M2M ?? null,
+                        qtBasicaFibra: l.QT_BASICA_TERM_FIBRA ?? raw.QT_BASICA_TERM_FIBRA ?? null,
+                        qtBasicaMetalico: l.QT_BASICA_TERM_METALICO ?? raw.QT_BASICA_TERM_METALICO ?? null,
+                        qtBasicaBl: l.QT_BASICA_BL ?? raw.QT_BASICA_BL ?? null,
+                        qtBlFtth: l.QT_BL_FTTH ?? raw.QT_BL_FTTH ?? null,
+                        qtBlFttc: l.QT_BL_FTTC ?? raw.QT_BL_FTTC ?? null,
+                        qtBasicaTv: l.QT_BASICA_TV ?? raw.QT_BASICA_TV ?? null,
+                        qtBasicaOutros: l.QT_BASICA_OUTROS ?? raw.QT_BASICA_OUTROS ?? null,
+                        qtBasicaLinhas: l.QT_BASICA_LINAS ?? raw.QT_BASICA_LINAS ?? null,
+                        qtAvancadaDados: l.QT_AVANCADA_DADOS ?? raw.QT_AVANCADA_DADOS ?? null,
+                        avancadaVoz: l.AVANCADA_VOZ ?? raw.AVANCADA_VOZ ?? null,
+                        qtVivoTech: l.QT_VIVO_TECH ?? raw.QT_VIVO_TECH ?? null,
+                        qtVvn: l.QT_VVN ?? raw.QT_VVN ?? null,
+                        dataFimVtech: l.DATA_FIM_VTECH ?? raw.DATA_FIM_VTECH ?? null,
+                        flgTrocaVtech: l.FLG_TROCA_VTECH ?? raw.FLG_TROCA_VTECH ?? null,
+                        flgPqDigital: l.FLG_PQ_DIGITAL ?? raw.FLG_PQ_DIGITAL ?? null,
+                      };
+
+                      const phonesList = [
+                        { label: "Contato Principal", value: mp.celularContatoSfa },
+                        { label: "TLFN_1", value: mp.tlfn1 },
+                        { label: "TLFN_2", value: mp.tlfn2 },
+                        { label: "TLFN_3", value: mp.tlfn3 },
+                        { label: "TLFN_4", value: mp.tlfn4 },
+                        { label: "TLFN_5", value: mp.tlfn5 },
+                        { label: "TEL_COMERCIAL_SIEBEL", value: mp.telComercialSiebel },
+                        { label: "TEL_CELULAR_SIEBEL", value: mp.telCelularSiebel },
+                        { label: "TEL_RESIDENCIAL_SIEBEL", value: mp.telResidencialSiebel },
+                      ].filter((p) => p.value);
+
                       return (
                         <div className="space-y-6 animate-in slide-in-from-left-2">
-                          {/* 1. Header: CNPJ & Nome */}
-                          <div className="border-l-4 border-neon-pink pl-4 bg-slate-900/50 p-4">
-                            <h3 className="text-xl font-bold text-white uppercase tracking-wider mb-2">Dados do Cliente</h3>
-                            <div className="grid grid-cols-2 gap-4">
+                          {/* Dados da Empresa */}
+                          <div className="border-l-4 border-neon-pink pl-4 bg-slate-900/50 p-4 space-y-3">
+                            <h3 className="text-xl font-bold text-white uppercase tracking-wider mb-2">Dados da Empresa</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div>
                                 <label className="text-[10px] uppercase text-slate-500 tracking-widest">CNPJ</label>
-                                <p className="text-white font-mono text-sm font-bold">{lead.cnpj}</p>
+                                <p className="text-white font-mono text-sm font-bold">{mp.cnpj || "-"}</p>
                               </div>
                               <div>
                                 <label className="text-[10px] uppercase text-slate-500 tracking-widest">Nome</label>
-                                <p className="text-white font-mono text-sm">{lead.razaoSocial}</p>
+                                <p className="text-white font-mono text-sm">{mp.nome || "-"}</p>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-1">
+                                <label className="text-[10px] uppercase text-slate-500 tracking-widest">Endereço</label>
+                                <p className="text-white text-sm">
+                                  {mp.endereco || "-"} {mp.numero ? `, ${mp.numero}` : ""} <br />
+                                  {mp.cidade || "-"} {mp.cep ? `- CEP: ${mp.cep}` : ""}
+                                </p>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div className="bg-pic-card p-3 border border-slate-700">
+                                  <label className="text-[10px] uppercase text-slate-500 tracking-widest">Vertical</label>
+                                  <p className="text-neon-blue font-bold uppercase">{mp.vertical ?? "-"}</p>
+                                </div>
+                                <div className="bg-pic-card p-3 border border-slate-700">
+                                  <label className="text-[10px] uppercase text-slate-500 tracking-widest">Rede</label>
+                                  <p className="text-white font-mono">{mp.nomeRede ?? "-"}</p>
+                                </div>
+                                <div className="bg-pic-card p-3 border border-slate-700">
+                                  <label className="text-[10px] uppercase text-slate-500 tracking-widest">Filiais SFA</label>
+                                  <p className="text-white font-mono">{mp.qtdSfaFiliais ?? "-"}</p>
+                                </div>
+                                <div className="bg-pic-card p-3 border border-slate-700">
+                                  <label className="text-[10px] uppercase text-slate-500 tracking-widest">Bio</label>
+                                  <p className="text-white font-mono">{mp.flgCliBiometrado ?? "NÃO"}</p>
+                                </div>
                               </div>
                             </div>
                           </div>
 
-                          {/* 2. Endereço */}
-                          <div className="border-l-4 border-pic-zinc pl-4 bg-slate-900/50 p-4">
-                            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Localização</h3>
-                            <p className="text-white text-sm">
-                              {mp.logradouro ?? lead.numero}, {mp.numero} <br />
-                              {mp.cidade} - CEP: {mp.cep}
-                            </p>
-                          </div>
-
-                          {/* 3. Vertical & Flags */}
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="bg-pic-card p-3 border border-slate-700">
-                              <label className="text-[10px] uppercase text-slate-500 tracking-widest">Vertical</label>
-                              <p className="text-neon-blue font-bold uppercase">{mp.vertical ?? lead.vertical ?? "-"}</p>
-                            </div>
-                            <div className="bg-pic-card p-3 border border-slate-700">
-                              <label className="text-[10px] uppercase text-slate-500 tracking-widest">Filiais SFA</label>
-                              <p className="text-white font-mono">{mp.qtdSfaFiliais ?? 0}</p>
-                            </div>
-                          </div>
-
-                          {/* 4. Base Vivo (Detailed Products) */}
+                          {/* Planta Vivo */}
                           <div className="border-l-4 border-neon-green pl-4 bg-slate-900/50 p-4">
                             <h3 className="text-sm font-bold text-neon-green uppercase tracking-wider mb-4 border-b border-dashed border-slate-700 pb-2">
-                              Base Vivo (Atual)
+                              Planta Vivo
                             </h3>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-y-4 gap-x-2">
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-slate-500">Móvel Term</p>
-                                <p className="text-white font-mono font-bold">{mp.qtMovelTerm}</p>
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-slate-500">Móvel Pen</p>
-                                <p className="text-white font-mono font-bold">{mp.qtMovelPen}</p>
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-slate-500">M2M</p>
-                                <p className="text-white font-mono font-bold">{mp.qtMovelM2m}</p>
-                              </div>
-
-                              <div className="col-span-full h-px bg-slate-800 my-1"></div>
-
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-slate-500">Fibra</p>
-                                <p className="text-white font-mono font-bold">{mp.qtBasicaFibra}</p>
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-slate-500">Metálico</p>
-                                <p className="text-white font-mono font-bold">{mp.qtBasicaMetalico}</p>
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-slate-500">Banda Larga</p>
-                                <p className="text-white font-mono font-bold">{mp.qtBasicaBl}</p>
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-slate-500">BL FTTH</p>
-                                <p className="text-white font-mono font-bold">{mp.qtBlFtth}</p>
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-slate-500">BL FTTC</p>
-                                <p className="text-white font-mono font-bold">{mp.qtBlFttc}</p>
-                              </div>
-
-                              <div className="col-span-full h-px bg-slate-800 my-1"></div>
-
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-slate-500">Voz/Linhas</p>
-                                <p className="text-white font-mono font-bold">{mp.qtBasicaLinhas}</p>
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-slate-500">TV</p>
-                                <p className="text-white font-mono font-bold">{mp.qtBasicaTv}</p>
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-slate-500">Outros</p>
-                                <p className="text-white font-mono font-bold">{mp.qtBasicaOutros}</p>
-                              </div>
-
-                              <div className="col-span-full h-px bg-slate-800 my-1"></div>
-
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-slate-500">Dados Avanc.</p>
-                                <p className="text-white font-mono font-bold">{mp.qtAvancadaDados}</p>
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-slate-500">Voz Avanc.</p>
-                                <p className="text-white font-mono font-bold">{mp.avancadaVoz}</p>
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-slate-500">Vivo Tech</p>
-                                <p className="text-white font-mono font-bold">{mp.qtVivoTech}</p>
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-slate-500">VVN</p>
-                                <p className="text-white font-mono font-bold">{mp.qtVvn}</p>
-                              </div>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-2">
+                              <InfoItem label="Produto" value={mp.tpProduto ?? "-"} />
+                              <InfoItem label="Móvel Term" value={mp.qtMovelTerm} treatMissingAsZero />
+                              <InfoItem label="Móvel Pen" value={mp.qtMovelPen} treatMissingAsZero />
+                              <InfoItem label="M2M" value={mp.qtMovelM2m} treatMissingAsZero />
+                              <InfoItem label="Básica Fibra" value={mp.qtBasicaFibra} treatMissingAsZero />
+                              <InfoItem label="Básica Metálico" value={mp.qtBasicaMetalico} treatMissingAsZero />
+                              <InfoItem label="Básica BL" value={mp.qtBasicaBl} treatMissingAsZero />
+                              <InfoItem label="BL FTTH" value={mp.qtBlFtth} treatMissingAsZero />
+                              <InfoItem label="BL FTTC" value={mp.qtBlFttc} treatMissingAsZero />
+                              <InfoItem label="Básica TV" value={mp.qtBasicaTv} treatMissingAsZero />
+                              <InfoItem label="Básica Outros" value={mp.qtBasicaOutros} treatMissingAsZero />
+                              <InfoItem label="Básica Linhas" value={mp.qtBasicaLinhas} treatMissingAsZero />
+                              <InfoItem label="Avançada Dados" value={mp.qtAvancadaDados} treatMissingAsZero />
+                              <InfoItem label="Avançada Voz" value={mp.avancadaVoz} treatMissingAsZero />
+                              <InfoItem label="Vivo Tech" value={mp.qtVivoTech} treatMissingAsZero />
+                              <InfoItem label="VVN" value={mp.qtVvn} treatMissingAsZero />
+                              <InfoItem label="Fim VTech" value={formatDate(mp.dataFimVtech)} />
+                              <InfoItem label="Troca VTech" value={mp.flgTrocaVtech ?? "-"} />
+                              <InfoItem label="PQ Digital" value={mp.flgPqDigital ?? "-"} />
                             </div>
                           </div>
 
-                          {/* 6. VTech Flags */}
-                          <div className="grid grid-cols-3 gap-2 text-center">
-                            <div className={`p-2 border ${mp.flgTrocaVtech === 'SIM' ? 'border-red-500 bg-red-500/10' : 'border-slate-800'}`}>
-                              <p className="text-[8px] uppercase text-slate-500">Troca VTech</p>
-                              <p className="text-xs font-bold text-white">{mp.flgTrocaVtech ?? 'NÃO'}</p>
-                            </div>
-                            <div className={`p-2 border ${mp.flgPqDigital === 'SIM' ? 'border-neon-blue bg-neon-blue/10' : 'border-slate-800'}`}>
-                              <p className="text-[8px] uppercase text-slate-500">PQ Digital</p>
-                              <p className="text-xs font-bold text-white">{mp.flgPqDigital ?? 'NÃO'}</p>
-                            </div>
-                            <div className="p-2 border border-slate-800">
-                              <p className="text-[8px] uppercase text-slate-500">Fim VTech</p>
-                              <p className="text-xs font-bold text-white">{mp.dataFimVtech ?? '-'}</p>
-                            </div>
-                          </div>
-
-                          {/* 7. Contatos */}
+                          {/* Contatos Mapa Parque */}
                           <div className="border-l-4 border-neon-blue pl-4">
                             <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-4">Contatos Mapa Parque</h3>
-
-                            {/* Principal */}
                             {(mp.nmContatoSfa || mp.emailContatoSfa || mp.celularContatoSfa) && (
                               <div className="mb-4 bg-pic-card p-3 border border-slate-700">
                                 <p className="text-xs font-bold text-white mb-1">{mp.nmContatoSfa || "Contato Principal"}</p>
@@ -518,24 +542,28 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
                                 <p className="text-[10px] text-slate-500">{mp.emailContatoSfa}</p>
                               </div>
                             )}
-
-                            {/* Phones List */}
                             <div className="space-y-2">
-                              <label className="text-[10px] uppercase text-slate-500 tracking-widest block">Telefones Adicionais</label>
-                              {[mp.tlfn1, mp.tlfn2, mp.tlfn3, mp.tlfn4, mp.tlfn5, mp.telComercialSiebel, mp.telCelularSiebel, mp.telResidencialSiebel].filter(Boolean).map((tel, idx) => (
-                                <PhoneItem
-                                  key={idx}
-                                  phone={{ rotulo: "Tel Mapa Parque", valor: tel, feedback: null }}
-                                  onFeedback={handlePhoneFeedback}
-                                />
-                              ))}
+                              <label className="text-[10px] uppercase text-slate-500 tracking-widest block">Telefones</label>
+                              {phonesList.length > 0 ? (
+                                phonesList.map((tel, idx) => (
+                                  <div key={idx} className="space-y-1">
+                                    <PhoneItem
+                                      phone={{ rotulo: "Tel Mapa Parque", valor: tel.value as string, feedback: null }}
+                                      onFeedback={handlePhoneFeedback}
+                                    />
+                                    <p className="text-[10px] text-slate-500">Fonte: {tel.label}</p>
+                                  </div>
+                                ))
+                              ) : (
+                                <p className="text-slate-600 text-xs italic">Sem telefones cadastrados.</p>
+                              )}
                             </div>
                           </div>
-
                         </div>
                       );
-                    })()
-                  ) : (
+                    }
+                    return null;
+                  })() || (
                     // STANDARD LAYOUT
                     <>
                       <div className="border-l-4 border-neon-green pl-4">

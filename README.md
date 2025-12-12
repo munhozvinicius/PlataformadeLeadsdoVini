@@ -11,7 +11,7 @@ Aplicação web para gestão de leads industriais com autenticação por papéis
 
 1. Copie `.env.local.example` para `.env.local`.
 2. Preencha:
-   - `MONGO_URL_MONGODB_URI` – string de conexão do MongoDB.
+- `DATABASE_URL` – string de conexão do PostgreSQL (Neon).
    - `NEXTAUTH_SECRET` – chave secreta para NextAuth (use `openssl rand -base64 32`).
    - Opcional: alterar `MASTER_EMAIL` / `MASTER_PASSWORD` do seed inicial.
 
@@ -19,7 +19,7 @@ O usuário MASTER padrão é `munhoz.vinicius@gmail.com / Theforce85!!`.
 
 ## Script de saneamento de MASTERs
 
-- Garanta que `.env.local` contenha `MONGO_URL_MONGODB_URI="mongodb+srv://Vercel-Admin-atlas-violet-house:p2jqOzEqJGuwfrbM@atlas-violet-house.jizuipo.mongodb.net/plataforma_leads?retryWrites=true&w=majority"`
+- Garanta que `.env.local` contenha `DATABASE_URL="postgresql://...@ep-wild-star-acpy2pmm-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"`
 - Rode `npm run fix:master` para limpar `owner` e `officeRecord` de todos os usuários `MASTER`.
 - O script é idempotente e não altera o campo `office`.
 

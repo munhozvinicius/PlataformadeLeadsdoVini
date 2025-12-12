@@ -14,9 +14,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const { campanhaId, consultorId, quantidade } = await req.json();
+  const { campanhaId, consultorId, quantity } = await req.json().catch(() => ({}));
 
-  if (!campanhaId || !consultorId || !quantidade || quantidade <= 0) {
+  if (!campanhaId || !consultorId || !quantity || quantity <= 0) {
     return NextResponse.json({ message: "Dados inválidos: ID da campanha, ID do consultor e quantidade positiva são obrigatórios." }, { status: 400 });
   }
 
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
   // Ensure the consultant is in an office that participates in this campaign
   const campaign = await prisma.campanha.findUnique({
     where: { id: campanhaId },
-    select: { officeIDs: true }
+    select: { officeRecords: { select: { id: true } } }
   });
 
   if (!campaign) {
@@ -59,8 +59,9 @@ export async function POST(req: Request) {
   // If campaign has specific offices assigned, enforce it.
   // If officeIDs is empty, maybe it's a global/legacy campaign? allow all or strict?
   // User implies strict: "selecionado os escritorios... quem terá acesso"
-  if (campaign.officeIDs && campaign.officeIDs.length > 0) {
-    if (!targetConsultant.officeRecordId || !campaign.officeIDs.includes(targetConsultant.officeRecordId)) {
+  if (campaign.officeRecords && campaign.officeRecords.length > 0) {
+    const campaignOfficeIds = campaign.officeRecords.map((o) => o.id);
+    if (!targetConsultant.officeRecordId || !campaignOfficeIds.includes(targetConsultant.officeRecordId)) {
       return NextResponse.json({
         message: "Este consultor não pertence a nenhum escritório participante desta campanha."
       }, { status: 400 });
@@ -115,7 +116,7 @@ export async function POST(req: Request) {
       consultorId: null
     },
     orderBy: { createdAt: "asc" },
-    take: quantidade,
+    take: quantity,
     select: { id: true },
   });
 
@@ -158,5 +159,19 @@ export async function POST(req: Request) {
     console.error("Failed to create log", e);
   }
 
-  return NextResponse.json({ assigned: leadsNovos.length, atribuídos: leadsNovos.length });
+  // 8. Atualiza contadores da campanha
+  const updatedCampaign = await prisma.campanha.update({
+    where: { id: campanhaId },
+    data: {
+      assignedLeads: { increment: leadsNovos.length },
+      remainingLeads: { decrement: leadsNovos.length },
+    },
+    select: { assignedLeads: true, remainingLeads: true, totalLeads: true },
+  });
+
+  return NextResponse.json({
+    assigned: leadsNovos.length,
+    atribuídos: leadsNovos.length,
+    campanha: updatedCampaign,
+  });
 }
