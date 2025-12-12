@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     const role = session.user.role;
     console.log("DEBUG: User Role:", role);
 
-    const ALLOWED_ROLES = [Role.MASTER, Role.GERENTE_SENIOR];
+    const ALLOWED_ROLES: Role[] = [Role.MASTER, Role.GERENTE_SENIOR];
 
     if (!role || !ALLOWED_ROLES.includes(role)) {
       console.log(`DEBUG: Access Denied. Role ${role} is not in allowed list: ${ALLOWED_ROLES.join(", ")}`);
