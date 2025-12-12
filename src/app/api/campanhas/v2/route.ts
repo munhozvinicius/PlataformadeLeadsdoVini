@@ -29,13 +29,19 @@ function parseOffice(value: unknown): Office | null {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
+    console.log("DEBUG: Session found:", session ? "YES" : "NO");
+
     if (!session?.user || !session.user.id) {
+      console.log("DEBUG: No user or ID in session", session);
       return NextResponse.json({ message: "Não autenticado." }, { status: 401 });
     }
 
     // Role check: Only Master, GS, GN, Owner (Consultant already blocked by middleware usually, but checking here too)
     const role = session.user.role;
+    console.log("DEBUG: User Role:", role, "Email:", session.user.email);
+
     if (role === Role.CONSULTOR) {
+      console.log("DEBUG: Access Denied. Role is CONSULTOR.");
       return NextResponse.json({ message: "Sem permissão." }, { status: 403 });
     }
 
