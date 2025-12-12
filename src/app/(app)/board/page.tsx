@@ -14,6 +14,7 @@ import { LeadCard } from "@/components/leads/LeadCard";
 import { LeadDetailModal } from "@/components/leads/LeadDetailModal";
 
 type ViewerRole = Role | Profile;
+type OfficeOption = { id: string; name: string; active?: boolean };
 
 type Lead = {
   id: string;
@@ -65,6 +66,8 @@ type Metrics = {
   lossReasons: { outcomeLabel: string | null; _count: { outcomeLabel: number } }[];
   avgActivities: number;
   followUps: number;
+  scheduledFollowUps?: number;
+  scheduledMeetings?: number;
 };
 
 type ConsultantBoardProps = {
@@ -164,6 +167,8 @@ function ConsultantBoard({
   // summary removed as unused
 
   const selectedLead = useMemo(() => leads.find((l) => l.id === selectedLeadId), [leads, selectedLeadId]);
+  const scheduledFollowUps = metrics?.scheduledFollowUps ?? metrics?.followUps ?? 0;
+  const scheduledMeetings = metrics?.scheduledMeetings ?? 0;
 
   return (
     <div className="space-y-6">
@@ -187,7 +192,23 @@ function ConsultantBoard({
         <div className="bg-pic-card border border-pic-zinc p-4 rounded-sm flex flex-col justify-between hover:border-white transition-colors group">
           <span className="text-[10px] uppercase tracking-widest text-slate-500 group-hover:text-white transition-colors">Fechamento</span>
           <span className="text-3xl font-black text-white">{metrics?.closeRate ?? 0}%</span>
-          <span className="text-[10px] text-slate-600">Follow-ups: {metrics?.followUps ?? 0}</span>
+          <span className="text-[10px] text-slate-600">Follow-ups: {scheduledFollowUps}</span>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-pic-card border border-neon-green/40 p-4 rounded-sm flex items-center justify-between shadow-[0_0_20px_rgba(0,255,153,0.15)]">
+          <div className="space-y-1">
+            <span className="text-[10px] uppercase tracking-widest text-neon-green">Reuniões agendadas</span>
+            <p className="text-xl font-black text-white">{scheduledMeetings}</p>
+          </div>
+          <div className="text-neon-green text-[10px] uppercase font-bold bg-neon-green/10 px-3 py-2 rounded-sm border border-neon-green/40">Agenda</div>
+        </div>
+        <div className="bg-pic-card border border-neon-blue/40 p-4 rounded-sm flex items-center justify-between shadow-[0_0_20px_rgba(0,243,255,0.15)]">
+          <div className="space-y-1">
+            <span className="text-[10px] uppercase tracking-widest text-neon-blue">FUPs agendados</span>
+            <p className="text-xl font-black text-white">{scheduledFollowUps}</p>
+          </div>
+          <div className="text-neon-blue text-[10px] uppercase font-bold bg-neon-blue/10 px-3 py-2 rounded-sm border border-neon-blue/40">Lembretes</div>
         </div>
       </div>
 
@@ -260,9 +281,25 @@ export default function BoardPage() {
   const router = useRouter();
   const [consultants, setConsultants] = useState<{ id: string; name: string; email: string; role: string }[]>([]);
   const [selectedConsultant, setSelectedConsultant] = useState<string>("");
+  const [offices, setOffices] = useState<OfficeOption[]>([]);
+  const [selectedOffice, setSelectedOffice] = useState<string>("");
   const [refreshSignal, setRefreshSignal] = useState(0);
   const [selectedCampaign, setSelectedCampaign] = useState<string>("all");
   const [campaignOptions, setCampaignOptions] = useState<{ id: string; name: string }[]>([]);
+
+  const viewerRole: ViewerRole = (session?.user.role as ViewerRole) ?? "CONSULTOR";
+  const canFilterByTeam = viewerRole === "PROPRIETARIO" || viewerRole === "GERENTE_SENIOR" || viewerRole === "GERENTE_NEGOCIOS" || viewerRole === "MASTER";
+  const selectedOfficeIds = useMemo(() => (selectedOffice ? [selectedOffice] : []), [selectedOffice]);
+
+  const handleCampaignsUpdate = useCallback((campaigns: { id: string; name: string }[]) => {
+    setCampaignOptions((prev) => {
+      const map = new Map(prev.map((c) => [c.id, c.name]));
+      campaigns.forEach((c) => {
+        if (!map.has(c.id)) map.set(c.id, c.name);
+      });
+      return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+    });
+  }, []);
 
   useEffect(() => {
     if (status === "loading") return;
@@ -279,15 +316,20 @@ export default function BoardPage() {
   }, []);
 
   const loadOffices = useCallback(async () => {
-    // Placeholder if office filter needed
+    const res = await fetch("/api/admin/offices", { cache: "no-store" });
+    if (res.ok) {
+      const data: OfficeOption[] = await res.json();
+      const active = data.filter((office) => office.active ?? true).sort((a, b) => a.name.localeCompare(b.name));
+      setOffices(active);
+    }
   }, []);
 
   useEffect(() => {
-    if (session?.user.role === "PROPRIETARIO" || session?.user.role === "GERENTE_SENIOR" || session?.user.role === "GERENTE_NEGOCIOS") {
+    if (canFilterByTeam) {
       loadConsultants();
       loadOffices();
     }
-  }, [session, loadConsultants, loadOffices]);
+  }, [canFilterByTeam, loadConsultants, loadOffices]);
 
   // Set default consultant if user is consultant
   useEffect(() => {
@@ -295,8 +337,6 @@ export default function BoardPage() {
       setSelectedConsultant(session.user.id);
     }
   }, [session]);
-
-  const viewerRole = (session?.user.role as ViewerRole) ?? "CONSULTOR";
 
   return (
     <main className="min-h-screen bg-pic-dark text-slate-200 overflow-hidden flex flex-col">
@@ -311,8 +351,25 @@ export default function BoardPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Office Filter (Admin only) */}
+            {canFilterByTeam && (
+              <div className="relative group">
+                <select
+                  value={selectedOffice}
+                  onChange={(e) => setSelectedOffice(e.target.value)}
+                  className="bg-black border border-pic-zinc text-slate-300 text-xs uppercase font-bold py-2 px-3 pr-8 focus:border-neon-blue outline-none appearance-none min-w-[200px]"
+                >
+                  <option value="">Todos Escritórios</option>
+                  {offices.map((office) => (
+                    <option key={office.id} value={office.id}>{office.name}</option>
+                  ))}
+                </select>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none text-[10px]">▼</div>
+              </div>
+            )}
+
             {/* Consultant Filter (Admin only) */}
-            {(viewerRole === "PROPRIETARIO" || viewerRole === "GERENTE_SENIOR" || viewerRole === "GERENTE_NEGOCIOS") && (
+            {canFilterByTeam && (
               <div className="relative group">
                 <select
                   value={selectedConsultant}
@@ -366,7 +423,8 @@ export default function BoardPage() {
             consultantId={selectedConsultant}
             campaignId={selectedCampaign}
             refreshSignal={refreshSignal}
-            onCampaignsUpdate={setCampaignOptions}
+            onCampaignsUpdate={handleCampaignsUpdate}
+            officeIds={selectedOfficeIds}
           />
         </div>
       </div>

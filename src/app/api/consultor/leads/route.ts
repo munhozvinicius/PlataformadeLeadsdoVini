@@ -16,6 +16,10 @@ export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
   const consultantId = searchParams.get("consultantId");
   const campaignId = searchParams.get("campaignId");
+  const officeIds = (searchParams.get("officeIds") || "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
 
   const where: Prisma.LeadWhereInput = {};
   if (campaignId) where.campanhaId = campaignId;
@@ -52,6 +56,18 @@ export async function GET(req: NextRequest) {
     }
   } else {
     if (consultantId) where.consultorId = consultantId;
+  }
+
+  if (officeIds.length > 0) {
+    // Narrow by offices while respecting any stricter filters above
+    if (where.officeId && typeof where.officeId === "string") {
+      // Already locked to one office (e.g., office admin); keep as is.
+    } else if (where.officeId && typeof where.officeId === "object") {
+      // Merge with existing filter if possible
+      where.officeId = { in: officeIds };
+    } else {
+      where.officeId = { in: officeIds };
+    }
   }
 
   const leads = await prisma.lead.findMany({

@@ -1,4 +1,5 @@
 import React from "react";
+import { CalendarClock, Clock3 } from "lucide-react";
 import { LeadStatusId } from "@/constants/leadStatus";
 
 export type LeadCardProps = {
@@ -17,6 +18,8 @@ export type LeadCardProps = {
     telefone2?: string | null;
     telefone3?: string | null;
     lastActivityAt?: string | null;
+    nextFollowUpAt?: string | null;
+    nextStepNote?: string | null;
   };
   onOpen: (leadId: string) => void;
 };
@@ -25,16 +28,30 @@ export type LeadCardProps = {
 
 export function LeadCard({ lead, onOpen }: LeadCardProps) {
 
-
-  // Format currency if present (assuming internal value or placeholder)
-
+  const nextFollowUpDate = lead.nextFollowUpAt ? new Date(lead.nextFollowUpAt) : null;
+  const hasUpcoming = nextFollowUpDate ? nextFollowUpDate.getTime() >= Date.now() : false;
+  const isMeeting = hasUpcoming && lead.nextStepNote === "REUNIAO";
+  const isFollowUp = hasUpcoming && lead.nextStepNote === "FOLLOW_UP";
+  const accentClass = isMeeting
+    ? "border-l-neon-green ring-1 ring-neon-green/30 shadow-[0_0_16px_rgba(0,255,153,0.25)]"
+    : isFollowUp
+      ? "border-l-neon-blue ring-1 ring-neon-blue/30 shadow-[0_0_16px_rgba(0,243,255,0.25)]"
+      : "border-pic-zinc hover:border-l-neon-pink hover:shadow-[0_0_20px_rgba(255,0,153,0.15)]";
+  const accentPill = isMeeting ? { label: "Reunião", icon: <CalendarClock className="w-3 h-3" /> } : isFollowUp ? { label: "FUP", icon: <Clock3 className="w-3 h-3" /> } : null;
+  const cornerColor = isMeeting ? "border-t-neon-green" : isFollowUp ? "border-t-neon-blue" : "border-t-pic-zinc";
 
   return (
     <div
-      className="group relative flex flex-col justify-between rounded-sm border-l-4 border-pic-zinc bg-pic-card p-4 transition-all hover:border-l-neon-pink hover:shadow-[0_0_20px_rgba(255,0,153,0.15)] cursor-pointer"
+      className={`group relative flex flex-col justify-between rounded-sm border-l-4 bg-pic-card p-4 transition-all cursor-pointer ${accentClass}`}
       onClick={() => onOpen(lead.id)}
     >
-      <div className="absolute right-0 top-0 h-0 w-0 border-t-[12px] border-r-[12px] border-t-pic-zinc border-r-transparent transition-colors group-hover:border-t-neon-pink"></div>
+      <div className={`absolute right-0 top-0 h-0 w-0 border-t-[12px] border-r-[12px] ${cornerColor} border-r-transparent transition-colors group-hover:border-t-neon-pink`}></div>
+      {accentPill && (
+        <div className={`absolute -left-1 -top-1 flex items-center gap-1 rounded-br-md px-2 py-1 text-[10px] font-black uppercase tracking-wider ${isMeeting ? "bg-neon-green text-black" : "bg-neon-blue text-black"}`}>
+          {accentPill.icon}
+          {accentPill.label}
+        </div>
+      )}
 
       <div className="mb-4 flex items-start justify-between">
         <div className="space-y-1">

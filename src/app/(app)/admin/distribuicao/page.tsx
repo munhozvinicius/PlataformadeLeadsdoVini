@@ -336,7 +336,7 @@ export default function DistribuicaoPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-6">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-neon-pink mb-1">Admin</p>
-          <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Gestão de Campanhas e Leads</h1>
+          <h1 className="text-xl font-black text-white uppercase tracking-tighter">Gestão de Campanhas e Leads</h1>
         </div>
         <div className="flex gap-2 bg-pic-dark/50 p-1 rounded-lg border border-white/10">
           <button

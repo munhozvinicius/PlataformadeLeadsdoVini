@@ -105,6 +105,11 @@ export async function POST(req: NextRequest) {
   const stageBefore = lead.status;
   const stageAfter = newStage && Object.values(LeadStatus).includes(newStage) ? newStage : lead.status;
   const followUpDate = nextFollowUpAt ? new Date(nextFollowUpAt) : null;
+  // Normalize next step type so front-end can key visual cues (e.g., FOLLOW_UP, REUNIAO)
+  const normalizedNextStep =
+    followUpDate && typeof nextStepNote === "string"
+      ? nextStepNote.trim().toUpperCase()
+      : null;
   const now = new Date();
 
   const historicoAtual: Record<string, unknown>[] = Array.isArray(lead.historico)
@@ -137,7 +142,7 @@ export async function POST(req: NextRequest) {
       stageBefore,
       stageAfter,
       nextFollowUpAt: followUpDate ?? undefined,
-      nextStepNote: nextStepNote || undefined,
+      nextStepNote: normalizedNextStep || undefined,
     },
     include: { user: { select: { id: true, name: true, email: true, role: true } } },
   });
@@ -154,7 +159,7 @@ export async function POST(req: NextRequest) {
       lastOutcomeLabel: outcomeLabel || lead.lastOutcomeLabel || undefined,
       lastOutcomeNote: note,
       nextFollowUpAt: followUpDate,
-      nextStepNote: nextStepNote || null,
+      nextStepNote: normalizedNextStep,
       historico: historicoAtual as Prisma.JsonArray,
       lastStatusChangeAt: stageAfter !== lead.status ? now : lead.lastStatusChangeAt,
     },

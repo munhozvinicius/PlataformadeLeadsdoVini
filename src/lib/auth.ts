@@ -6,7 +6,6 @@ import { prisma } from "@/lib/prisma";
 import { Office, Role, Profile } from "@prisma/client";
 
 export const authOptions: NextAuthOptions = {
-  trustHost: true,
   providers: [
     CredentialsProvider({
       name: "Credentials",

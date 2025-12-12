@@ -1,5 +1,5 @@
 import React from "react";
-import { ThumbsUp, ThumbsDown, Phone } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Phone, Flame } from "lucide-react";
 
 type PhoneFeedback = "like" | "dislike" | null;
 
@@ -8,6 +8,7 @@ type PhoneItemProps = {
         valor: string;
         rotulo?: string;
         feedback?: PhoneFeedback;
+        feedbackReason?: string | null;
     };
     onFeedback: (valor: string, feedback: PhoneFeedback) => void;
 };
@@ -17,11 +18,14 @@ export function PhoneItem({ phone, onFeedback }: PhoneItemProps) {
         <div className="flex items-center justify-between bg-black border border-slate-800 p-3 group hover:border-neon-blue transition-colors">
             <div className="flex items-center gap-3">
                 <div className="w-8 h-8 flex items-center justify-center bg-slate-900 text-neon-blue rounded-full">
-                    <Phone size={14} />
+                    {phone.feedback === "like" ? <Flame size={14} className="text-neon-pink" /> : <Phone size={14} />}
                 </div>
                 <div>
                     <p className="text-white font-mono text-sm leading-none mb-1">{phone.valor}</p>
                     <p className="text-[10px] text-slate-500 uppercase tracking-widest">{phone.rotulo || "Telefone"}</p>
+                    {phone.feedback === "dislike" && phone.feedbackReason ? (
+                        <p className="text-[10px] text-red-400 mt-1">⚠ {phone.feedbackReason}</p>
+                    ) : null}
                 </div>
             </div>
 

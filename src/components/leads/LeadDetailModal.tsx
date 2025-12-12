@@ -170,15 +170,29 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
   const [externalLoading, setExternalLoading] = useState(false);
   const [externalData, setExternalData] = useState<Record<string, unknown> | null>(lead.externalData ?? null);
 
-  const [phonesState, setPhonesState] = useState(
+  type PhoneEntry = {
+    valor: string;
+    rotulo?: string;
+    feedback?: "like" | "dislike" | null;
+    feedbackReason?: string | null;
+    feedbackAt?: string | null;
+  };
+
+  const [phonesState, setPhonesState] = useState<PhoneEntry[]>(
     [
-      ...(lead.telefones ?? []),
+      ...((lead.telefones ?? []) as PhoneEntry[]),
       ...[lead.telefone1, lead.telefone2, lead.telefone3]
         .filter(Boolean)
-        .map((p) => ({ rotulo: "Telefone", valor: p as string })),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ].map(p => ({ ...p, feedback: (p as any).feedback ?? null }))
+        .map((p) => ({ rotulo: "Telefone", valor: p as string } as PhoneEntry)),
+    ].map((p) => ({
+      ...p,
+      feedback: p.feedback ?? null,
+      feedbackReason: p.feedbackReason ?? null,
+      feedbackAt: p.feedbackAt ?? null,
+    }))
   );
+  const [pendingDislike, setPendingDislike] = useState<{ valor: string; rotulo?: string } | null>(null);
+  const [dislikeReason, setDislikeReason] = useState<string>("Número inválido / inexistente");
 
   // Status Management (Missing in original?)
   const [selectedStatus, setSelectedStatus] = useState<LeadStatusId>(lead.status as LeadStatusId);
@@ -228,6 +242,14 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
     if (!activityForm.note.trim()) return;
     setSavingActivity(true);
 
+    const nextStepType = activityForm.nextFollowUp
+      ? activityForm.type.toLowerCase().includes("reuni")
+        ? "REUNIAO"
+        : activityForm.type.toLowerCase().includes("follow")
+          ? "FOLLOW_UP"
+          : null
+      : null;
+
     // 1. Save Activity
     await fetch("/api/activities", {
       method: "POST",
@@ -240,6 +262,7 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
         outcomeLabel: OUTCOME_OPTIONS.find(o => o.code === activityForm.outcome)?.label,
         note: activityForm.note,
         nextFollowUpAt: activityForm.nextFollowUp ? new Date(activityForm.nextFollowUp).toISOString() : null,
+        nextStepNote: nextStepType,
       }),
     });
 
@@ -305,16 +328,48 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
     }
   }
 
-  async function handlePhoneFeedback(valor: string, feedback: "like" | "dislike" | null) {
-    const newPhones = phonesState.map(p => p.valor === valor ? { ...p, feedback } : p);
-    setPhonesState(newPhones);
+  const NON_SUCCESS_REASONS = [
+    "Número inválido / inexistente",
+    "Contato não reconhece",
+    "Telefone ocupado / caixa postal",
+    "Sem decisão (intermediário)",
+    "Cliente não tem interesse",
+  ];
 
-    // Save immediately
+  async function persistPhoneFeedback(updatedPhones: typeof phonesState) {
+    setPhonesState(updatedPhones);
     await fetch(`/api/leads/${lead.id}/telefones`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ telefones: newPhones })
+      body: JSON.stringify({ telefones: updatedPhones }),
     });
+    await onRefresh();
+  }
+
+  async function handlePhoneFeedback(valor: string, feedback: "like" | "dislike" | null) {
+    if (feedback === "dislike") {
+      const phone = phonesState.find((p) => p.valor === valor);
+      setPendingDislike({ valor, rotulo: phone?.rotulo });
+      return;
+    }
+    const newPhones = phonesState.map((p) =>
+      p.valor === valor
+        ? { ...p, feedback, feedbackReason: null, feedbackAt: feedback ? new Date().toISOString() : null }
+        : p,
+    );
+    await persistPhoneFeedback(newPhones);
+  }
+
+  async function confirmDislike() {
+    if (!pendingDislike) return;
+    const { valor } = pendingDislike;
+    const newPhones = phonesState.map((p) =>
+      p.valor === valor
+        ? { ...p, feedback: "dislike" as const, feedbackReason: dislikeReason, feedbackAt: new Date().toISOString() }
+        : p,
+    );
+    setPendingDislike(null);
+    await persistPhoneFeedback(newPhones);
   }
 
   return (
@@ -962,6 +1017,54 @@ export function LeadDetailModal({ lead, onClose, onRefresh }: Props) {
 
         </div>
       </div>
+
+      {pendingDislike ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80">
+          <div className="bg-pic-card border-2 border-red-500 shadow-2xl w-full max-w-md p-6 space-y-4">
+            <h3 className="text-lg font-black text-white uppercase tracking-widest flex items-center gap-2">
+              Tabulação Rápida (Deslike)
+            </h3>
+            <p className="text-sm text-slate-300">
+              Telefone <span className="font-mono text-white">{pendingDislike.valor}</span>
+            </p>
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {NON_SUCCESS_REASONS.map((reason) => (
+                <label
+                  key={reason}
+                  className={`flex items-center gap-2 text-sm rounded border px-3 py-2 cursor-pointer ${dislikeReason === reason ? "border-red-500 bg-red-500/10 text-white" : "border-slate-700 text-slate-300"
+                    }`}
+                >
+                  <input
+                    type="radio"
+                    name="dislike-reason"
+                    value={reason}
+                    checked={dislikeReason === reason}
+                    onChange={() => setDislikeReason(reason)}
+                  />
+                  {reason}
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => {
+                  setPendingDislike(null);
+                  setDislikeReason(NON_SUCCESS_REASONS[0]);
+                }}
+                className="px-4 py-2 border border-slate-600 text-slate-300 text-sm hover:border-white"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmDislike}
+                className="flex-1 px-4 py-2 bg-red-600 text-white text-sm font-bold uppercase tracking-wider hover:bg-red-500"
+              >
+                Salvar motivo
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

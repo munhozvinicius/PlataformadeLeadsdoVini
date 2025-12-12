@@ -136,7 +136,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const { name, email, password, role, officeIds, ownerId, seniorId, active, officeRecordId, managedOfficeIds } = body;
+  const { name, email, password, role, officeIds, ownerId, seniorId, active, officeRecordId, managedOfficeIds, officeCode } = body;
 
   if (!name || !email || !password || !role) {
     return NextResponse.json({ message: "Dados insuficientes" }, { status: 400 });
@@ -164,7 +164,16 @@ export async function POST(req: Request) {
   const managedOfficeRecordIds = Array.isArray(managedOfficeIds)
     ? managedOfficeIds.filter((id: unknown): id is string => typeof id === "string" && id.trim().length > 0)
     : [];
-  const targetOfficeRecordId = officeRecordId as string | undefined;
+  const officeCodeUpper = typeof officeCode === "string" ? officeCode.trim().toUpperCase() : undefined;
+  let targetOfficeRecordId = officeRecordId as string | undefined;
+
+  // Se não veio officeRecordId mas veio code, tenta resolver
+  if (!targetOfficeRecordId && officeCodeUpper) {
+    const officeRecord = await prisma.officeRecord.findUnique({ where: { code: officeCodeUpper } });
+    if (officeRecord) {
+      targetOfficeRecordId = officeRecord.id;
+    }
+  }
   let ownerConnect;
   if (role === Role.CONSULTOR) {
     const targetOwnerId = ownerId ?? (isProprietario(sessionRole) ? session.user.id : null);
@@ -179,14 +188,8 @@ export async function POST(req: Request) {
       if (!targetOfficeRecordId || !gnManagedOffices.includes(targetOfficeRecordId)) {
         return NextResponse.json({ message: "GN só pode criar consultor em seus escritórios" }, { status: 403 });
       }
-      if (owner.officeRecordId && !gnManagedOffices.includes(owner.officeRecordId)) {
-        return NextResponse.json({ message: "GN só pode associar consultor a proprietário do seu escritório" }, { status: 403 });
-      }
     }
     ownerConnect = { connect: { id: owner.id } };
-    if (!targetOfficeRecordId) {
-      return NextResponse.json({ message: "Consultor precisa de um escritório" }, { status: 400 });
-    }
   }
 
   const seniorConnect =
@@ -201,6 +204,9 @@ export async function POST(req: Request) {
   try {
     const hashed = await bcrypt.hash(password, 10);
     const targetOffices: Office[] = [];
+    if (officeCodeUpper && Object.values(Office).includes(officeCodeUpper as Office)) {
+      targetOffices.push(officeCodeUpper as Office);
+    }
     if (role === Role.GERENTE_SENIOR) {
       targetOffices.push(...(Object.values(Office) as Office[]));
     } else if (role === Role.GERENTE_NEGOCIOS) {
@@ -267,10 +273,25 @@ export async function POST(req: Request) {
       }
       const ownerIdValue = (ownerConnect.connect as { id: string }).id;
       const ownerOffices = await getUserOfficeCodes(ownerIdValue);
-      if (!ownerOffices.length) {
-        return NextResponse.json({ message: "Proprietário sem escritório" }, { status: 400 });
+      if (ownerOffices.length) {
+        targetOffices.push(...ownerOffices);
       }
-      targetOffices.push(...ownerOffices);
+      if (!targetOffices.length && officeCodeUpper && Object.values(Office).includes(officeCodeUpper as Office)) {
+        targetOffices.push(officeCodeUpper as Office);
+      }
+      if (!targetOffices.length && normalizedOffices.length) {
+        targetOffices.push(...normalizedOffices);
+      }
+      if (!targetOffices.length && targetOfficeRecordId) {
+        // fallback: consulta officeRecord para pegar enum code se existir
+        const targetOfficeRecord = await prisma.officeRecord.findUnique({ where: { id: targetOfficeRecordId } });
+        if (targetOfficeRecord?.office && Object.values(Office).includes(targetOfficeRecord.office as Office)) {
+          targetOffices.push(targetOfficeRecord.office as Office);
+        }
+      }
+      if (!targetOffices.length) {
+        return NextResponse.json({ message: "Consultor precisa de um escritório" }, { status: 400 });
+      }
     }
 
     const userData: Prisma.UserCreateInput = {

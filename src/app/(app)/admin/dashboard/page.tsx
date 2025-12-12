@@ -42,6 +42,8 @@ type ConsultantPerf = {
   leadsParados72h: number;
   tempoMedioPrimeiroContato: number;
   tempoMedioConclusao: number;
+  followUpsAgendados: number;
+  reunioesAgendadas: number;
 };
 
 type CampaignPerf = {
@@ -215,7 +217,7 @@ export default function AdminDashboardPage() {
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-pic-zinc pb-6">
           <div>
-            <h1 className="text-3xl font-black text-white uppercase tracking-tighter mb-1">
+            <h1 className="text-xl font-black text-white uppercase tracking-tighter mb-1">
               Dashboard <span className="text-neon-pink">Estratégico</span>
             </h1>
             <p className="text-slate-400 text-sm">Visão consolidada de performance, agilidade e resultados.</p>
@@ -310,6 +312,8 @@ export default function AdminDashboardPage() {
                           <th className="px-6 py-4 font-bold text-right">Conversão</th>
                           <th className="px-6 py-4 font-bold text-right text-red-500">Parados 72h</th>
                           <th className="px-6 py-4 font-bold text-right">Agilidade</th>
+                          <th className="px-6 py-4 font-bold text-right text-neon-green">Reuniões</th>
+                          <th className="px-6 py-4 font-bold text-right text-neon-blue">FUPs</th>
                           <th className="px-6 py-4 font-bold text-center">Ação</th>
                         </tr>
                       </thead>
@@ -327,6 +331,8 @@ export default function AdminDashboardPage() {
                               {c.leadsParados72h}
                             </td>
                             <td className="px-6 py-4 text-slate-300 text-right font-mono">{fmtHours(c.tempoMedioPrimeiroContato)}</td>
+                            <td className="px-6 py-4 text-neon-green text-right font-mono font-bold">{c.reunioesAgendadas}</td>
+                            <td className="px-6 py-4 text-neon-blue text-right font-mono font-bold">{c.followUpsAgendados}</td>
                             <td className="px-6 py-4 text-center">
                               <button
                                 onClick={() => router.push(`/board?consultantId=${c.id}`)}

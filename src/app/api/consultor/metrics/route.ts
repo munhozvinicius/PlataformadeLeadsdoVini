@@ -4,8 +4,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { LeadStatus, Role } from "@prisma/client";
+import { LeadStatus, Prisma, Role } from "@prisma/client";
 import { getOwnerTeamIds } from "@/lib/auth-helpers";
+import { isOfficeAdmin } from "@/lib/authRoles";
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -14,21 +15,50 @@ export async function GET(req: NextRequest) {
   }
 
   const campaignId = req.nextUrl.searchParams.get("campaignId");
-  const where: Record<string, unknown> = {};
+  const consultantId = req.nextUrl.searchParams.get("consultantId");
+  const officeIds = (req.nextUrl.searchParams.get("officeIds") || "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  const where: Prisma.LeadWhereInput = {};
 
   if (campaignId && campaignId !== "all") {
     where.campanhaId = campaignId;
+  }
+
+  const sessionUser = await prisma.user.findUnique({ where: { id: session.user.id } });
+  if (!sessionUser) {
+    return NextResponse.json({ message: "Sessão inválida" }, { status: 401 });
   }
 
   if (session.user.role === Role.CONSULTOR) {
     where.consultorId = session.user.id;
   } else if (session.user.role === Role.PROPRIETARIO) {
     const teamIds = await getOwnerTeamIds(session.user.id);
-    where.consultorId = { in: teamIds };
-  } else if (session.user.role === Role.MASTER) {
-    // optional consultorId filter
-    const consultantId = req.nextUrl.searchParams.get("consultantId");
+    if (consultantId) {
+      if (!teamIds.includes(consultantId)) {
+        return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      }
+      where.consultorId = consultantId;
+    } else {
+      where.consultorId = { in: teamIds };
+    }
+  } else if (isOfficeAdmin(session.user.role)) {
+    if (!sessionUser.officeRecordId) {
+      return NextResponse.json({ message: "Office inválido" }, { status: 401 });
+    }
+    where.officeId = sessionUser.officeRecordId;
     if (consultantId) where.consultorId = consultantId;
+  } else if (consultantId) {
+    where.consultorId = consultantId;
+  }
+
+  if (officeIds.length > 0) {
+    if (typeof where.officeId === "string") {
+      // Already locked; keep existing filter
+    } else {
+      where.officeId = { in: officeIds };
+    }
   }
 
   const leads = await prisma.lead.findMany({ where, select: { id: true, status: true } });
@@ -61,15 +91,27 @@ export async function GET(req: NextRequest) {
   });
   const avgActivities = totalLeads === 0 ? 0 : Number((totalActivities / totalLeads).toFixed(2));
 
-  const today = new Date();
-  const endNextWeek = new Date(today);
-  endNextWeek.setDate(today.getDate() + 7);
-  const followUps = await prisma.lead.count({
+  const now = new Date();
+  const startToday = new Date(now.toDateString());
+  const endNextWeek = new Date(now);
+  endNextWeek.setDate(now.getDate() + 7);
+
+  const scheduledFollowUps = await prisma.lead.count({
     where: {
       ...where,
+      nextStepNote: "FOLLOW_UP",
       nextFollowUpAt: {
-        gte: new Date(today.toDateString()),
-        lte: endNextWeek,
+        gte: startToday,
+      },
+    },
+  });
+
+  const scheduledMeetings = await prisma.lead.count({
+    where: {
+      ...where,
+      nextStepNote: "REUNIAO",
+      nextFollowUpAt: {
+        gte: startToday,
       },
     },
   });
@@ -83,6 +125,8 @@ export async function GET(req: NextRequest) {
     closeRate,
     lossReasons,
     avgActivities,
-    followUps,
+    followUps: scheduledFollowUps,
+    scheduledMeetings,
+    scheduledFollowUps,
   });
 }

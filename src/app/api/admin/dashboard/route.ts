@@ -19,6 +19,8 @@ type ConsultantPerf = {
   leadsParados72h: number;
   tempoMedioPrimeiroContato: number;
   tempoMedioConclusao: number;
+  followUpsAgendados: number;
+  reunioesAgendadas: number;
 };
 
 type CampaignPerf = {
@@ -190,6 +192,22 @@ export async function GET() {
       concluídos.map((l) => l.updatedAt.getTime() - l.createdAt.getTime()).filter((v) => v >= 0),
     );
 
+    const followUpsAgendados = await prisma.lead.count({
+      where: {
+        consultorId: c.id,
+        nextStepNote: "FOLLOW_UP",
+        nextFollowUpAt: { gte: startToday },
+      },
+    });
+
+    const reunioesAgendadas = await prisma.lead.count({
+      where: {
+        consultorId: c.id,
+        nextStepNote: "REUNIAO",
+        nextFollowUpAt: { gte: startToday },
+      },
+    });
+
     performanceConsultores.push({
       id: c.id,
       nome: c.name,
@@ -203,6 +221,8 @@ export async function GET() {
       leadsParados72h,
       tempoMedioPrimeiroContato,
       tempoMedioConclusao,
+      followUpsAgendados,
+      reunioesAgendadas,
     });
   }
 

@@ -12,7 +12,7 @@ export default function AcessosPage() {
         <div className="max-w-7xl mx-auto space-y-6">
             <header className="flex flex-col gap-2">
                 <p className="text-xs uppercase tracking-[0.2em] text-neon-blue font-bold">Administração</p>
-                <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Acessos e Escritórios</h1>
+                <h1 className="text-xl font-black text-white uppercase tracking-tighter">Acessos e Escritórios</h1>
                 <p className="text-slate-400 text-sm">Gerencie usuários, hierarquias e escritórios da plataforma.</p>
             </header>
 

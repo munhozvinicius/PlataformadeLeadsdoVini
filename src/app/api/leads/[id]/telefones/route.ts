@@ -11,7 +11,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         const { telefones } = await req.json();
         const leadId = params.id;
 
-        // Atualiza o campo telefones (agora armazenando JSON com feedback)
+        // Atualiza o campo telefones (agora armazenando JSON com feedback e motivo)
         const updatedLead = await prisma.lead.update({
             where: { id: leadId },
             data: {
