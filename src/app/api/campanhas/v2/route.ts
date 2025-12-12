@@ -42,7 +42,10 @@ export async function POST(req: NextRequest) {
 
     if (role === Role.CONSULTOR) {
       console.log("DEBUG: Access Denied. Role is CONSULTOR.");
-      return NextResponse.json({ message: "Sem permissão." }, { status: 403 });
+      return NextResponse.json({
+        message: `Sem permissão. Seu cargo identificado é: ${role}. Contate o suporte.`,
+        debug: { role, email: session.user.email }
+      }, { status: 403 });
     }
 
     const formData = await req.formData();
