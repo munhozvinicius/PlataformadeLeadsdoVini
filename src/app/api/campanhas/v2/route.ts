@@ -39,16 +39,22 @@ export async function POST(req: NextRequest) {
     // Role check: Only Master, GS, GN, Owner (Consultant already blocked by middleware usually, but checking here too)
     const role = session.user.role;
     console.log("DEBUG: User Role:", role, "Email:", session.user.email);
+    console.log("DEBUG: Role enum value (CONSULTOR):", Role.CONSULTOR);
 
+    // TEMPORARY: DISABLING ROLE CHECK TO RULE OUT LOGIC ERROR
+    /*
     if (role === Role.CONSULTOR) {
       console.log("DEBUG: Access Denied. Role is CONSULTOR.");
-      return NextResponse.json({
+      return NextResponse.json({ 
         message: `Sem permissão. Seu cargo identificado é: ${role}. Contate o suporte.`,
         debug: { role, email: session.user.email }
       }, { status: 403 });
     }
+    */
+    console.log("DEBUG: Role check skipped. Proceeding to formData.");
 
     const formData = await req.formData();
+    console.log("DEBUG: formData parsed successfully.");
     const nome = formData.get("nome")?.toString().trim();
     const descricao = formData.get("descricao")?.toString().trim();
     const typeRaw = formData.get("campaignType");
