@@ -172,7 +172,11 @@ export default function DistribuicaoPage() {
         body: formData
       });
 
-      const data = await res.json().catch(() => null);
+      const data = await res.json().catch((err) => {
+        console.error("Failed to parse JSON response:", err);
+        return { message: `Erro desconhecido (Status: ${res.status})` };
+      });
+
       if (res.status === 201) {
         const imported = typeof data?.totalLeads === "number" ? data.totalLeads : 0;
         const successMessage = data?.message ?? "Campanha criada com sucesso.";
@@ -186,10 +190,19 @@ export default function DistribuicaoPage() {
         loadInfo();
         setActiveTab("dashboard");
       } else {
-        setCreateMsg(data?.message ?? "Erro ao criar campanha.");
+        // Enhanced Error Handling
+        const detailedError = data?.message ?? "Erro ao criar campanha.";
+        const debugInfo = data?.debug ? JSON.stringify(data.debug) : "";
+        const fullMsg = debugInfo ? `${detailedError} (DEBUG: ${debugInfo})` : detailedError;
+
+        setCreateMsg(fullMsg);
+        alert(`ERRO AO CRIAR: ${fullMsg}`); // Force alert for user visibility
       }
-    } catch {
-      setCreateMsg("Erro no servidor.");
+    } catch (error) {
+      console.error("Fetch error:", error);
+      const errMsg = error instanceof Error ? error.message : "Erro na requisição.";
+      setCreateMsg(errMsg);
+      alert("ERRO DE CONEXÃO: " + errMsg);
     } finally {
       setCreating(false);
     }
